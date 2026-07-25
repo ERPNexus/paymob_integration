@@ -25,12 +25,39 @@ MANIFEST
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Credentials — this app moves money; nothing resembling a key reaches git.
+# See rules/secrets.md.
+*.pem
+*.key
+*.p12
+*.pfx
+site_config.json
+secrets.json
+credentials.json
+*.credentials
+
+# Build / test tooling
+build/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Logs
+*.log
+logs/
 
 # Dependency directories
 node_modules/
@@ -53,3 +80,21 @@ jspm_packages/
 
 # Aider AI Chat
 .aider*
+
+# AI agent local state — the shared skills in .claude/skills are committed,
+# per-machine settings and scratch notes are not.
+.claude/settings.local.json
+.claude/*.local.json
+CLAUDE.local.md
+AGENTS.local.md
+.cursor/
+.windsurfrules
+
+# Owner's private study notes — not shipped, not a spec.
+# The review checklist that used to live here is rules/implementation-gate.md.
+learning/
+
+# Scratch
+scratch/
+tmp/
+*.local.md
