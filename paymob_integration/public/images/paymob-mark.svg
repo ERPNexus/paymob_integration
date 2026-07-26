@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Paymob">
+	<rect width="64" height="64" rx="16" fill="#0180fd"/>
+	<path fill="#fff" d="M18 51V13h16.5C45 13 51 19.1 51 28.1S45 43 34.5 43H27v8Zm9-29v12h7.1c4.9 0 7.7-2.1 7.7-5.9S39 22 34.1 22Z"/>
+</svg>

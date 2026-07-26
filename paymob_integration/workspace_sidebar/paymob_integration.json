@@ -1,0 +1,25 @@
+{
+ "app": "paymob_integration",
+ "doctype": "Workspace Sidebar",
+ "header_icon": "credit-card",
+ "items": [
+  {
+   "collapsible": 1,
+   "label": "Home",
+   "link_to": "Paymob Integration",
+   "link_type": "Workspace",
+   "type": "Link"
+  },
+  {
+   "collapsible": 1,
+   "label": "Paymob Settings",
+   "link_to": "Paymob Settings",
+   "link_type": "DocType",
+   "type": "Link"
+  }
+ ],
+ "module": "Paymob Integration",
+ "name": "Paymob Integration",
+ "standard": 1,
+ "title": "Paymob Integration"
+}

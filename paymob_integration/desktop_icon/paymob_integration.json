@@ -1,0 +1,13 @@
+{
+ "app": "paymob_integration",
+ "bg_color": "blue",
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "label": "Paymob Integration",
+ "link_to": "Paymob Integration",
+ "link_type": "Workspace Sidebar",
+ "logo_url": "/assets/paymob_integration/images/paymob-mark.svg",
+ "name": "Paymob Integration",
+ "standard": 1
+}

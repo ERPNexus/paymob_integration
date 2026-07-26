@@ -10,16 +10,14 @@ app_license = "mit"
 
 # required_apps = []
 
-# Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "paymob_integration",
-# 		"logo": "/assets/paymob_integration/logo.png",
-# 		"title": "Paymob Integration",
-# 		"route": "/paymob_integration",
-# 		"has_permission": "paymob_integration.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "paymob_integration",
+		"logo": "/assets/paymob_integration/images/paymob-mark.svg",
+		"title": "Paymob Integration",
+		"route": "/app/paymob-integration",
+	}
+]
 
 # Includes in <head>
 # ------------------
