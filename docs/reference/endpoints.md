@@ -24,9 +24,30 @@ authority: **no**. The Intention call is never retried.
 message that can cause money to be recorded.
 
 **Technical:**
-- Method: `POST` (JSON) from Paymob's servers, with `?hmac=...` on the URL.
-- Auth: verify **HMAC-SHA512** with the HMAC secret before anything else.
-- Side effects: idempotency check → legal state transition → Payment Entry (if success + amount matches).
+- Route: `paymob_integration.webhooks.processed_callback`, `POST` (JSON body) from Paymob's
+  servers, with `?hmac=...` on the URL — **not** in the JSON body.
+- `frappe.form_dict` is built from the JSON body only (`make_form_dict`, `request.is_json`);
+  `request.args`/`request.form` are never merged in on that path. So `frappe.form_dict.get("hmac")`
+  is always `None` for this endpoint — the signature is read from `frappe.request.args.get("hmac")`
+  instead. `obj` is read from `frappe.form_dict`, which is safe precisely because the query string
+  cannot spoof body fields on the JSON path.
+- Auth: verify **HMAC-SHA512** over the fixed field order in
+  `paymob/hmac_verify.py::PROCESSED_CALLBACK_FIELDS` (`amount_cents` … `success`, `order.id` not
+  `order`) with `hmac.compare_digest`, before any document load or database read of a
+  payload-named document.
+- The HMAC secret is resolved by **trial verification against every enabled credential set**
+  (`settings.enabled_credential_sets()`), not by filtering on a claimed country or currency —
+  a payload field must never choose which secret checks it. A forgery matches none; a genuine
+  callback matches exactly one. See [ADR-0006](decisions.md#adr-0006--the-processed-callback-is-the-apps-only-allow_guesttrue-method).
+- Auth exception: `allow_guest=True` — the app's only one. Paymob's servers hold no Frappe
+  session; the HMAC *is* the authentication. See ADR-0006.
+- On failure: `frappe.local.response["http_status_code"] = 401`, return nothing — no explanation,
+  no document load, no `frappe.db` call.
+- On success (this phase): log and return `"ok"`. No attempt lookup, no state change, no Payment
+  Entry yet — Phase 05 inserts classify → insert → commit → enqueue at that point, so the `200`
+  starts meaning "durably stored" instead of just "acknowledged."
+- Side effects (from Phase 05 onward): idempotency check → legal state transition → Payment Entry
+  (if success + amount matches).
 - Ledger authority: **yes** — see [ADR-0001](decisions.md#adr-0001--ledger-writes-are-triggered-only-by-the-server-to-server-processed-callback).
 
 ### Response callback (browser redirect target)
@@ -88,7 +109,10 @@ country they sell in, and switches the whole site between test and live.
 
 **Functional:** A callback that can't be proven to come from Paymob is refused.
 
-**Technical:** Reject (e.g. `401`), log the event, write nothing to the ledger.
+**Technical:** Reject with `401`, log `reason=no_matching_secret` plus the number of enabled
+credential sets tried — nothing payload-derived. At the point verification fails, the payload's
+`merchant_order_id` and transaction ID are unverified, attacker-controlled strings; they are
+logged only *after* a signature passes. Writes nothing to the ledger.
 
 ### Response callback signature failure
 

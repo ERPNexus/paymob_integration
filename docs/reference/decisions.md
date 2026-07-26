@@ -117,3 +117,36 @@ accounts are configured in, without guessing.
 - **Consequences / why:** the exception is bounded to this page, which has no ledger authority
   (ADR-0001) and performs no write in any branch. It does not license "load then verify" on any
   path that can move money — those paths still verify strictly first, per gate §2.
+
+---
+
+### ADR-0006 — The processed callback is the app's only `allow_guest=True` method
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** Paymob's servers can tell us a payment succeeded without a customer being logged
+in to ERPNext — because the message never comes from a customer's browser.
+
+**Technical:**
+- **Context:** `rules/payments.md` rule 17 makes `allow_guest=True` on a money-moving method an
+  automatic reject, because a guest endpoint has no permission check to lean on. The processed
+  callback is money-moving (ADR-0001: it is the *only* channel with ledger authority) and must be
+  `allow_guest=True`, because Paymob's servers hold no Frappe session and can never obtain one.
+- **Decision:** This is the one deliberate, narrow exception. It is safe because the endpoint does
+  no work "as" any identity — it does not read, write, or return anything document-specific until
+  the HMAC-SHA512 signature is verified, and the signature *is* the authentication. Every other
+  money-moving `@frappe.whitelist()` method in the app checks permission on the document first, as
+  rule 17 requires.
+- Resolving the HMAC secret reads `Paymob Settings` (`settings.enabled_credential_sets()`)
+  *before* verification succeeds or fails. This looks like it violates gate §2 ("verify before any
+  database access"), but it does not: §2 forbids reading the **business document the payload
+  names** before verification — here, no attempt, Payment Request, or any payload-named document
+  is loaded. Reading **configuration to obtain the key needed to verify** is part of verifying, not
+  a bypass of it. This is narrower than [ADR-0011](#adr-0011--the-result-page-resolves-the-credential-set-before-verifying-the-redirect-signature),
+  which reads one payload-named attempt row before verifying on a page with no ledger authority at
+  all — the processed callback loads no attempt here, in this phase or any later one, until after
+  a matching secret is found.
+- **Consequences / why:** a forgery matches no configured secret and is refused with a `401` that
+  carries no explanation and touches no document. A genuine callback matches exactly one
+  credential set, at which point acting "as" the merchant account that set matches is exactly what
+  should happen. No other endpoint in this app may follow this pattern.

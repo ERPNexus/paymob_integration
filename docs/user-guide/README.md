@@ -55,6 +55,15 @@ wallet), for each country/currency/mode combination.
 | **Payment Method** | A short name you choose to remember what this row is for (e.g. "Card", "Wallet"). It is a label for you — Paymob never sees this text. | Your own choice. |
 | **Integration ID** | The number Paymob assigns to one payment-method configuration in your dashboard. This is the value actually sent to Paymob when a checkout is created. | Paymob dashboard → Developers → Payment Integrations, next to the payment method you configured there. |
 
+### Connecting Paymob's callback
+
+In your Paymob dashboard, under the integration this credential row uses, paste ERPNext's webhook
+address into the **Transaction Processed Callback** field — not the **Transaction Response
+Callback** field, which is a different, browser-facing setting ERPNext also uses but that carries
+no authority to record a payment. The HMAC secret you paste into **HMAC Secret** above must be the
+one for that same Paymob account, or every callback from it is silently refused (rejected, no
+payment from that account ever recorded) with no explanation sent back to Paymob.
+
 ### Testing your setup
 
 Click **Test Connection**, choose a currency, and wait for a green success message. This proves
