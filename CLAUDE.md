@@ -1,3 +1,10 @@
+# OpenWolf
+
+@.wolf/OPENWOLF.md
+
+This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
+
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -113,7 +120,7 @@ The full list is `rules/payments.md` (18 requirements) and the "Global constrain
   `paymob_integration/translations/ar.csv` and nowhere else. Fieldnames, DocType names, and stored
   Select values stay English.
 - Data changes go through an **idempotent** patch registered in `patches.txt`.
-- Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
+- Commit messages follow [`rules/commits.md`](rules/commits.md).
 
 ## Working on a phase
 

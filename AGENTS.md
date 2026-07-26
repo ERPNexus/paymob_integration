@@ -1,4 +1,9 @@
-# Repository Guidelines
+# OpenWolf
+
+@.wolf/OPENWOLF.md
+
+This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
+
 
 ## Claude-Managed Repository
 
@@ -37,7 +42,7 @@ No test suite is present yet. Add Python tests close to the feature, using Frapp
 
 ## Commit & Pull Request Guidelines
 
-Git history currently uses Conventional Commits, for example `feat: Initialize App`. Continue with concise prefixes such as `feat:`, `fix:`, `docs:`, `test:`, and `chore:`. Pull requests should include a short problem statement, implementation summary, test evidence, migration notes if any, linked issues, and screenshots for Desk or website UI changes.
+Follow [`rules/commits.md`](rules/commits.md) for Conventional Commit messages. Pull requests should include a short problem statement, implementation summary, test evidence, migration notes if any, linked issues, and screenshots for Desk or website UI changes.
 
 ## Security & Configuration Tips
 

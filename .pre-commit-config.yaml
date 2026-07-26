@@ -38,6 +38,7 @@ repos:
         # Ignore any files that might contain jinja / bundles
         exclude: |
             (?x)^(
+                \.wolf/.*|
                 paymob_integration/public/dist/.*|
                 .*node_modules.*|
                 .*boilerplate.*|
@@ -55,6 +56,7 @@ repos:
         # Ignore any files that might contain jinja / bundles
         exclude: |
             (?x)^(
+                \.wolf/.*|
                 paymob_integration/public/dist/.*|
                 cypress/.*|
                 .*node_modules.*|
