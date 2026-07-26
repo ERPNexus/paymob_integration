@@ -1,7 +1,11 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T06:11:01.566Z
-> Files: 99 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T08:01:59.435Z
+> Files: 116 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/0cbf8a7e-b9f8-4540-97d4-0d43b39c9339/scratchpad/
+
+- `check_err.py` — run (~94 tok)
 
 ## ./
 
@@ -11,6 +15,7 @@
 - `.pre-commit-config.yaml` (~538 tok)
 - `AGENTS.md` — Repository Guidelines (~927 tok)
 - `CLAUDE.md` — OpenWolf (~1914 tok)
+- `DESIGN.md` — DESIGN.md — Paymob Integration visual system (~989 tok)
 - `license.txt` (~268 tok)
 - `pyproject.toml` — Python project configuration (~565 tok)
 - `README.md` — Project documentation (~171 tok)
@@ -92,13 +97,18 @@
 ## paymob_integration/
 
 - `__init__.py` (~7 tok)
-- `hooks.py` — Declares views (~1935 tok)
+- `api.py` — Whitelisted entry points for logged-in Desk users. (~1685 tok)
+- `hooks.py` — Declares views (~1939 tok)
 - `modules.txt` (~5 tok)
 - `patches.txt` (~73 tok)
 
 ## paymob_integration/config/
 
 - `__init__.py` (~0 tok)
+
+## paymob_integration/desktop_icon/
+
+- `paymob_integration.json` — Desk launcher entry for the Paymob workspace (~90 tok)
 
 ## paymob_integration/patches/
 
@@ -107,8 +117,10 @@
 ## paymob_integration/paymob/
 
 - `__init__.py` (~0 tok)
+- `amounts.py` — Converts amounts to and from Paymob integer minor units. (~260 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
 - `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~438 tok)
+- `intention.py` — Creates a Paymob Intention and returns checkout identifiers. (~365 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~300 tok)
 
 ## paymob_integration/paymob_integration/
@@ -132,6 +144,12 @@
 - `paymob_integration_id.json` (~422 tok)
 - `paymob_integration_id.py` — For license information, please see license.txt (~62 tok)
 
+## paymob_integration/paymob_integration/doctype/paymob_payment_attempt/
+
+- `__init__.py` (~0 tok)
+- `paymob_payment_attempt.json` — Checkout-attempt lifecycle schema. (~1090 tok)
+- `paymob_payment_attempt.py` — Paymob Payment Attempt controller. (~45 tok)
+
 ## paymob_integration/paymob_integration/doctype/paymob_settings/
 
 - `__init__.py` (~0 tok)
@@ -142,10 +160,19 @@
 ## paymob_integration/paymob_integration/workspace/paymob_integration/
 
 - `paymob_integration.json` (~445 tok)
+- `paymob_integration.json` — Public Paymob workspace for the Desk launcher (~260 tok)
 
 ## paymob_integration/public/
 
 - `.gitkeep` (~0 tok)
+
+## paymob_integration/public/images/
+
+- `paymob-mark.svg` — Compact Paymob app mark for the Desk launcher (~40 tok)
+
+## paymob_integration/public/js/
+
+- `payment_request.js` — Declares checkout_tab (~365 tok)
 
 ## paymob_integration/templates/
 
@@ -155,9 +182,20 @@
 
 - `__init__.py` (~0 tok)
 
+## paymob_integration/tests/
+
+- `__init__.py` (~0 tok)
+- `helpers.py` — Creates self-contained ERPNext documents for checkout integration tests. (~600 tok)
+- `test_amounts.py` — Minor-unit conversion checks. (~250 tok)
+- `test_checkout.py` — Intention creation and checkout-boundary checks. (~830 tok)
+
 ## paymob_integration/translations/
 
 - `ar.csv` (~313 tok)
+
+## paymob_integration/workspace_sidebar/
+
+- `paymob_integration.json` — Sidebar links for the Paymob workspace (~135 tok)
 
 ## plans/
 

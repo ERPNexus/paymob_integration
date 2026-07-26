@@ -15,17 +15,36 @@
 - **Description:** Seamless integration for paymob with ERPNext
 - Country, currency, and mode jointly identify Paymob credentials and integration IDs; callers must
   supply all three to avoid selecting a regional account by row order.
+- Checkout credential country is the merchant's `Company.country`; customer billing country is
+  separate and falls back from the selected address to the party's primary address.
+- Frappe only puts an app in `/desk`'s launcher when its `hooks.py` defines
+  `add_to_apps_screen`; a Workspace alone remains reachable by its direct `/app/<workspace>` route.
+- Frappe's Desktop Icon generator requires every `add_to_apps_screen` entry to include a `logo` key.
+- App-level `workspace_sidebar` and `desktop_icon` fixtures must include their document `name`.
+- Existing Frappe users with a saved `Desktop Layout` do not receive new standard icons automatically;
+  append the new icon to their saved layout rather than resetting it.
+- Frappe's app launcher and sidebar reserve a small square logo area; use a compact official mark
+  when one is available, otherwise a full wordmark will render crisply but small.
 - The app is installed on the `capital` site. `bench --site capital run-tests --app
   paymob_integration` aborts during global test-record setup — `hrms` regional setup for India
   fails on a stale `Attendance Permissions` document link, unrelated to this app. Add
   `--lightmode` to skip that bootstrap and run the suite.
 - `prettier` and `eslint` skip `.wolf/` in `.pre-commit-config.yaml`; those hook scripts are
   vendored from cytostack/openwolf and must stay byte-identical to upstream.
+- Paymob billing country is the uppercase ISO value of Frappe `Country.code`, not the display name.
+- A Desk `Workspace Sidebar` linking to a Workspace must have that public Workspace fixture under
+  the module package's `workspace/<slug>/` directory; a direct URL can render without it, but the
+  Desk launcher cannot generate a click route.
 
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->
+- [2026-07-26] For optional Frappe fields at a validation boundary, use `doc.get()` and report
+  missing references separately from missing linked values; dynamic attribute access produces an
+  opaque `AttributeError`.
+- [2026-07-26] `BaseDocument.update()` accepts one mapping, not keyword arguments; use
+  `document.update({"field": value})` before saving.
 
 ## Decision Log
 
