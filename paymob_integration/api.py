@@ -56,10 +56,14 @@ def start_checkout(payment_request: str):
 
 def build_checkout_url(credentials, client_secret):
 	"""Only browser-safe public and per-session keys reach the hosted checkout URL."""
-	return f"{settings.base_url(credentials)}/unifiedcheckout/?{urlencode({
-		'publicKey': credentials.public_key,
-		'clientSecret': client_secret,
-	})}"
+	return f"{settings.base_url(credentials)}/unifiedcheckout/?{
+		urlencode(
+			{
+				'publicKey': credentials.public_key,
+				'clientSecret': client_secret,
+			}
+		)
+	}"
 
 
 def _validate_payable(request):
@@ -102,9 +106,7 @@ def _create_attempt(request, credentials):
 			"currency": request.currency,
 			"country": credentials.country,
 			"mode": credentials.mode,
-			"expires_at": add_to_date(
-				now_datetime(), seconds=config.intention_expiration_seconds
-			),
+			"expires_at": add_to_date(now_datetime(), seconds=config.intention_expiration_seconds),
 		}
 	)
 	attempt.insert(ignore_permissions=True)
@@ -114,9 +116,12 @@ def _create_attempt(request, credentials):
 
 def _billing_data(request, source):
 	"""Paymob requires these keys; customer data stays on existing ERPNext records."""
-	contact = frappe.db.get_value(
-		"Contact", source.get("contact_person"), ["first_name", "last_name"], as_dict=True
-	) or {}
+	contact = (
+		frappe.db.get_value(
+			"Contact", source.get("contact_person"), ["first_name", "last_name"], as_dict=True
+		)
+		or {}
+	)
 	return {
 		"first_name": contact.get("first_name") or request.party or "NA",
 		"last_name": contact.get("last_name") or "NA",

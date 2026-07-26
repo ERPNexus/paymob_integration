@@ -79,6 +79,15 @@ Plain-language, task-oriented docs — how to *use* the app, no code. Written as
 (per [../../rules/documentation.md](../../rules/documentation.md)). Describe behavior in prose and
 link into [../reference/](../reference/) for the exact rules rather than restating them.
 
+## What the customer sees after paying
+
+Paymob sends the customer's browser back to a simple status page. It can say "we're confirming
+your payment" even for a payment that has already gone through — the real confirmation travels
+directly between Paymob's servers and ERPNext, and that message can arrive a moment before or
+after the customer's browser redirect does. This is normal, not a stall or a bug, and needs no
+action from you. The status the customer sees always matches what ERPNext has recorded, once both
+messages have arrived. See [states.md](../reference/states.md) for what each status means.
+
 ## Planned topics (filled as slices land)
 
 - Connecting a Paymob account (credentials, test vs live).

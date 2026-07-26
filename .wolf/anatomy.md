@@ -1,11 +1,21 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T08:01:59.435Z
-> Files: 116 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T10:42:17.447Z
+> Files: 127 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/0cbf8a7e-b9f8-4540-97d4-0d43b39c9339/scratchpad/
 
 - `check_err.py` — run (~94 tok)
+
+## ../../../.claude/plans/
+
+- `let-s-plan-plans-03-result-page-md-frolicking-taco.md` — Expand Phase 03 — Customer Result Page (~2371 tok)
+- `plan-plans-04-webhook-hmac-verification-temporal-parnas.md` — Phase 04 — Webhook & HMAC Verification (~3654 tok)
+
+## ../../../.claude/projects/-home-frappe-frappe-bench-16-apps-paymob-integration/memory/
+
+- `feedback-no-commit-before-review.md` (~437 tok)
+- `MEMORY.md` — Memory Index (~271 tok)
 
 ## ./
 
@@ -76,15 +86,15 @@
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~1054 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~882 tok)
+- `decisions.md` — Decisions (ADRs) (~1546 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~1568 tok)
 - `fields.md` — Fields (~2081 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~763 tok)
+- `states.md` — States & Transitions (~845 tok)
 
 ## docs/user-guide/
 
-- `README.md` — Project documentation (~1601 tok)
+- `README.md` — Project documentation (~1880 tok)
 
 ## learning/paymob-integration/
 
@@ -120,8 +130,10 @@
 - `amounts.py` — Converts amounts to and from Paymob integer minor units. (~260 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
 - `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~438 tok)
+- `hmac_verify.py` — Verifies Paymob's response callback (the browser redirect). Display integrity only — this (~497 tok)
 - `intention.py` — Creates a Paymob Intention and returns checkout identifiers. (~365 tok)
-- `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~300 tok)
+- `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~384 tok)
+- `test_settings.py` — TestCredentialLookup: test_includes_country, test_explicit_mode_overrides_site_mode (~324 tok)
 
 ## paymob_integration/paymob_integration/
 
@@ -188,20 +200,28 @@
 - `helpers.py` — Creates self-contained ERPNext documents for checkout integration tests. (~600 tok)
 - `test_amounts.py` — Minor-unit conversion checks. (~250 tok)
 - `test_checkout.py` — Intention creation and checkout-boundary checks. (~830 tok)
+- `test_hmac_verify.py` — TestVerifyResponseCallback: test_valid_signature_passes, test_tampered_field_is_rejected, test_missi (~583 tok)
+- `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 8 mor (~1539 tok)
 
 ## paymob_integration/translations/
 
-- `ar.csv` (~313 tok)
+- `ar.csv` (~769 tok)
 
 ## paymob_integration/workspace_sidebar/
 
 - `paymob_integration.json` — Sidebar links for the Paymob workspace (~135 tok)
 
+## paymob_integration/www/
+
+- `__init__.py` (~0 tok)
+- `paymob_result.py` — Customer-facing result page after Paymob checkout. Renders our own stored (~903 tok)
+- `paymob-result.html` (~46 tok)
+
 ## plans/
 
 - `01-settings-and-credentials.md` — Phase 01 — Settings & Credentials Implementation Plan (~8010 tok)
 - `02-create-intention-and-checkout.md` — Phase 02 — Intention & Checkout URL Implementation Plan (~7652 tok)
-- `03-result-page.md` — Phase 03 — Customer Result Page (outline) (~449 tok)
+- `03-result-page.md` — Phase 03 — Customer Result Page Implementation Plan (~6231 tok)
 - `04-webhook-hmac-verification.md` — Phase 04 — Webhook & HMAC Verification (outline) (~407 tok)
 - `05-transaction-record-and-dedup.md` — Phase 05 — Transaction Record & Dedup (outline) (~443 tok)
 - `06-state-machine-and-audit.md` — Phase 06 — State Machine & Audit Trail (outline) (~419 tok)

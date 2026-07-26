@@ -45,16 +45,17 @@ class TestCreateIntention(UnitTestCase):
 		return intention.create_intention(self.credentials, **payload)
 
 	def test_returns_the_three_identifiers(self):
-		with patch(
-			"paymob_integration.paymob.intention.client.request", return_value=INTENTION_RESPONSE
-		):
+		with patch("paymob_integration.paymob.intention.client.request", return_value=INTENTION_RESPONSE):
 			result = self.call()
 
-		self.assertEqual(result, {
-			"intention_id": "pi_FAKE_1",
-			"order_id": "987654",
-			"client_secret": "egy_csk_FAKE_1",
-		})
+		self.assertEqual(
+			result,
+			{
+				"intention_id": "pi_FAKE_1",
+				"order_id": "987654",
+				"client_secret": "egy_csk_FAKE_1",
+			},
+		)
 
 	def test_authenticates_with_the_secret_key(self):
 		with patch(
@@ -104,18 +105,14 @@ class TestCheckoutURL(UnitTestCase):
 			self.assertEqual(api._merchant_country(request, frappe._dict()), "Egypt")
 
 	def test_paymob_region_falls_back_to_the_linked_document_company(self):
-		request = frappe._dict(
-			company=None, reference_doctype="Sales Invoice", reference_name="SINV-00001"
-		)
+		request = frappe._dict(company=None, reference_doctype="Sales Invoice", reference_name="SINV-00001")
 		with (
 			patch("paymob_integration.api.frappe.get_cached_value", return_value="Egypt"),
 		):
 			self.assertEqual(api._merchant_country(request, frappe._dict(company="Egypt Company")), "Egypt")
 
 	def test_missing_company_has_an_explicit_error(self):
-		request = frappe._dict(
-			company=None, reference_doctype="Sales Invoice", reference_name="SINV-00001"
-		)
+		request = frappe._dict(company=None, reference_doctype="Sales Invoice", reference_name="SINV-00001")
 		with (
 			self.assertRaisesRegex(frappe.ValidationError, "Payment Request needs a company"),
 		):
@@ -180,8 +177,14 @@ class TestCheckoutURL(UnitTestCase):
 			),
 			patch("paymob_integration.api._billing_data", return_value={}),
 			patch("paymob_integration.api._items", return_value=[]),
-			patch("paymob_integration.api.settings.get_settings", return_value=Mock(intention_expiration_seconds=3600)),
-			patch("paymob_integration.api.get_url", side_effect=["https://site.test/webhook", "https://site.test/result"]),
+			patch(
+				"paymob_integration.api.settings.get_settings",
+				return_value=Mock(intention_expiration_seconds=3600),
+			),
+			patch(
+				"paymob_integration.api.get_url",
+				side_effect=["https://site.test/webhook", "https://site.test/result"],
+			),
 			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),
 		):
 			result = api.start_checkout(request.name)

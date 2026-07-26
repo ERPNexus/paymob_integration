@@ -21,7 +21,8 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 
 ### paid
 
-**Functional:** Money is settled. The order can proceed; the ledger reflects payment.
+**Functional:** Money is settled. The order can proceed; the ledger reflects payment. The
+customer sees "Payment received. Thank you."
 
 **Technical:**
 - Entered when: an **authentic** (HMAC-verified) **processed callback** reports success **and**
@@ -31,7 +32,8 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 
 ### failed
 
-**Functional:** The payment did not go through. The customer may retry (a retry is a fresh attempt).
+**Functional:** The payment did not go through. The customer may retry (a retry is a fresh
+attempt). The customer sees "This payment did not go through. You can try again."
 
 **Technical:**
 - Entered when: an authentic processed callback reports a decline.
@@ -42,6 +44,7 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 ### expired
 
 **Functional:** The customer never completed checkout and the window closed. Nothing was charged.
+The customer sees "This payment link has expired."
 
 **Technical:**
 - Entered when: no callback arrived and a scheduled **Transaction Inquiry** confirms no completion.
@@ -50,7 +53,8 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 
 ### refunded
 
-**Functional:** Previously settled money was returned to the customer.
+**Functional:** Previously settled money was returned to the customer. The customer sees "This
+payment has been refunded."
 
 **Technical:**
 - Entered from `paid` only, on a genuine, separately-signed **refund event**.

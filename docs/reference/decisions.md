@@ -94,3 +94,26 @@ silently accept it — a human reviews it before it hits the books.
 frozen amount, state, and Paymob identifiers for each checkout. Payment Request status remains
 derived from submitted Payment Entries. This preserves retry history and makes the unique reference
 the outbound correlation guarantee.
+
+---
+
+### ADR-0011 — The result page resolves the credential set before verifying the redirect signature
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** The result page can find the right secret to check, for every country Paymob
+accounts are configured in, without guessing.
+
+**Technical:**
+- **Context:** `rules/implementation-gate.md` §2 requires verification before any database
+  access. But the HMAC secret is stored per country/currency on `Paymob Credential Set`, and the
+  only place that pairing is recorded for a given checkout is the `Paymob Payment Attempt` row
+  itself — there is no way to pick the right secret without a lookup first.
+- **Decision:** Load the attempt with a read-only `frappe.db.get_value` (four non-sensitive
+  columns, no `get_doc`, no `client_secret`), resolve its credential set, then verify. The
+  alternative — trial-verifying the signature against every enabled credential set until one
+  matches — still reads the database (every row instead of one) and adds branching for no
+  security benefit, since a wrong-secret trial and a genuine forgery look identical either way.
+- **Consequences / why:** the exception is bounded to this page, which has no ledger authority
+  (ADR-0001) and performs no write in any branch. It does not license "load then verify" on any
+  path that can move money — those paths still verify strictly first, per gate §2.

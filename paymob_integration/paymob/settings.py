@@ -8,20 +8,23 @@ def get_settings():
 	return frappe.get_cached_doc("Paymob Settings")
 
 
-def get_credential_set(country, currency):
-	"""Return the enabled credential set for a country and currency in the site's current mode."""
+def get_credential_set(country, currency, mode=None):
+	"""Return the enabled credential set for a country and currency in `mode`.
+
+	`mode` defaults to the site's current mode. Pass the attempt's own stored `mode` when
+	re-verifying an existing attempt — the settings mode may have changed since checkout started.
+	"""
 	config = get_settings()
 	if not config.enabled:
 		frappe.throw(_("Paymob is not enabled. Ask an administrator to configure Paymob Settings."))
 
+	mode = mode or config.mode
 	for row in config.credential_sets:
-		if row.enabled and row.country == country and row.currency == currency and row.mode == config.mode:
+		if row.enabled and row.country == country and row.currency == currency and row.mode == mode:
 			return row
 
 	frappe.throw(
-		_("No Paymob credentials are configured for {0}, {1} in {2} mode.").format(
-			country, currency, config.mode
-		)
+		_("No Paymob credentials are configured for {0}, {1} in {2} mode.").format(country, currency, mode)
 	)
 
 

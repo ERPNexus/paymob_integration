@@ -25,7 +25,9 @@ frappe.ui.form.on("Payment Request", {
 						frappe.msgprint({
 							title: __("Popup Blocked"),
 							message: __("Your browser blocked the checkout window. {0}", [
-								`<a href="${message.checkout_url}" target="_blank">${__("Click here to pay")}</a>`,
+								`<a href="${message.checkout_url}" target="_blank">${__(
+									"Click here to pay"
+								)}</a>`,
 							]),
 							indicator: "orange",
 						});

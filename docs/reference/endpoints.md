@@ -34,9 +34,24 @@ message that can cause money to be recorded.
 **Functional:** The page the customer lands on after paying. It shows a result; it changes nothing.
 
 **Technical:**
-- Method: `GET` from the customer's **browser**, with `&hmac=...` query params.
-- Auth: verify HMAC for display integrity, but **never** write the ledger from here.
-- Side effects: render a **generic** result page ("we're confirming…"); the two channels can race.
+- Route: `GET /paymob-result?merchant_order_id=...&hmac=...` — served by
+  `paymob_integration/www/paymob_result.py`, template `paymob-result.html`. `no_cache = 1`.
+- `merchant_order_id` is looked up directly as the attempt's `special_reference` (its autoname) —
+  this lookup key is unsigned and attacker-controlled.
+- Loads the attempt first (read-only `frappe.db.get_value`, six columns only) to resolve the
+  right per-country/currency/**mode** HMAC secret — the attempt's own stored `mode`, not the
+  site's current mode, so an admin flipping Test/Live mid-checkout can't invalidate a legitimate
+  redirect — **then** verifies. The one place in the app that reads the database before
+  verification, scoped by
+  [ADR-0011](decisions.md#adr-0011--the-result-page-resolves-the-credential-set-before-verifying-the-redirect-signature).
+- Auth: verify HMAC-SHA512 for display integrity, but **never** write the ledger from here. The
+  signed `order` field must also equal the selected attempt's own `paymob_order_id` — otherwise a
+  genuinely signed redirect for one attempt could be replayed against another attempt's unsigned
+  `merchant_order_id`, borrowing its real state.
+- Side effects: render a **generic** result page; the two channels can race, so `Pending` is
+  always a correct answer.
+- Fails closed: unknown reference, unconfigured credentials, or a bad/missing signature all
+  render the same neutral **Pending** page, never a 404 or 500.
 - Ledger authority: **no**.
 
 ## Settings
@@ -74,6 +89,17 @@ country they sell in, and switches the whole site between test and live.
 **Functional:** A callback that can't be proven to come from Paymob is refused.
 
 **Technical:** Reject (e.g. `401`), log the event, write nothing to the ledger.
+
+### Response callback signature failure
+
+**Functional:** A customer whose result-page link was tampered with sees "we're confirming your
+payment," never a fake "paid" or "failed."
+
+**Technical:** Unlike the processed callback (which rejects with a `401`), the response callback
+still returns `200` and renders the neutral `Pending` message — refusing outright would just be a
+worse UX for a page with no ledger authority to protect. Logs `reason=unknown_reference` or falls
+through the credential lookup's own narrow exception; never echoes the attacker-supplied
+`merchant_order_id` back into the log line.
 
 ### Duplicate webhook delivery
 

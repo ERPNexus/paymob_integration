@@ -35,6 +35,9 @@
 - A Desk `Workspace Sidebar` linking to a Workspace must have that public Workspace fixture under
   the module package's `workspace/<slug>/` directory; a direct URL can render without it, but the
   Desk launcher cannot generate a click route.
+- A trusted result-page state requires both a valid response HMAC and equality between its signed
+  Paymob order ID and the selected attempt's stored `paymob_order_id`; credential lookup must use
+  the attempt's frozen mode because site mode can change while checkout is open.
 
 ## Do-Not-Repeat
 
