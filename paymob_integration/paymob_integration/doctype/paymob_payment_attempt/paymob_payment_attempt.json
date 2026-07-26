@@ -1,0 +1,146 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:special_reference",
+ "creation": "2026-07-26 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "special_reference",
+  "payment_request",
+  "state",
+  "needs_human_attention",
+  "expected_amount_cents",
+  "currency",
+  "country",
+  "mode",
+  "paymob_intention_id",
+  "paymob_order_id",
+  "client_secret",
+  "expires_at",
+  "last_polled_at",
+  "payment_entry"
+ ],
+ "fields": [
+  {
+   "fieldname": "special_reference",
+   "fieldtype": "Data",
+   "label": "Special Reference",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "payment_request",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Payment Request",
+   "options": "Payment Request",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "State",
+   "options": "Pending\nPaid\nFailed\nExpired\nRefunded",
+   "read_only": 1
+  },
+  {
+   "fieldname": "needs_human_attention",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Needs Human Attention",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Expected Amount Cents",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "country",
+   "fieldtype": "Data",
+   "label": "Country",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "Test\nLive",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paymob_intention_id",
+   "fieldtype": "Data",
+   "label": "Paymob Intention ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paymob_order_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Paymob Order ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_polled_at",
+   "fieldtype": "Datetime",
+   "label": "Last Polled At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-26 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Paymob Integration",
+ "name": "Paymob Payment Attempt",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
