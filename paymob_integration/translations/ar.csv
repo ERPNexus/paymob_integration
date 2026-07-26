@@ -25,4 +25,24 @@ Credential Sets,مجموعات بيانات الاعتماد
 Integration IDs,معرفات التكامل
 Intention Expiration Seconds,ثواني انتهاء صلاحية النية
 Stale Pending Minutes,دقائق التعليق القديمة
+Pay with Paymob,ادفع عبر باي موب
+Creating a Paymob checkout...,جارٍ إنشاء صفحة الدفع...
+Paymob Attempts,محاولات الدفع
+Submit the Payment Request before starting a payment.,يجب اعتماد طلب الدفع قبل بدء عملية الدفع.
+This Payment Request is already {0}.,طلب الدفع هذا بالفعل {0}.
+Paymob does not support the currency {0}.,باي موب لا يدعم العملة {0}.
+Paymob checkout is only available for incoming Payment Requests.,الدفع عبر باي موب متاح فقط لطلبات الدفع الواردة.
+The Payment Request needs a company before starting Paymob checkout.,يحتاج طلب الدفع إلى شركة قبل بدء الدفع عبر باي موب.
+Company {0} needs a country before starting Paymob checkout.,تحتاج الشركة {0} إلى بلد قبل بدء الدفع عبر باي موب.
+The Payment Request amount must be greater than zero.,يجب أن يكون مبلغ طلب الدفع أكبر من صفر.
+The Payment Request needs a reference document before starting Paymob checkout.,يحتاج طلب الدفع إلى مستند مرجعي قبل بدء الدفع عبر باي موب.
+Special Reference,مرجع خاص
+Needs Human Attention,يتطلب انتباهًا بشريًا
+Expected Amount Cents,المبلغ المتوقع بالوحدات الصغرى
+State,الحالة
+Pending,معلق
+Paid,مدفوع
+Failed,فشل
+Expired,منتهي الصلاحية
+Refunded,مسترد
 Configuration,الإعدادات
