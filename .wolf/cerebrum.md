@@ -15,6 +15,12 @@
 - **Description:** Seamless integration for paymob with ERPNext
 - Country, currency, and mode jointly identify Paymob credentials and integration IDs; callers must
   supply all three to avoid selecting a regional account by row order.
+- The app is installed on the `capital` site. `bench --site capital run-tests --app
+  paymob_integration` aborts during global test-record setup — `hrms` regional setup for India
+  fails on a stale `Attendance Permissions` document link, unrelated to this app. Add
+  `--lightmode` to skip that bootstrap and run the suite.
+- `prettier` and `eslint` skip `.wolf/` in `.pre-commit-config.yaml`; those hook scripts are
+  vendored from cytostack/openwolf and must stay byte-identical to upstream.
 
 ## Do-Not-Repeat
 
