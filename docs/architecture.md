@@ -114,4 +114,4 @@ Inquiry auth is the odd one out: it needs a **Bearer auth token** obtained from 
 
 ## Multi-region note
 
-Egypt, KSA, UAE, and Oman are separate Paymob deployments with separate merchant accounts, keys, integration IDs, and base URLs. An integration serving more than one country needs per-country credential sets (base URL + secret/public/API keys + HMAC secret + integration IDs) and must route each payment by the invoice's country/currency — one global settings record with a single key set cannot work.
+Egypt, KSA, UAE, and Oman are separate Paymob deployments with separate merchant accounts, keys, integration IDs, and base URLs. An integration serving more than one country needs per-country credential sets (base URL + secret/public/API keys + HMAC secret + integration IDs) and must route each payment by the invoice company's country and the transaction currency — one global settings record with a single key set cannot work.

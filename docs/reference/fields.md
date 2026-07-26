@@ -3,9 +3,6 @@
 DocType fields that carry meaning. For each: what it holds, its **source of truth**, validation,
 and mutability. Governed by [../../rules/documentation.md](../../rules/documentation.md).
 
-> Field names below are **provisional** and will be reconciled with the actual DocType schema as
-> it is built. The *role* of each field is the stable part; the exact `fieldname` is lookup detail.
-
 ### state (lifecycle)
 
 **Functional:** Where this payment is in its life — pending, paid, failed, expired, or refunded.
@@ -14,13 +11,14 @@ and mutability. Governed by [../../rules/documentation.md](../../rules/documenta
 - Source of truth: ERPNext, driven by verified Paymob events (see [states.md](states.md)).
 - Validation: only legal transitions allowed; never regressed to represent "needs review."
 
-### expected_amount (snapshot)
+### expected_amount_cents (snapshot)
 
 **Functional:** The amount we expected to be paid, frozen at checkout time.
 
 **Technical:**
 - Source of truth: ERPNext database at **Create Intention** time (never the browser).
-- **Immutable** after creation. Every callback amount is compared against *this*, not a re-read total.
+- Stored as a `Long Int` in the currency's minor units and immutable after creation. Every callback
+  amount is compared against *this*, not a re-read total.
 - A mismatch triggers [ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted).
 
 ### needs_human_attention (review flag)
@@ -54,6 +52,11 @@ and mutability. Governed by [../../rules/documentation.md](../../rules/documenta
 - Source of truth: Paymob (intention response). Browser-exposed and single-session (see [ADR-0002](decisions.md#adr-0002--server-only-credentials-never-reach-the-browser)).
 - Transient — not a long-lived credential; do not treat as a read/inquiry key.
 
+### last_polled_at
+
+**Technical:** The timestamp of the last reconciliation inquiry. It is the one attempt field that
+Phase 10 may update with `db_set`; money, status, and identifiers are never updated that way.
+
 ### enabled (Paymob Settings, Paymob Credential Set, Paymob Integration ID)
 
 **Functional:** Three separate on/off switches, at three different levels. `Paymob Settings.enabled`
@@ -76,7 +79,8 @@ for Egypt cannot be reused for Saudi Arabia.
 
 **Technical:**
 - `country`: free-text `Data` field (e.g. `Egypt`, `Saudi Arabia`) — matched against the Paymob
-  region the credential set belongs to. Required on both DocTypes.
+  region the credential set belongs to. Required on both DocTypes. Checkout resolves this from the
+  Payment Request's company country, not the customer's billing address.
 - `currency`: `Link` to ERPNext's `Currency` DocType (e.g. `EGP`, `SAR`) — required on both. The
   currency of a Payment Request must match a credential set and integration ID with the same
   `country` + `currency` + `mode` combination, or there is nothing to pay with.

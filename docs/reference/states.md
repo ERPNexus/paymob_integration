@@ -14,7 +14,8 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 **Functional:** We're confirming the payment. The customer sees "We're confirming your payment."
 
 **Technical:**
-- Entered when: intention created and checkout started; no verified processed callback yet.
+- Entered when: intention created and checkout started; no verified processed callback yet. An
+  attempt created before a failed Paymob call is also pending and is resolved by the Phase 10 poller.
 - Exits to: `paid` (verified success), `failed` (verified decline), `expired` (abandoned + inquiry finds nothing).
 - Terminal: no.
 

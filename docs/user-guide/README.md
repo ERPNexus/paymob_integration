@@ -63,6 +63,16 @@ money. Do this for every currency you configure, and fix any row that fails befo
 site-wide **Enabled** switch. Keep separate Test and Live rows, and do not screenshot or share
 Secret Key, API Key, or HMAC Secret with anyone outside your team.
 
+## Take a payment
+
+Open a submitted **Payment Request** and click **Pay with Paymob**. ERPNext opens Paymob's hosted
+checkout in a new tab. The Payment Request's company and currency select the matching Paymob
+credentials. Customer billing details use the linked document's selected address when available,
+then the customer's primary address.
+
+Use **Paymob Attempts** on the same Payment Request to see each checkout try. If a card is declined,
+start a new payment; the previous attempt remains as history.
+
 **Audience:** the merchant / ERPNext user operating Paymob payments.
 
 Plain-language, task-oriented docs — how to *use* the app, no code. Written as features ship

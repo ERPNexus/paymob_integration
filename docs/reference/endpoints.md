@@ -5,6 +5,19 @@ Governed by [../../rules/documentation.md](../../rules/documentation.md).
 
 ## Endpoints
 
+### Start checkout
+
+**Functional:** A Desk user starts a hosted Paymob checkout from a submitted Payment Request.
+
+**Technical:** `paymob_integration.api.start_checkout(payment_request)` requires `write`
+permission on that incoming Payment Request. It reads the amount and currency from the request and
+the merchant region from `Company.country`, creates a pending attempt, commits its unique reference,
+then calls Paymob's Intention API. Customer billing country is separate: the selected customer
+address falls back to the party's primary address, and is sent as the uppercase ISO `Country.code`
+or Paymob's `NA` placeholder. It returns only the attempt name and hosted URL containing the public
+key and per-session client secret. Ledger
+authority: **no**. The Intention call is never retried.
+
 ### Processed callback (server-to-server webhook)
 
 **Functional:** How Paymob's servers tell us the real outcome of a payment. This is the only

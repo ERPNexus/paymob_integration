@@ -81,3 +81,16 @@ silently accept it — a human reviews it before it hits the books.
   and `Paymob Credential Set.payment_account` supplies the clearing account.
 - **Consequences / why:** this removes a dependency and indirection. Phase 02 supplies the
   Pay with Paymob button; installing `payments` later does not conflict with this setup.
+
+---
+
+### ADR-0004 — Lifecycle state lives on a Paymob Payment Attempt, not on the Payment Request
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** A declined checkout stays visible while the customer starts a separate retry.
+
+**Technical:** One `Paymob Payment Attempt`, named by its unique `special_reference`, stores the
+frozen amount, state, and Paymob identifiers for each checkout. Payment Request status remains
+derived from submitted Payment Entries. This preserves retry history and makes the unique reference
+the outbound correlation guarantee.
