@@ -8,6 +8,12 @@
 
 <!-- How the user likes things done. Code style, tools, patterns, communication. -->
 - Repository commitments should include a dedicated Conventional Commits rule for consistency.
+- Even when a plan (or "learning mode") calls out a piece of business logic as "yours to write" /
+  a user contribution, implement it fully anyway unless the user explicitly asks to write it
+  themselves. Do not leave `NotImplementedError`/TODO stubs in a plan you were asked to implement.
+- Do not treat a plan's own housekeeping tasks (e.g. "rewrite the outline into a full phase plan")
+  as mandatory just because the plan document says so — confirm or skip busywork like that; the
+  user has flagged it as useless before. See [[feedback-outline-not-full-plans]].
 
 ## Key Learnings
 

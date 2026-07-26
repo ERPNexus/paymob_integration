@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T10:42:17.447Z
-> Files: 127 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T11:10:10.990Z
+> Files: 130 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/0cbf8a7e-b9f8-4540-97d4-0d43b39c9339/scratchpad/
 
@@ -14,8 +14,9 @@
 
 ## ../../../.claude/projects/-home-frappe-frappe-bench-16-apps-paymob-integration/memory/
 
+- `feedback-implement-fully-no-todo-stubs.md` — Declares fully (~447 tok)
 - `feedback-no-commit-before-review.md` (~437 tok)
-- `MEMORY.md` — Memory Index (~271 tok)
+- `MEMORY.md` — Memory Index (~311 tok)
 
 ## ./
 
@@ -86,15 +87,15 @@
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~1546 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~1568 tok)
+- `decisions.md` — Decisions (ADRs) (~2129 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~2062 tok)
 - `fields.md` — Fields (~2081 tok)
 - `README.md` — Project documentation (~381 tok)
 - `states.md` — States & Transitions (~845 tok)
 
 ## docs/user-guide/
 
-- `README.md` — Project documentation (~1880 tok)
+- `README.md` — Project documentation (~2029 tok)
 
 ## learning/paymob-integration/
 
@@ -111,6 +112,7 @@
 - `hooks.py` — Declares views (~1939 tok)
 - `modules.txt` (~5 tok)
 - `patches.txt` (~73 tok)
+- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~546 tok)
 
 ## paymob_integration/config/
 
@@ -130,10 +132,10 @@
 - `amounts.py` — Converts amounts to and from Paymob integer minor units. (~260 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
 - `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~438 tok)
-- `hmac_verify.py` — Verifies Paymob's response callback (the browser redirect). Display integrity only — this (~497 tok)
+- `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
 - `intention.py` — Creates a Paymob Intention and returns checkout identifiers. (~365 tok)
-- `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~384 tok)
-- `test_settings.py` — TestCredentialLookup: test_includes_country, test_explicit_mode_overrides_site_mode (~324 tok)
+- `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~511 tok)
+- `test_settings.py` — TestCredentialLookup: test_includes_country, test_explicit_mode_overrides_site_mode, test_disabled_r (~414 tok)
 
 ## paymob_integration/paymob_integration/
 
@@ -200,8 +202,9 @@
 - `helpers.py` — Creates self-contained ERPNext documents for checkout integration tests. (~600 tok)
 - `test_amounts.py` — Minor-unit conversion checks. (~250 tok)
 - `test_checkout.py` — Intention creation and checkout-boundary checks. (~830 tok)
-- `test_hmac_verify.py` — TestVerifyResponseCallback: test_valid_signature_passes, test_tampered_field_is_rejected, test_missi (~583 tok)
+- `test_hmac_verify.py` — TestVerifyResponseCallback: test_valid_signature_passes, test_tampered_field_is_rejected, test_missi (~1650 tok)
 - `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 8 mor (~1539 tok)
+- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~1166 tok)
 
 ## paymob_integration/translations/
 
