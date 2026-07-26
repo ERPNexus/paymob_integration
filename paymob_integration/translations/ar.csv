@@ -1,0 +1,28 @@
+Paymob did not answer in time. The payment has not changed. Please try again.,لم يستجب باي موب في الوقت المحدد. لم تتغير حالة الدفع. برجاء المحاولة مرة أخرى.
+Could not reach Paymob. The payment has not changed. Please try again.,تعذر الاتصال بباي موب. لم تتغير حالة الدفع. برجاء المحاولة مرة أخرى.
+Paymob is not enabled. Ask an administrator to configure Paymob Settings.,باي موب غير مفعل. برجاء الطلب من المسؤول ضبط إعدادات باي موب.
+No Paymob credentials are configured for {0}, {1} in {2} mode.,لا توجد بيانات اعتماد لباي موب لـ {0}، {1} في وضع {2}.
+Connected to Paymob for {0} in {1} mode.,تم الاتصال بباي موب لـ {0} في وضع {1}.
+Paymob rejected the request. Check the credentials and try again.,رفض باي موب الطلب. تحقق من بيانات الاعتماد وحاول مرة أخرى.
+Paymob returned an invalid response. Please try again.,أعاد باي موب استجابة غير صالحة. يرجى المحاولة مرة أخرى.
+Test Connection,اختبار الاتصال
+Contacting Paymob...,جارٍ الاتصال بباي موب...
+Currency,العملة
+Paymob,باي موب
+Test,اختبار
+Enabled,مفعل
+Country,البلد
+Mode,الوضع
+Base URL,Base URL
+Public Key,Public Key
+Secret Key,Secret Key
+API Key,API Key
+HMAC Secret,HMAC Secret
+Payment Account,حساب الدفع
+Payment Method,طريقة الدفع
+Integration ID,Integration ID
+Credential Sets,مجموعات بيانات الاعتماد
+Integration IDs,معرفات التكامل
+Intention Expiration Seconds,ثواني انتهاء صلاحية النية
+Stale Pending Minutes,دقائق التعليق القديمة
+Configuration,الإعدادات

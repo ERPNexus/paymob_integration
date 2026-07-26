@@ -525,7 +525,7 @@ git commit -m "feat: resolve Paymob credentials by currency and mode with no fal
 **Interfaces:**
 - Consumes: `client.request`, `settings.base_url`.
 - Produces: `get_auth_token(credentials, force_refresh: bool = False) -> str`, cached under
-  `paymob_auth_token:<country>:<mode>` for `TOKEN_TTL_SECONDS`.
+  `paymob_auth_token:<country>:<currency>:<mode>` for `TOKEN_TTL_SECONDS`.
 
 Phase 10's poller depends on this. It is built here because Test Connection is the honest way to
 prove an API key works, and that is the same call.
@@ -608,7 +608,7 @@ TOKEN_TTL_SECONDS = 45 * 60
 
 
 def cache_key(credentials):
-	return f"paymob_auth_token:{credentials.country}:{credentials.mode}"
+	return f"paymob_auth_token:{credentials.country}:{credentials.currency}:{credentials.mode}"
 
 
 def get_auth_token(credentials, force_refresh=False):

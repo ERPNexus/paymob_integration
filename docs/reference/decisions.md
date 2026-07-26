@@ -65,3 +65,19 @@ silently accept it — a human reviews it before it hits the books.
   lifecycle state is not regressed.
 - **Consequences / why:** protects the ledger from posting the wrong amount while still keeping a
   full, tamper-evident record for reconciliation.
+
+---
+
+### ADR-0010 — The `payments` app is not a dependency
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** Installing this app does not require installing another payment app.
+
+**Technical:**
+- **Context:** ERPNext's Payment Request gateway machinery resolves controllers through the
+  `Payment Gateway` DocType in the separate `payments` app, which is not installed on this bench.
+- **Decision:** Drive Payment Requests directly. Paymob configuration lives in `Paymob Settings`,
+  and `Paymob Credential Set.payment_account` supplies the clearing account.
+- **Consequences / why:** this removes a dependency and indirection. Phase 02 supplies the
+  Pay with Paymob button; installing `payments` later does not conflict with this setup.

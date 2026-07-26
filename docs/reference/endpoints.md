@@ -28,23 +28,31 @@ message that can cause money to be recorded.
 
 ## Settings
 
-### Integration IDs (child table)
+### Paymob Settings (Single)
 
-**Functional:** Which Paymob payment methods this site offers, and their mode/currency.
-
-**Technical:**
-- Stored as a **child table** (method, currency, mode, integration ID) — not a single field.
-- Each integration ID is a mode-bound (`test`/`live`) payment-method contract. Test and live IDs
-  must match the key mode in use, or checkout fails.
-
-### Credential storage
-
-**Functional:** Where the Paymob keys are kept.
+**Functional:** One place where a merchant enters their Paymob account details, one set per
+country they sell in, and switches the whole site between test and live.
 
 **Technical:**
-- Stored in secure Frappe/site configuration — **never** committed to the repo.
-- Server-only credentials (secret key, API key, HMAC secret) are never sent to the browser
-  ([ADR-0002](decisions.md#adr-0002--server-only-credentials-never-reach-the-browser)).
+- `enabled` gates credential resolution. `mode` (`Test`/`Live`) selects credential rows; there
+  is **no fallback** from Live to Test.
+- `credential_sets` stores country, currency, mode, base URL, browser-safe `public_key`, encrypted
+  `secret_key`/`api_key`/`hmac_secret`, and the clearing `payment_account`.
+- `integration_ids` stores the checkout methods keyed by country, currency, and mode.
+- `intention_expiration_seconds` defaults to 3600 and `stale_pending_minutes` to 20.
+- Only System Managers can read or edit the settings.
+
+### Test Connection
+
+**Functional:** A button proves saved Paymob credentials work before a customer relies on them.
+
+**Technical:**
+- Whitelisted method `test_connection(country, currency)` requires `System Manager`.
+- It requests `POST {base_url}/api/auth/tokens`, caches the discarded auth token, and returns only
+  `{ok, message}`; no token or key is returned or logged.
+- Ledger authority: none.
+- Expected Paymob failures are surfaced as short translated Desk messages without an endpoint,
+  response body, credential, or traceback.
 
 ## Named error paths
 

@@ -1,0 +1,59 @@
+{
+ "app": "paymob_integration",
+ "charts": [],
+ "content": "[{\"id\":\"paymob_settings_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Configuration</b></span>\",\"col\":12}},{\"id\":\"paymob_settings_shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Settings\",\"col\":3}},{\"id\":\"paymob_settings_card\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}}]",
+ "creation": "2026-07-26 07:53:38.530420",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "setting",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Paymob Integration",
+ "link_type": "DocType",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Configuration",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Paymob Settings",
+   "link_count": 0,
+   "link_to": "Paymob Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-26 07:53:38.530420",
+ "modified_by": "Administrator",
+ "module": "Paymob Integration",
+ "name": "Paymob Integration",
+ "number_cards": [],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 0.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Paymob Settings",
+   "link_to": "Paymob Settings",
+   "type": "DocType"
+  }
+ ],
+ "title": "Paymob Integration",
+ "type": "Workspace"
+}
