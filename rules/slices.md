@@ -43,6 +43,7 @@ A slice is **done** only when all of these ship in the same change:
 | Tests | Per [`testing.md`](testing.md) |
 | Docs | Per [`documentation.md`](documentation.md) — states, decisions, fields, endpoints |
 | Translations | Per [`translation.md`](translation.md) |
+| Workspace | Per [`workspace.md`](workspace.md) — new DocTypes/reports/pages are wired into the `Paymob Integration` workspace |
 | Money rules | Per [`payments.md`](payments.md) if it touches money |
 
 Partial slices are not merged. If a slice grows while being built, it is split — not finished

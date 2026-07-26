@@ -26,6 +26,7 @@ blocks a merge.
 | [testing.md](testing.md) | The payment scenarios every money path must prove | Convention (blocking at review) |
 | [documentation.md](documentation.md) | Every slice ships with docs; published docs 100% cover the app | Convention (Definition of Done) |
 | [translation.md](translation.md) | Every user-facing string is translatable; Arabic lives in `ar.csv` | Convention (Definition of Done) |
+| [workspace.md](workspace.md) | Every new DocType, report, or page is reachable from the `Paymob Integration` workspace | Convention (Definition of Done) |
 
 ### Craft
 
@@ -36,6 +37,7 @@ blocks a merge.
 | [logging.md](logging.md) | Every payment stage is traceable by Payment Request name | Convention (Definition of Done) |
 | [configuration.md](configuration.md) | Nothing configurable is hardcoded; one Settings DocType | Convention (Definition of Done) |
 | [secrets.md](secrets.md) | Credentials never reach git, logs, or the browser | Convention + `pre-commit` |
+| [commits.md](commits.md) | Commit history uses a consistent Conventional Commits format | Convention (blocking at review) |
 
 ### The gate
 

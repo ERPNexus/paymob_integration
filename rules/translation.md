@@ -21,9 +21,15 @@ English forever, and nobody goes back to find them.
 | Button, message, error, notification | "Payment verified" | Yes |
 | Select field options | "Pending", "Expired" | Yes — the stored value stays English |
 | Print formats, emails, portal pages | receipt template | Yes |
+| Canonical external technical term | "Public Key", "HMAC Secret", "Integration ID" | **Keep English** — it must match the vendor's dashboard and documentation |
 
 Arabic column names break queries, API calls, reports, and every line of Python that touches
 the field. Code stays English. Only what the user reads is translated.
+
+An English label is also retained when it is the exact name of a Paymob credential, API field,
+protocol term, or dashboard value. Translate the surrounding instruction, help text, and error
+message, but not the canonical term itself. This lets a merchant match the field to Paymob's
+dashboard without guessing whether an Arabic synonym means the same credential.
 
 ## The requirement
 
@@ -45,6 +51,7 @@ the field. Code stays English. Only what the user reads is translated.
 - [ ] New strings have Arabic entries in `translations/ar.csv`.
 - [ ] No Arabic text appears anywhere outside `ar.csv`.
 - [ ] No fieldname, DocType name, or stored value was translated.
+- [ ] Canonical Paymob dashboard, API, and protocol terms retain their English spelling.
 
 ## What this rule is NOT
 
