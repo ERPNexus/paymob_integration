@@ -24,3 +24,11 @@ class TestCredentialLookup(FrappeTestCase):
 		get_settings.return_value = frappe._dict(enabled=1, mode="Live", credential_sets=[test_row, live_row])
 
 		self.assertIs(settings.get_credential_set("Egypt", "USD", "Test"), test_row)
+
+
+class TestEnabledCredentialSets(FrappeTestCase):
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_disabled_returns_empty(self, get_settings):
+		get_settings.return_value = frappe._dict(enabled=0, credential_sets=[frappe._dict(enabled=1)])
+
+		self.assertEqual(settings.enabled_credential_sets(), [])

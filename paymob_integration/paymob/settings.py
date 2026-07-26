@@ -28,6 +28,18 @@ def get_credential_set(country, currency, mode=None):
 	)
 
 
+def enabled_credential_sets():
+	"""Every enabled credential row. Callers that must not let a payload pick the secret
+	trial-verify against all of them rather than filtering on a claimed country or currency.
+	Returns [] rather than throwing when Paymob is disabled — the webhook has no user to show
+	a message to.
+	"""
+	config = get_settings()
+	if not config.enabled:
+		return []
+	return [row for row in config.credential_sets if row.enabled]
+
+
 def get_integration_ids(country, currency):
 	"""Return enabled integration IDs for a country and currency in the site's current mode."""
 	config = get_settings()
