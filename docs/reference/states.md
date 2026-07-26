@@ -75,3 +75,38 @@ it as final. The customer still sees the normal "payment received" result.
 - **Does NOT change the lifecycle state.** The record stays `paid` (or whatever it was); this is
   a flag *alongside* it. Resolve by human decision → keep `paid`, or move to `refunded`, etc.
 - See decision [ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted).
+
+## Event kinds (Paymob Transaction)
+
+> These are **not** a third axis on top of the two above. A `Paymob Transaction` row is one
+> append-only event received about a payment, not a record with its own lifecycle — `event_kind`
+> never transitions, it is set once at insert and stays fixed forever. The lifecycle states above
+> belong to the `Paymob Payment Attempt`; the event kinds below belong to the raw events that,
+> from Phase 06 onward, drive that attempt's lifecycle state.
+
+**Functional:** What kind of thing Paymob is telling us happened to a transaction — a plain
+success, a decline, a wallet payment still settling, a reversal, or an authorization-only step.
+
+**Technical:**
+- Source of truth: `paymob.events.classify_event(obj)`, run on every authentic processed callback.
+  There is no event-type field in Paymob's payload — the flags *are* the type, and reversal flags
+  are read before `success`/`pending` because a refund callback also carries `success: true`.
+- The seven stored `Select` values, checked in this order:
+
+  | Value | Set when | Note |
+  |---|---|---|
+  | `Void` | `is_voided` | checked first, wins over every other flag |
+  | `Refund` | `is_refunded` | also carries `success: true`; refund must be read before success |
+  | `Capture` | `is_capture` | a captured authorization |
+  | `Auth` | `is_auth` | authorization-only, not yet captured |
+  | `Pending` | `pending` | wallet/kiosk in-flight; also carries `success: true` |
+  | `Success` | `success` (and none of the above) | a completed payment |
+  | `Decline` | none of the above flags set | the fallback |
+
+- `event_kind` is half of the row's computed **name** (`"<paymob_transaction_id>:<event_kind>"`,
+  see [ADR-0005](decisions.md#adr-0005--the-dedup-key-is-the-rows-own-primary-key-not-a-separate-unique-column))
+  — the same transaction id can have one row per distinct kind (e.g. a `Success` row and a later
+  `Refund` row for the same payment). `Refund` is the one exception to "never two rows of the
+  same kind": its name also carries `refunded_amount_cents`, because Paymob resends the same
+  parent transaction id for each cumulative partial refund — one row per distinct cumulative
+  amount, not one row total.

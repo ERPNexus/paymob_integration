@@ -51,3 +51,4 @@ Payment received. Thank you.,تم استلام الدفعة. شكرًا لك.
 This payment did not go through. You can try again.,لم تكتمل عملية الدفع. يمكنك المحاولة مرة أخرى.
 This payment link has expired.,انتهت صلاحية رابط الدفع هذا.
 This payment has been refunded.,تم استرداد هذه الدفعة.
+A Paymob Transaction needs a transaction ID and an event kind.,تحتاج معاملة باي موب إلى رقم معاملة ونوع حدث.

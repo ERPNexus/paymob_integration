@@ -1,7 +1,7 @@
 {
  "app": "paymob_integration",
  "charts": [],
- "content": "[{\"id\":\"paymob-settings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Settings\",\"col\":3}},{\"id\":\"paymob-configuration\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}}]",
+ "content": "[{\"id\":\"paymob-settings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Settings\",\"col\":3}},{\"id\":\"paymob-configuration\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}},{\"id\":\"paymob-transactions-shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Transactions\",\"col\":3}},{\"id\":\"paymob-transactions-card\",\"type\":\"card\",\"data\":{\"card_name\":\"Transactions\",\"col\":4}}]",
  "custom_blocks": [],
  "doctype": "Workspace",
  "for_user": "",
@@ -27,6 +27,24 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Transactions",
+   "link_count": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Paymob Transaction",
+   "link_count": 0,
+   "link_to": "Paymob Transaction",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
  "module": "Paymob Integration",
@@ -39,6 +57,13 @@
    "doc_view": "",
    "label": "Paymob Settings",
    "link_to": "Paymob Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Paymob Transactions",
+   "link_to": "Paymob Transaction",
    "type": "DocType"
   }
  ],

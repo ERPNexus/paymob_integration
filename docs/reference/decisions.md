@@ -120,6 +120,62 @@ accounts are configured in, without guessing.
 
 ---
 
+### ADR-0005 — The dedup key is the row's own primary key, not a separate unique column
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** The same webhook delivered twice never creates two records — Frappe's own
+document-name uniqueness is the guarantee, not application code.
+
+**Technical:**
+- **Context:** `plans/05-transaction-record-and-dedup.md` called for a unique column holding
+  `"<transaction_id>:<event_kind>"`. In Frappe a unique **field** collision raises
+  `frappe.UniqueValidationError`; only a **primary-key** collision raises
+  `frappe.DuplicateEntryError`, the exception `webhooks._store` is written to catch. A unique
+  field would also add a second index for the same fact the primary key already indexes.
+- **Decision:** `PaymobTransaction.autoname()` sets `self.name = f"{paymob_transaction_id}:
+  {event_kind}"` directly — no `event_key` field exists on the DocType. `SHOW INDEX FROM
+  \`tabPaymob Transaction\`` shows one `PRIMARY` index and nothing else.
+- Also decided here: **`Pending` is a seventh event kind**, not folded into `Success`. Paymob's
+  wallet/kiosk flow can send `pending: true, success: true`, followed later by a real settlement
+  for the same transaction id. Classifying both as `Success` would give them the same computed
+  name and silently swallow the settlement as a "duplicate."
+- Also decided here: **`Refund`'s key includes `refunded_amount_cents`** —
+  `f"{paymob_transaction_id}:Refund:{refunded_amount_cents}"`. Paymob resends the *same* parent
+  transaction id for each cumulative partial refund with a growing `refunded_amount_cents`
+  (`plans/11-refund-and-void.md`); keying on `event_kind` alone would collapse the second partial
+  refund into the first's row instead of recording it. An exact resend (identical amount) still
+  dedups correctly.
+- **Consequences / why:** one index instead of two, the app's actual duplicate-guard exception
+  matches the one `rules/payments.md` §6 names, a genuine settlement arriving after a pending
+  notification is never lost, and cumulative partial refunds are never silently dropped.
+
+---
+
+### ADR-0007 — Persist-then-acknowledge: the `200` means committed
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** When Paymob's servers get a `200` back from the processed callback, the payment
+event is already safely on disk — not just "read."
+
+**Technical:**
+- **Context:** Before this phase, `processed_callback` verified the HMAC and returned `"ok"`
+  without writing anything — the `200` meant "we read it," not "we kept it." Paymob's webhook
+  retry behaviour is undocumented and assumed to be zero (`plans/README.md`, decision 4), so a
+  lost event between verification and storage had no other safety net.
+- **Decision:** `webhooks._store` inserts the `Paymob Transaction` row and calls
+  `frappe.db.commit()` **before** `processed_callback` returns `"ok"`. A duplicate delivery
+  (`frappe.DuplicateEntryError`) also returns `"ok"` — the row already exists, so there is nothing
+  left to acknowledge differently. Any other exception during insert is left to propagate: Frappe
+  rolls back and the response is a 5xx, so Paymob (or the Phase 10 poller) retries.
+- **Consequences / why:** the only exception `_store` catches is `frappe.DuplicateEntryError` — a
+  broader `except` would silently swallow a real persistence failure while still telling Paymob
+  "got it," burying the one event that needed to be kept. Because Paymob's own retry behaviour
+  cannot be relied on, the Phase 10 poller is the real safety net for a delivery that gets a 5xx.
+
+---
+
 ### ADR-0006 — The processed callback is the app's only `allow_guest=True` method
 
 **Date:** 2026-07-26 · **Status:** Accepted

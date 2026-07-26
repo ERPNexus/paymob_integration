@@ -166,3 +166,73 @@ a Paymob intention.
 
 **Technical:** Administrator-controlled Int, default 20 minutes. Phase 10 uses it to select
 pending attempts for Transaction Inquiry.
+
+### name / event_key (Paymob Transaction)
+
+**Functional:** The same webhook delivered twice never creates two records.
+
+**Technical:**
+- Source of truth: `PaymobTransaction.autoname()`, which sets `self.name =
+  f"{paymob_transaction_id}:{event_kind}"` — except for `Refund`, which appends
+  `:{refunded_amount_cents}` because Paymob resends the same parent transaction id for each
+  cumulative partial refund. There is no separate `event_key` field — the document's own primary
+  key **is** the dedup key, so the guard is a database constraint, not an `if`. See
+  [ADR-0005](decisions.md#adr-0005--the-dedup-key-is-the-rows-own-primary-key-not-a-separate-unique-column).
+- A duplicate delivery raises `frappe.DuplicateEntryError` on `insert()`; `webhooks._store`
+  catches exactly that exception and only that one.
+
+### event_kind (Paymob Transaction)
+
+**Functional:** What kind of event this row records — see
+[states.md](states.md#event-kinds-paymob-transaction) for the full list and classification order.
+
+**Technical:** `Select`, required, set once by `events.classify_event(obj)` at insert time and
+never changed afterward — an append-only record has no field that transitions.
+
+### source (Paymob Transaction)
+
+**Functional:** Where this event came from — did Paymob push it to us, or did we ask?
+
+**Technical:** `Select`, `Webhook` or `Inquiry`, required. This phase always writes `Webhook`;
+Phase 10's Transaction Inquiry poller writes `Inquiry` for rows it discovers itself.
+
+### hmac_verified (Paymob Transaction)
+
+**Functional:** Whether this event's authenticity was proven by a signature check.
+
+**Technical:** `Check`, `1` on every row this phase writes (a webhook is only stored after HMAC
+verification succeeds). The field exists for Phase 10's Transaction Inquiry rows, which carry no
+signature to check and so are stored with this at `0`.
+
+### processed (Paymob Transaction)
+
+**Functional:** Whether this event has been used yet to drive the payment's lifecycle state.
+
+**Technical:** `Check`, defaults to `0` and stays `0` on every row this phase writes — the
+consumer that flips it to `1` is Phase 06's state machine, shipped together with the
+`frappe.enqueue` call that hands rows to it. This phase never enqueues anything.
+
+### raw_payload (Paymob Transaction)
+
+**Functional:** The reconciliation-relevant part of the event as Paymob sent it, kept for audit
+— never surfaced in a log line, and never a second copy of customer personal data.
+
+**Technical:** `Code`, `frappe.as_json(webhooks._redact(obj))`. `_redact` keeps an **allowlist**
+of transaction/amount/status fields (never the whole `obj`) plus `order` trimmed to
+`id`/`merchant_order_id` and `source_data` trimmed to `type`/`sub_type`/`pan` (Paymob's masked
+last-four, allowed under `rules/stored-payment-data.md`). Real Paymob payloads carry
+`billing_data` and similar customer-identity blocks beyond what this app uses; those are dropped
+before storage. `rules/logging.md` forbids logging the complete webhook payload; this field is
+the durable record instead, readable only by System Manager / Accounts Manager per the DocType's
+permissions. No role has delete on this DocType — see
+[audit-trail.md](../../rules/audit-trail.md) on immutability.
+
+### currency (Paymob Transaction)
+
+**Functional:** The currency Paymob reported for this specific event.
+
+**Technical:** `Data`, not `Link` — unlike `Paymob Payment Attempt.currency`. This value comes
+from an inbound, unverified-against-ERPNext fact; a `Link` field would throw (and the webhook
+would 500, and Paymob would retry forever) the moment Paymob reports a currency ERPNext has no
+`Currency` row for. Comparing it against the attempt's `currency` (a business decision) is Phase
+06's job, not this DocType's.

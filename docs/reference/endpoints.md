@@ -43,11 +43,28 @@ message that can cause money to be recorded.
   session; the HMAC *is* the authentication. See ADR-0006.
 - On failure: `frappe.local.response["http_status_code"] = 401`, return nothing — no explanation,
   no document load, no `frappe.db` call.
-- On success (this phase): log and return `"ok"`. No attempt lookup, no state change, no Payment
-  Entry yet — Phase 05 inserts classify → insert → commit → enqueue at that point, so the `200`
-  starts meaning "durably stored" instead of just "acknowledged."
-- Side effects (from Phase 05 onward): idempotency check → legal state transition → Payment Entry
-  (if success + amount matches).
+- On success: classify the event (`paymob.events.classify_event`), resolve the merchant
+  order ID against `Paymob Payment Attempt` via `webhooks._resolve_attempt` (one read that
+  answers both "does this attempt exist" and "which Payment Request"), insert one
+  `Paymob Transaction` row, commit, and return `"ok"`. See
+  [ADR-0007](decisions.md#adr-0007--persist-then-acknowledge-the-200-means-committed).
+- `merchant_order_id` is **not** covered by the HMAC (only `order.id` is signed — see the field
+  list above), so `_resolve_attempt` only trusts the lookup when the attempt's own frozen
+  `paymob_order_id` equals the signed `order.id`, mirroring `www/paymob_result.py`'s redirect
+  check. A mismatch stores the row with both `attempt` and `payment_request` blank, same as an
+  unrecognized reference.
+- Status codes:
+  - `401` — HMAC did not verify against any enabled credential set. Nothing stored.
+  - `200` ("ok") — event durably stored (first delivery of this transaction id + event kind).
+  - `200` ("ok") — duplicate delivery (`frappe.DuplicateEntryError` on insert). The row already
+    exists; nothing new is written, and Paymob is told to stop retrying.
+  - `5xx` — persistence failed for any other reason (`webhooks._store` catches only
+    `frappe.DuplicateEntryError`; every other exception propagates and Frappe rolls back). Paymob
+    retries, and the Phase 10 poller is the second safety net given Paymob's retry behaviour is
+    assumed to be zero.
+  - The body is `"ok"` on every 200 — stored or duplicate look identical to the caller, by design.
+- No attempt-state change and no Payment Entry yet from this phase — Phase 06 reads the stored
+  rows (`processed = 0`) and drives the state machine; Phase 08 posts the ledger entry.
 - Ledger authority: **yes** — see [ADR-0001](decisions.md#adr-0001--ledger-writes-are-triggered-only-by-the-server-to-server-processed-callback).
 
 ### Response callback (browser redirect target)
@@ -129,8 +146,13 @@ through the credential lookup's own narrow exception; never echoes the attacker-
 
 **Functional:** The same event arriving twice produces one result, not two.
 
-**Technical:** Idempotency check on `transaction_id` + event type; acknowledge and exit on duplicate.
-A later *different* event for the same transaction (e.g. a refund) remains processable.
+**Technical:** `Paymob Transaction.name` is `"<transaction_id>:<event_kind>"` — for `Refund`,
+`"<transaction_id>:Refund:<refunded_amount_cents>"`
+([ADR-0005](decisions.md#adr-0005--the-dedup-key-is-the-rows-own-primary-key-not-a-separate-unique-column));
+a repeat insert raises `frappe.DuplicateEntryError`, which `webhooks._store` catches, rolls back,
+logs one line, and returns as if stored — `200`, nothing written twice. A later *different* event
+for the same transaction (e.g. a refund after a success, or a second partial refund with a larger
+`refunded_amount_cents`) has a different name, and remains fully processable.
 
 ### Amount mismatch
 

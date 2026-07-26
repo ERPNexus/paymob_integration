@@ -1,0 +1,153 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-26 11:32:30.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "paymob_transaction_id",
+  "event_kind",
+  "attempt",
+  "payment_request",
+  "amount_cents",
+  "currency",
+  "success",
+  "pending",
+  "is_refunded",
+  "is_voided",
+  "refunded_amount_cents",
+  "source",
+  "hmac_verified",
+  "received_at",
+  "raw_payload",
+  "processed"
+ ],
+ "fields": [
+  {
+   "fieldname": "paymob_transaction_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Paymob Transaction ID",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "event_kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Event Kind",
+   "options": "Success\nDecline\nPending\nRefund\nVoid\nCapture\nAuth",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "attempt",
+   "fieldtype": "Link",
+   "label": "Attempt",
+   "options": "Paymob Payment Attempt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_request",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Payment Request",
+   "options": "Payment Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Amount Cents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "success",
+   "fieldtype": "Check",
+   "label": "Success",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pending",
+   "fieldtype": "Check",
+   "label": "Pending",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_refunded",
+   "fieldtype": "Check",
+   "label": "Is Refunded",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_voided",
+   "fieldtype": "Check",
+   "label": "Is Voided",
+   "read_only": 1
+  },
+  {
+   "fieldname": "refunded_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Refunded Amount Cents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Webhook\nInquiry",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "hmac_verified",
+   "fieldtype": "Check",
+   "label": "HMAC Verified",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Received At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_payload",
+   "fieldtype": "Code",
+   "label": "Raw Payload",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processed",
+   "fieldtype": "Check",
+   "label": "Processed",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-26 11:32:30.000000",
+ "modified_by": "Administrator",
+ "module": "Paymob Integration",
+ "name": "Paymob Transaction",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
