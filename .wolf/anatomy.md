@@ -1,31 +1,16 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T11:10:10.990Z
-> Files: 130 tracked | Anatomy hits: 0 | Misses: 0
-
-## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/0cbf8a7e-b9f8-4540-97d4-0d43b39c9339/scratchpad/
-
-- `check_err.py` — run (~94 tok)
-
-## ../../../.claude/plans/
-
-- `let-s-plan-plans-03-result-page-md-frolicking-taco.md` — Expand Phase 03 — Customer Result Page (~2371 tok)
-- `plan-plans-04-webhook-hmac-verification-temporal-parnas.md` — Phase 04 — Webhook & HMAC Verification (~3654 tok)
-
-## ../../../.claude/projects/-home-frappe-frappe-bench-16-apps-paymob-integration/memory/
-
-- `feedback-implement-fully-no-todo-stubs.md` — Declares fully (~447 tok)
-- `feedback-no-commit-before-review.md` (~437 tok)
-- `MEMORY.md` — Memory Index (~311 tok)
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T12:28:37.818Z
+> Files: 141 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
 - `.editorconfig` — Editor configuration (~109 tok)
 - `.eslintrc` (~671 tok)
-- `.gitignore` — Git ignore rules (~343 tok)
+- `.gitignore` — Git ignore rules (~422 tok)
 - `.pre-commit-config.yaml` (~538 tok)
-- `AGENTS.md` — Repository Guidelines (~927 tok)
-- `CLAUDE.md` — OpenWolf (~1914 tok)
+- `AGENTS.md` — OpenWolf (~955 tok)
+- `CLAUDE.md` — OpenWolf (~1913 tok)
 - `DESIGN.md` — DESIGN.md — Paymob Integration visual system (~989 tok)
 - `license.txt` (~268 tok)
 - `pyproject.toml` — Python project configuration (~565 tok)
@@ -63,6 +48,54 @@
 
 - `report.json` (~722 tok)
 
+## .frappe-visual-review/2026-07-26T06-18-00/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-19-17/
+
+- `report.json` (~632 tok)
+
+## .frappe-visual-review/2026-07-26T06-19-58/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-24-42/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-25-25/
+
+- `report.json` (~266 tok)
+
+## .frappe-visual-review/2026-07-26T06-27-09/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-27-46/
+
+- `report.json` (~266 tok)
+
+## .frappe-visual-review/2026-07-26T06-28-11/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-33-05/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-48-46/
+
+- `report.json` (~490 tok)
+
+## .frappe-visual-review/2026-07-26T06-49-45/
+
+- `report.json` (~262 tok)
+
+## .frappe-visual-review/2026-07-26T07-34-21/
+
+- `report.json` (~490 tok)
+
 ## .ruff_cache/
 
 - `.gitignore` — Git ignore rules (~10 tok)
@@ -70,12 +103,12 @@
 
 ## .ruff_cache/0.14.10/
 
-- `10976157832668008079` (~152 tok)
-- `8546099780309061464` (~152 tok)
+- `10976157832668008079` (~531 tok)
+- `8546099780309061464` (~531 tok)
 
 ## docs/
 
-- `architecture.md` — Architecture — How a Paymob ↔ ERPNext Payment Actually Flows (~2416 tok)
+- `architecture.md` — Architecture — How a Paymob ↔ ERPNext Payment Actually Flows (~2423 tok)
 - `glossary.md` — Glossary — Paymob & Payment-Integration Terms (~5010 tok)
 - `must_have_features.md` — Must-Have Features — Non-Negotiables for the Paymob ↔ ERPNext Integration (~2228 tok)
 - `README.md` — Project documentation (~383 tok)
@@ -87,11 +120,11 @@
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~2129 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~2062 tok)
-- `fields.md` — Fields (~2081 tok)
+- `decisions.md` — Decisions (ADRs) (~3023 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~2512 tok)
+- `fields.md` — Fields (~3073 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~845 tok)
+- `states.md` — States & Transitions (~1397 tok)
 
 ## docs/user-guide/
 
@@ -108,11 +141,11 @@
 ## paymob_integration/
 
 - `__init__.py` (~7 tok)
-- `api.py` — Whitelisted entry points for logged-in Desk users. (~1685 tok)
-- `hooks.py` — Declares views (~1939 tok)
+- `api.py` — Whitelisted entry points for logged-in Desk users. (~1690 tok)
+- `hooks.py` — Declares views (~1899 tok)
 - `modules.txt` (~5 tok)
 - `patches.txt` (~73 tok)
-- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~546 tok)
+- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~1587 tok)
 
 ## paymob_integration/config/
 
@@ -120,7 +153,7 @@
 
 ## paymob_integration/desktop_icon/
 
-- `paymob_integration.json` — Desk launcher entry for the Paymob workspace (~90 tok)
+- `paymob_integration.json` (~95 tok)
 
 ## paymob_integration/patches/
 
@@ -129,13 +162,14 @@
 ## paymob_integration/paymob/
 
 - `__init__.py` (~0 tok)
-- `amounts.py` — Converts amounts to and from Paymob integer minor units. (~260 tok)
+- `amounts.py` — Convert ERPNext amounts to Paymob integer minor units. (~272 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
-- `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~438 tok)
+- `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~445 tok)
+- `events.py` — There is no event-type field in the processed callback payload — the flags *are* the type. (~167 tok)
 - `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
-- `intention.py` — Creates a Paymob Intention and returns checkout identifiers. (~365 tok)
+- `intention.py` — Create a Paymob Intention once per payment attempt; never retry it automatically. (~326 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~511 tok)
-- `test_settings.py` — TestCredentialLookup: test_includes_country, test_explicit_mode_overrides_site_mode, test_disabled_r (~414 tok)
+- `test_settings.py` — Tests: includes_country, explicit_mode_overrides_site_mode, disabled_returns_empty (~414 tok)
 
 ## paymob_integration/paymob_integration/
 
@@ -161,32 +195,34 @@
 ## paymob_integration/paymob_integration/doctype/paymob_payment_attempt/
 
 - `__init__.py` (~0 tok)
-- `paymob_payment_attempt.json` — Checkout-attempt lifecycle schema. (~1090 tok)
-- `paymob_payment_attempt.py` — Paymob Payment Attempt controller. (~45 tok)
+- `paymob_payment_attempt.json` (~813 tok)
+- `paymob_payment_attempt.py` — For license information, please see license.txt (~57 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_settings/
 
 - `__init__.py` (~0 tok)
-- `paymob_settings.js` — For license information, please see license.txt (~250 tok)
+- `paymob_settings.js` — For license information, please see license.txt (~292 tok)
 - `paymob_settings.json` (~485 tok)
-- `paymob_settings.py` — For license information, please see license.txt (~228 tok)
+- `paymob_settings.py` — For license information, please see license.txt (~253 tok)
+- `test_paymob_settings.py` — Tests: connection_surfaces_paymob_errors (~353 tok)
+
+## paymob_integration/paymob_integration/doctype/paymob_transaction/
+
+- `__init__.py` (~0 tok)
+- `paymob_transaction.json` (~827 tok)
+- `paymob_transaction.py` — For license information, please see license.txt (~253 tok)
 
 ## paymob_integration/paymob_integration/workspace/paymob_integration/
 
-- `paymob_integration.json` (~445 tok)
-- `paymob_integration.json` — Public Paymob workspace for the Desk launcher (~260 tok)
+- `paymob_integration.json` (~515 tok)
 
 ## paymob_integration/public/
 
 - `.gitkeep` (~0 tok)
 
-## paymob_integration/public/images/
-
-- `paymob-mark.svg` — Compact Paymob app mark for the Desk launcher (~40 tok)
-
 ## paymob_integration/public/js/
 
-- `payment_request.js` — Declares checkout_tab (~365 tok)
+- `payment_request.js` — Declares checkout_tab (~370 tok)
 
 ## paymob_integration/templates/
 
@@ -199,20 +235,21 @@
 ## paymob_integration/tests/
 
 - `__init__.py` (~0 tok)
-- `helpers.py` — Creates self-contained ERPNext documents for checkout integration tests. (~600 tok)
-- `test_amounts.py` — Minor-unit conversion checks. (~250 tok)
-- `test_checkout.py` — Intention creation and checkout-boundary checks. (~830 tok)
-- `test_hmac_verify.py` — TestVerifyResponseCallback: test_valid_signature_passes, test_tampered_field_is_rejected, test_missi (~1650 tok)
-- `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 8 mor (~1539 tok)
-- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~1166 tok)
+- `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~674 tok)
+- `test_amounts.py` — Tests: two_decimal_currency, decimal_arithmetic_is_exact, three_decimal_currency, half_a_minor_unit_rounds_up + 3 more (~306 tok)
+- `test_checkout.py` — Tests: returns_the_three_identifiers, authenticates_with_the_secret_key, sends_the_amount_as_an_integer, only_browser_safe_values_are_in_the_url + ... (~2719 tok)
+- `test_events.py` — Tests: void_flag_wins, refund_flag_wins_over_success, capture_flag, auth_flag + 5 more (~421 tok)
+- `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
+- `test_result_page.py` — Tests: paid_attempt_with_valid_signature_renders_paid, paid_attempt_with_bad_signature_renders_pending, unknown_reference_renders_neutral_without_r... (~1539 tok)
+- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~3618 tok)
 
 ## paymob_integration/translations/
 
-- `ar.csv` (~769 tok)
+- `ar.csv` (~798 tok)
 
 ## paymob_integration/workspace_sidebar/
 
-- `paymob_integration.json` — Sidebar links for the Paymob workspace (~135 tok)
+- `paymob_integration.json` (~142 tok)
 
 ## paymob_integration/www/
 
@@ -239,16 +276,17 @@
 ## rules/
 
 - `audit-trail.md` — Rule: Audit Trail (~630 tok)
-- `commits.md` — Rule: Commit Messages (~336 tok)
+- `commits.md` — Rule: Commit Messages (~284 tok)
 - `configuration.md` — Rule: Configuration (~626 tok)
 - `currency.md` — Rule: Currency (~503 tok)
+- `document-reference-links.md` — User-Facing Document Reference Links (~327 tok)
 - `documentation.md` — Rule: Documentation Discipline (~877 tok)
 - `error-handling.md` — Rule: Error Handling (~675 tok)
 - `frappe-discipline.md` — Rule: Frappe Discipline (~727 tok)
 - `implementation-gate.md` — Implementation Gate — must-not-get-wrong list (~1432 tok)
 - `logging.md` — Rule: Logging (~676 tok)
 - `payments.md` — Rule: Money Safety (~1390 tok)
-- `README.md` — Project documentation (~866 tok)
+- `README.md` — Project documentation (~897 tok)
 - `secrets.md` — Rule: Secrets (~552 tok)
 - `slices.md` — Rule: Slices (~672 tok)
 - `stored-payment-data.md` — Rule: Stored Payment Data (~598 tok)

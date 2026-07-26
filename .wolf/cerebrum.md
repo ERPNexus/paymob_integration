@@ -44,6 +44,16 @@
 - A trusted result-page state requires both a valid response HMAC and equality between its signed
   Paymob order ID and the selected attempt's stored `paymob_order_id`; credential lookup must use
   the attempt's frozen mode because site mode can change while checkout is open.
+- In local development, `frappe.utils.get_url()` produces a Bench-only host such as
+  `http://capital:8002`; a customer's browser redirect may work through localhost while Paymob's
+  servers cannot reach the processed-callback URL. End-to-end webhook tests require a public HTTPS
+  tunnel or deployed hostname before the intention is created.
+- With Frappe developer mode enabled, `get_url()` appends `webserver_port` even to an HTTPS
+  `host_name` unless that hostname already contains an explicit port. Temporary HTTPS tunnel URLs
+  should therefore be configured with `:443`.
+- A real Paymob checkout through the temporary HTTPS tunnel successfully persisted the verified
+  transaction with `processed = 0`; the attempt remains `Pending` by design until Phase 06 consumes
+  that durable event.
 
 ## Do-Not-Repeat
 
@@ -54,6 +64,8 @@
   opaque `AttributeError`.
 - [2026-07-26] `BaseDocument.update()` accepts one mapping, not keyword arguments; use
   `document.update({"field": value})` before saving.
+- [2026-07-26] Run repository-scoped Git commands from the app root, not the Bench root; the latter
+  is not a Git worktree.
 
 ## Decision Log
 
