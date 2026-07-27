@@ -129,10 +129,11 @@ def _store(obj, kind, reference, payment_request):
 			"raw_payload": frappe.as_json(_redact(obj)),
 		}
 	)
+	frappe.db.savepoint("paymob_transaction_insert")
 	try:
 		doc.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
-		frappe.db.rollback()
+		frappe.db.rollback(save_point="paymob_transaction_insert")
 		frappe.logger("paymob").info(
 			f"processed callback duplicate payment_request={payment_request or 'unknown'} "
 			f"txn={obj.get('id')} kind={kind}"

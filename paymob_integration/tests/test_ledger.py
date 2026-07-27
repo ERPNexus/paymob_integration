@@ -6,11 +6,10 @@ from unittest.mock import Mock, patch
 
 import frappe
 from erpnext.accounts.doctype.payment_request.payment_request import PaymentRequest
-from frappe.tests import IntegrationTestCase
 
 from paymob_integration import api
 from paymob_integration.paymob import amounts, ledger
-from paymob_integration.tests.helpers import given_submitted_payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 
 
 def _clearing_account():
@@ -25,7 +24,7 @@ def _credentials():
 	return row
 
 
-class TestPostPayment(IntegrationTestCase):
+class TestPostPayment(NoCommitIntegrationTestCase):
 	def setUp(self):
 		patcher = patch(
 			"paymob_integration.paymob.settings.get_credential_set",
@@ -59,7 +58,6 @@ class TestPostPayment(IntegrationTestCase):
 		if invoice.docstatus == 1:
 			invoice.cancel()
 		frappe.delete_doc("Sales Invoice", invoice_name, force=True, ignore_permissions=True)
-		frappe.db.commit()
 
 	def _given_transaction(self, txn_id, attempt, payment_request, amount_cents=27555, currency="EGP"):
 		doc = frappe.get_doc(
@@ -79,7 +77,6 @@ class TestPostPayment(IntegrationTestCase):
 			}
 		)
 		doc.insert(ignore_permissions=True)
-		frappe.db.commit()
 		self.addCleanup(lambda: frappe.db.delete("Paymob Transaction", {"paymob_transaction_id": txn_id}))
 		return doc
 

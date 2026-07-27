@@ -1,12 +1,12 @@
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import IntegrationTestCase, UnitTestCase
+from frappe.tests import UnitTestCase
 
 from paymob_integration import api
 from paymob_integration.paymob import intention
 from paymob_integration.paymob.client import PaymobNetworkError
-from paymob_integration.tests.helpers import given_submitted_payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 
 INTENTION_RESPONSE = {
 	"id": "pi_FAKE_1",
@@ -197,7 +197,7 @@ class TestCheckoutURL(UnitTestCase):
 		self.assertEqual(result, {"attempt": attempt.name, "checkout_url": "https://checkout.test"})
 
 
-class TestStartCheckout(IntegrationTestCase):
+class TestStartCheckout(NoCommitIntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		self.payment_request, self.invoice = given_submitted_payment_request()
@@ -214,7 +214,6 @@ class TestStartCheckout(IntegrationTestCase):
 		frappe.delete_doc("Payment Request", self.payment_request.name, force=True)
 		self.invoice.cancel()
 		frappe.delete_doc("Sales Invoice", self.invoice.name, force=True)
-		frappe.db.commit()
 		super().tearDown()
 
 	def start(self, intention_result=CHECKOUT_RESULT, intention_error=None):

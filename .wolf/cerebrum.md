@@ -107,6 +107,9 @@
   `name`, so external `paymob_transaction_id` data cannot safely power the connection. Audit
   entries therefore retain the external ID for correlation and also link to the exact local
   `Paymob Transaction` document.
+- `IntegrationTestCase.setUpClass()` commits Frappe's class fixtures before registering its
+  rollback cleanup. `NoCommitIntegrationTestCase` must patch `frappe.db.commit` only after that
+  setup, then register its restoration cleanup so it runs before Frappe's rollback.
 
 ## Do-Not-Repeat
 

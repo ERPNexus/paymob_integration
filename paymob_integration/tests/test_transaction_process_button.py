@@ -5,11 +5,10 @@ delegating to the same idempotent consumer the webhook enqueues.
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
 
 from paymob_integration import api
 from paymob_integration.paymob_integration.doctype.paymob_transaction.paymob_transaction import process
-from paymob_integration.tests.helpers import given_submitted_payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 
 
 def _credentials():
@@ -24,7 +23,7 @@ def _clearing_account():
 	return frappe.get_cached_value("Company", company, "default_cash_account")
 
 
-class TestProcessButton(IntegrationTestCase):
+class TestProcessButton(NoCommitIntegrationTestCase):
 	def setUp(self):
 		patcher = patch(
 			"paymob_integration.paymob.settings.get_credential_set",
@@ -53,7 +52,6 @@ class TestProcessButton(IntegrationTestCase):
 			}
 		)
 		txn.insert(ignore_permissions=True)
-		frappe.db.commit()
 		self.addCleanup(self._cleanup_fixture, attempt.name, payment_request.name, invoice.name)
 		return attempt, txn
 
@@ -75,7 +73,6 @@ class TestProcessButton(IntegrationTestCase):
 		if invoice.docstatus == 1:
 			invoice.cancel()
 		frappe.delete_doc("Sales Invoice", invoice_name, force=True, ignore_permissions=True)
-		frappe.db.commit()
 
 	def test_guest_cannot_press_the_button(self):
 		_, txn = self._given_stuck_transaction()

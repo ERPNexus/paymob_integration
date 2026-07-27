@@ -1,6 +1,20 @@
 """Build the ERPNext documents checkout integration tests act on."""
 
+from unittest.mock import patch
+
 import frappe
+from frappe.tests import IntegrationTestCase
+
+
+class NoCommitIntegrationTestCase(IntegrationTestCase):
+	"""Keep each integration-test class inside Frappe's rollback transaction."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		commit = patch.object(frappe.db, "commit", return_value=None)
+		commit.start()
+		cls.addClassCleanup(commit.stop)
 
 
 def given_submitted_payment_request(grand_total="275.55", currency="EGP"):

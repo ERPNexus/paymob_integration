@@ -3,10 +3,9 @@ import hmac as hmac_lib
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
 
 from paymob_integration.paymob.hmac_verify import RESPONSE_CALLBACK_FIELDS
-from paymob_integration.tests.helpers import given_submitted_payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 from paymob_integration.www import paymob_result
 
 SECRET = "hmac_test_FAKE_secret"
@@ -20,7 +19,7 @@ def _signed_query(merchant_order_id, order_id, secret=SECRET):
 	return {**fields, "merchant_order_id": merchant_order_id, "hmac": digest}
 
 
-class TestResultPage(IntegrationTestCase):
+class TestResultPage(NoCommitIntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		self.payment_request, self.invoice = given_submitted_payment_request()
@@ -47,7 +46,6 @@ class TestResultPage(IntegrationTestCase):
 		frappe.delete_doc("Payment Request", self.payment_request.name, force=True)
 		self.invoice.cancel()
 		frappe.delete_doc("Sales Invoice", self.invoice.name, force=True)
-		frappe.db.commit()
 		super().tearDown()
 
 	def render(self, form_dict):

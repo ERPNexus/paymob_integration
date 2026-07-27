@@ -1,6 +1,6 @@
 """Endpoint tests for the processed callback, driven through a real werkzeug request so the
 frappe.form_dict / request.args split (the make_form_dict landmine, see webhooks.py) is actually
-exercised rather than assumed. IntegrationTestCase because the storage path (Phase 05) writes
+exercised rather than assumed. The no-commit integration base is required because the storage path (Phase 05) writes
 real Paymob Transaction rows.
 """
 
@@ -8,12 +8,11 @@ import json
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
 from werkzeug.test import EnvironBuilder
 from werkzeug.wrappers import Request
 
 from paymob_integration import webhooks
-from paymob_integration.tests.helpers import given_submitted_payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 from paymob_integration.tests.test_hmac_verify import SECRET, VALID_OBJ, _sign_processed
 
 
@@ -33,7 +32,7 @@ def _post(payload, hmac):
 	return webhooks.processed_callback()
 
 
-class TestProcessedCallback(IntegrationTestCase):
+class TestProcessedCallback(NoCommitIntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		frappe.local.response = frappe._dict()
@@ -41,7 +40,6 @@ class TestProcessedCallback(IntegrationTestCase):
 	def tearDown(self):
 		frappe.local.request = None
 		frappe.db.delete("Paymob Transaction", {"paymob_transaction_id": VALID_OBJ["id"]})
-		frappe.db.commit()
 		super().tearDown()
 
 	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
@@ -249,7 +247,6 @@ class TestProcessedCallback(IntegrationTestCase):
 			frappe.delete_doc("Payment Request", payment_request.name, force=True)
 			invoice.cancel()
 			frappe.delete_doc("Sales Invoice", invoice.name, force=True)
-			frappe.db.commit()
 
 	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
 	def test_mismatched_order_id_does_not_resolve_attempt(self, enabled_credential_sets):
@@ -284,7 +281,6 @@ class TestProcessedCallback(IntegrationTestCase):
 			frappe.delete_doc("Payment Request", payment_request.name, force=True)
 			invoice.cancel()
 			frappe.delete_doc("Sales Invoice", invoice.name, force=True)
-			frappe.db.commit()
 
 	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
 	def test_unknown_merchant_order_id_stores_with_blank_links(self, enabled_credential_sets):

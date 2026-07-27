@@ -6,14 +6,13 @@ still counts zero.
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
 
 from paymob_integration import api
 from paymob_integration.paymob import processor
 from paymob_integration.paymob_integration.report.paymob_open_audit_entries.paymob_open_audit_entries import (
 	execute,
 )
-from paymob_integration.tests.helpers import given_submitted_payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 
 
 def _credentials():
@@ -29,15 +28,12 @@ def _clearing_account():
 
 
 def _forget_transaction(txn_id):
-	"""Committed cleanup for a bare transaction fixture with no attempt/payment request —
-	those are cleaned up (and committed) via `_cleanup_fixture` instead.
-	"""
+	"""Clean up a bare transaction fixture with no attempt or Payment Request."""
 	frappe.db.delete("Paymob Transaction", {"paymob_transaction_id": txn_id})
 	frappe.db.delete("Paymob Audit Entry", {"paymob_transaction_id": txn_id})
-	frappe.db.commit()
 
 
-class TestProcessTransaction(IntegrationTestCase):
+class TestProcessTransaction(NoCommitIntegrationTestCase):
 	def setUp(self):
 		patcher = patch(
 			"paymob_integration.paymob.settings.get_credential_set",
@@ -74,7 +70,6 @@ class TestProcessTransaction(IntegrationTestCase):
 		if invoice.docstatus == 1:
 			invoice.cancel()
 		frappe.delete_doc("Sales Invoice", invoice_name, force=True, ignore_permissions=True)
-		frappe.db.commit()
 
 	def _given_transaction(
 		self,
@@ -107,7 +102,6 @@ class TestProcessTransaction(IntegrationTestCase):
 			}
 		)
 		doc.insert(ignore_permissions=True)
-		frappe.db.commit()
 		self.addCleanup(_forget_transaction, txn_id)
 		return doc
 
@@ -372,7 +366,7 @@ class TestProcessTransaction(IntegrationTestCase):
 		return entry
 
 
-class TestAmountMismatch(IntegrationTestCase):
+class TestAmountMismatch(NoCommitIntegrationTestCase):
 	def setUp(self):
 		patcher = patch(
 			"paymob_integration.paymob.settings.get_credential_set",
@@ -406,7 +400,6 @@ class TestAmountMismatch(IntegrationTestCase):
 		if invoice.docstatus == 1:
 			invoice.cancel()
 		frappe.delete_doc("Sales Invoice", invoice_name, force=True, ignore_permissions=True)
-		frappe.db.commit()
 
 	def _given_transaction(self, txn_id, amount_cents, currency="EGP", attempt=None, payment_request=None):
 		doc = frappe.get_doc(
@@ -426,7 +419,6 @@ class TestAmountMismatch(IntegrationTestCase):
 			}
 		)
 		doc.insert(ignore_permissions=True)
-		frappe.db.commit()
 		self.addCleanup(_forget_transaction, txn_id)
 		return doc
 

@@ -19,6 +19,13 @@ Tests use recorded or hand-written Paymob responses. No test may make a network 
 suite that depends on Paymob being up, or on test credentials being valid, is a test suite that
 will be disabled the first time it goes red for the wrong reason.
 
+### Never commit test data
+
+Test code must not call `frappe.db.commit()`. Integration database tests inherit
+`NoCommitIntegrationTestCase`, which begins after Frappe's class setup and makes commits no-ops
+until Frappe rolls the class transaction back. Do not bypass that transaction for fixture setup or
+cleanup.
+
 ### Every money path ships with these tests
 
 **Unit tests** (single function, no site interaction where possible):
@@ -55,6 +62,9 @@ effect. "No ledger row was created" is asserted by counting, not assumed.
 - [ ] New money path has integration tests for success, duplicate, mismatch, and failure.
 - [ ] Every test that involves a money path asserts on Payment Entry count and allocation.
 - [ ] No test performs a network call.
+- [ ] No test calls `frappe.db.commit()`.
+- [ ] Every integration database test inherits `NoCommitIntegrationTestCase`.
+- [ ] Fixture setup and cleanup do not bypass the test transaction.
 - [ ] `bench --site <site> run-tests --app paymob_integration` passes.
 
 ## What this rule is NOT
