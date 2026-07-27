@@ -67,8 +67,9 @@ message that can cause money to be recorded.
   `short` queue, with `job_id=f"paymob-process-{doc.name}"` and `deduplicate=True` so a
   redelivery that somehow slips past the primary-key constraint still cannot double-enqueue. A
   duplicate delivery (`doc` is `None`) enqueues nothing — there is no new row to process.
-- No Payment Entry yet from this phase — Phase 06/07's job drives the state machine and holds a
-  mismatch for review; Phase 08 posts the ledger entry.
+- `paymob.processor.process_transaction` drives the state machine, holds a mismatch for review,
+  and posts the Payment Entry through `paymob.ledger.post_payment` when the event targets `Paid`
+  cleanly.
 - Ledger authority: **yes** — see [ADR-0001](decisions.md#adr-0001--ledger-writes-are-triggered-only-by-the-server-to-server-processed-callback).
 
 ### Response callback (browser redirect target)
@@ -124,6 +125,21 @@ country they sell in, and switches the whole site between test and live.
 - Expected Paymob failures are surfaced as short translated Desk messages without an endpoint,
   response body, credential, or traceback.
 
+### Process (manual rescue)
+
+**Functional:** A button on a Paymob Transaction stuck at "Processed: No" runs it through the
+state machine now, instead of waiting for the background job or Phase 10's poller.
+
+**Technical:**
+- Whitelisted method `paymob_transaction.process(name)` calls
+  `frappe.get_doc("Paymob Transaction", name).check_permission("read")` — the same roles that can
+  read the doctype, taken from `paymob_transaction.json` rather than a hardcoded role list — then
+  `processor.process_transaction(name)` (ADR-0013).
+- It never calls Paymob's API; it re-runs our own idempotent consumer of an already-stored,
+  already-HMAC-verified row. A no-op on an already-processed row, same as the automatic path.
+- Ledger authority: none directly — it can trigger `paymob.ledger.post_payment` the same way the
+  automatic path does, under the same duplicate-payment guard.
+
 ## Named error paths
 
 ### HMAC verification failure
@@ -168,8 +184,9 @@ cents, currency case/whitespace-insensitive) whenever the event targets `Paid`. 
 over, or right-amount-wrong-currency — sets `attempt.needs_human_attention = 1` and writes one
 `Amount Mismatch` `Paymob Audit Entry` with both amounts and both currencies; **the lifecycle state
 still moves to `Paid`**, per [ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted) —
-the flag blocks the not-yet-built Phase 08 Payment Entry creation, it does not regress the state.
-No Payment Entry exists from any path in this phase, mismatched or not.
+the flag blocks `paymob.ledger.post_payment` from running at all (`processor.process_transaction`
+gates the call on `target == "Paid" and not mismatch`), it does not regress the state. No Payment
+Entry is created on a mismatched callback.
 
 ### Illegal transition
 
@@ -194,6 +211,24 @@ money that cannot be posted anywhere — held for a human rather than silently d
 the case `webhooks._resolve_attempt` produces when `merchant_order_id` doesn't resolve, or
 resolves to an attempt whose frozen `paymob_order_id` doesn't match the signed `order.id`. A
 `Decline` with no attempt writes no audit entry. Both mark the row `processed = 1`.
+
+### Duplicate payment for one Payment Request
+
+**Functional:** A second genuine payment for a Payment Request that already has one is real money
+that was charged twice — held for a human to refund, not silently dropped or posted again.
+
+**Technical:** Distinct from the [duplicate webhook delivery](#duplicate-webhook-delivery) case
+above: that one is the *same* transaction id redelivered, caught by the primary-key constraint
+before `process_transaction` ever runs. This is a *different*, genuine `Success` transaction id
+for an attempt whose Payment Request already has a submitted Payment Entry —
+`states.check` treats `current == target` as a legal no-op, so it reaches
+`paymob.ledger.post_payment`, which looks up `Payment Entry Reference` for an existing submitted
+row against the same `payment_request` before doing anything else, inside the same
+`for_update=True` lock the caller already holds. Finding one skips posting entirely: the attempt is
+flagged `needs_human_attention = 1`, and one `Duplicate Payment` `Paymob Audit Entry` is written
+naming the existing Payment Entry and, when it exists, the sibling transaction id — the current
+transaction row is still marked `processed = 1` so the job does not retry. See
+[ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module).
 
 ### Missing callback (abandoned / lost)
 

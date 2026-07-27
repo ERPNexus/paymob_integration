@@ -31,7 +31,12 @@ def given_submitted_payment_request(grand_total="275.55", currency="EGP"):
 
 
 def given_submitted_sales_invoice(grand_total="275.55", currency="EGP"):
-	"""Create one non-stock invoice line at exactly the requested amount."""
+	"""Create one non-stock invoice line at exactly the requested amount.
+
+	`disable_rounded_total` avoids a mismatch on sites whose Currency master rounds to a whole
+	unit (`smallest_currency_fraction_value = 0`) — without it, `outstanding_amount` silently
+	differs from `grand_total`, which any test asserting the ledger down to the cent depends on.
+	"""
 	company = frappe.defaults.get_global_default("company")
 	customer = _ensure_customer(currency)
 	item = _ensure_item()
@@ -42,6 +47,7 @@ def given_submitted_sales_invoice(grand_total="275.55", currency="EGP"):
 			"customer": customer,
 			"currency": currency,
 			"conversion_rate": 1,
+			"disable_rounded_total": 1,
 			"due_date": frappe.utils.nowdate(),
 			"items": [{"item_code": item, "qty": 1, "rate": grand_total}],
 		}

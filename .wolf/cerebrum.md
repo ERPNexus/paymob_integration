@@ -7,6 +7,8 @@
 ## User Preferences
 
 <!-- How the user likes things done. Code style, tools, patterns, communication. -->
+- Commit and push requested repository work directly on `version-16`; do not create an `agent/*`
+  branch unless the user asks for one.
 - Repository commitments should include a dedicated Conventional Commits rule for consistency.
 - Even when a plan (or "learning mode") calls out a piece of business logic as "yours to write" /
   a user contribution, implement it fully anyway unless the user explicitly asks to write it
@@ -54,6 +56,57 @@
 - A real Paymob checkout through the temporary HTTPS tunnel successfully persisted the verified
   transaction with `processed = 0`; the attempt remains `Pending` by design until Phase 06 consumes
   that durable event.
+- ERPNext's `PaymentRequest.create_payment_entry` posts `self.outstanding_amount` read at call
+  time — **not** the amount the caller was told to collect. Phase 07's mismatch gate compares the
+  Paymob amount to `attempt.expected_amount_cents`, a snapshot taken at intention creation, so the
+  two can drift (partial cash payment, credit note). Any ledger write path needs its own post-hoc
+  equality check against `payment_entry.paid_amount`.
+- `_allocate_payment_request_to_pe_references` (payment_request.py:505) sets
+  `references[N].payment_request`; `PaymentEntry.update_payment_requests` (payment_entry.py:320)
+  derives the Payment Request status on submit. Both are why nothing in this app writes PR status.
+- Once a phase starts creating Payment Entries, the existing `_cleanup_fixture` teardown in
+  `test_processor.py` breaks for **every** test on a posting path, not just the ones whose
+  assertions change — a submitted Payment Entry blocks the cancel/delete of both the Payment
+  Request and the Sales Invoice. Teardown must cancel and delete the Payment Entry first.
+- Phases 08 + 09 (ledger write path, duplicate payment guard) are implemented: `paymob.ledger.
+  post_payment` is the single Payment Entry write path (ADR-0008), and its duplicate check —
+  `frappe.db.get_value("Payment Entry Reference", {"payment_request": ..., "docstatus": 1},
+  "parent")` — runs first inside the caller's `for_update=True` lock, before any posting. The
+  audit writer was extracted from `processor._audit` into `paymob.audit.record` (ADR-0012) so
+  `ledger.py` can write audit entries without importing `processor` (which imports `ledger`).
+- `pre-commit run --all-files` reformats *every* file in the repo, including ones you didn't
+  touch, if they carry pre-existing ruff-format/lint debt — this bench's `capital` site already
+  has 12 pre-existing `RUF059` (unused unpacked `invoice` in test fixtures) errors on
+  `version-16` unrelated to any one phase. Scope pre-commit to the files actually changed
+  (`pre-commit run --files <paths>`) to avoid dragging unrelated reformatting into a phase's diff.
+- A real Paymob checkout through the temporary tunnel exposed a live bug the full test suite
+  never caught: `processor.process_transaction` is enqueued from `webhooks.processed_callback`
+  (`allow_guest=True`), so the RQ job inherits `user="Guest"`. ERPNext's `create_payment_entry` →
+  `get_payment_reference_details` calls `frappe.has_permission(..., throw=True)` directly (not
+  via a doc save `ignore_permissions` can reach), so Guest hit `PermissionError` and the
+  transaction sat at `processed=0` forever, silently — no test simulates the Guest-user context
+  a real webhook-enqueued job runs in; `IntegrationTestCase` always runs as Administrator. Fixed
+  in ADR-0013: `process_transaction` does `frappe.set_user("Administrator")` for its duration,
+  restored in `finally`. Diagnosed by reading the actual RQ job's `exc_info` via
+  `Job.fetch(job_id, connection=get_redis_conn())` — `bench doctor` and Error Log alone didn't
+  surface it (the real job's traceback wasn't in Error Log; only stale unrelated jobs were).
+- Permission checks for a Desk button on a doctype with no `write` permission row (an
+  append-only log like Paymob Transaction) should read the DocType's own `permissions` list via
+  `doc.check_permission("read")`, not a hardcoded role tuple passed to `frappe.only_for(...)` —
+  the user explicitly corrected this mid-task: hardcoded role lists drift from the JSON's own
+  permission definition over time. See [[feedback-no-hardcoded-roles]].
+- A whitelisted `test_<doctype>.py` file placed directly under `doctype/<name>/` triggers
+  Frappe's per-doctype `make_test_records` bootstrap when run via `--module` or early in
+  `--app` sort order, which can crash with `DuplicateEntryError` on a non-pristine site (this
+  bench's `capital` site already has real `Standard Buying`/`Standard Selling` Price Lists that
+  ERPNext's `BootStrapTestData` tries to insert unconditionally). Files needing real
+  Payment-Request-linked fixtures belong under `paymob_integration/tests/` instead (matching
+  `test_processor.py`/`test_ledger.py`), which sorts after the doctype folder and avoids the
+  crash entirely.
+- A Frappe DocType Dashboard connection filters another DocType by the current document's
+  `name`, so external `paymob_transaction_id` data cannot safely power the connection. Audit
+  entries therefore retain the external ID for correlation and also link to the exact local
+  `Paymob Transaction` document.
 
 ## Do-Not-Repeat
 
@@ -69,6 +122,18 @@
 - [2026-07-27] Do not add a third `paymob_integration` package level for Frappe artifacts. In this
   single-module app, `Paymob Integration` maps to `paymob_integration/paymob_integration/`; its
   DocTypes and reports already belong directly under that package's `doctype/` and `report/`.
+- [2026-07-27] `helpers.given_submitted_sales_invoice`'s promised "exactly the requested amount"
+  was false whenever the site's `Currency` master rounds to a whole unit
+  (`smallest_currency_fraction_value = 0` — true for EGP on the `capital` site). ERPNext's
+  Sales Invoice `rounded_total` then differs from `grand_total` by up to ~0.5, and
+  `outstanding_amount` tracks the rounded figure — invisible until Phase 08 actually posted a
+  Payment Entry and checked `invoice.outstanding_amount == 0`. Fix: `disable_rounded_total = 1`
+  on the fixture invoice, not a per-test workaround. Before trusting any test-fixture "exact
+  amount" claim on this bench, check the currency's `smallest_currency_fraction_value`.
+- [2026-07-27] After hand-editing a DocType JSON `Select` field's `options`, the change is not
+  live until `bench --site <site> migrate` runs — `frappe.get_cached_doc`/metadata caching means
+  a fresh test run raises `ValidationError` on the new option ("cannot be X, should be one of
+  Y") until the site's DocType metadata is resynced.
 
 ## Decision Log
 

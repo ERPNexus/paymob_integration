@@ -61,6 +61,14 @@ and mutability. Governed by [../../rules/documentation.md](../../rules/documenta
 **Technical:** The timestamp of the last reconciliation inquiry. It is the one attempt field that
 Phase 10 may update with `db_set`; money, status, and identifiers are never updated that way.
 
+### payment_entry (Paymob Payment Attempt)
+
+**Functional:** Which ERPNext Payment Entry this attempt's money landed in, once it has.
+
+**Technical:** Link to Payment Entry, blank until `paymob.ledger.post_payment` posts one. Set with
+`attempt.save(ignore_permissions=True)`, never `db_set` — it is money-adjacent, not bookkeeping.
+See [ADR-0008](decisions.md#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check).
+
 ### enabled (Paymob Settings, Paymob Credential Set, Paymob Integration ID)
 
 **Functional:** Three separate on/off switches, at three different levels. `Paymob Settings.enabled`
@@ -146,8 +154,9 @@ payments in EGP" or "mobile wallet"), and which Paymob configuration handles it.
 
 **Functional:** The clearing account where payments for this configuration will land.
 
-**Technical:** Required Link to ERPNext Account, selected by a System Manager. Phase 08 reads it
-onto the in-memory Payment Request before creating a Payment Entry.
+**Technical:** Required Link to ERPNext Account, selected by a System Manager. `paymob.ledger.
+post_payment` reads it onto the in-memory Payment Request before creating a Payment Entry. See
+[ADR-0008](decisions.md#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check).
 
 ### secret_key / api_key / hmac_secret (Paymob Credential Set)
 
@@ -192,6 +201,15 @@ pending attempts for Transaction Inquiry.
 
 **Technical:** `Select`, required, set once by `events.classify_event(obj)` at insert time and
 never changed afterward — an append-only record has no field that transitions.
+
+### paymob_transaction (Paymob Audit Entry)
+
+**Functional:** The exact gateway event behind an audit entry, available from the event's Desk
+form under **Connections**.
+
+**Technical:** Read-only Link to `Paymob Transaction`, set by `paymob.audit.record`. The external
+`paymob_transaction_id` remains for gateway correlation; it can identify multiple local event rows
+(for example, a partial refund sequence), while this link identifies one exact stored event.
 
 ### source (Paymob Transaction)
 
@@ -249,10 +267,11 @@ would 500, and Paymob would retry forever) the moment Paymob reports a currency 
 **Functional:** What kind of thing went wrong, and a plain-language account of it a non-developer
 can read without opening the code.
 
-**Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`, or
-`Unattributed Payment` — set once by whichever branch of `paymob.processor` creates the entry.
-`description` is always built with `_()` and named values (never string concatenation), per
-[`rules/translation.md`](../../rules/translation.md).
+**Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
+`Unattributed Payment`, or `Duplicate Payment` — set once by whichever caller of `paymob.audit.
+record` creates the entry (`paymob.processor` for the first three, `paymob.ledger.post_payment`
+for `Duplicate Payment`). `description` is always built with `_()` and named values (never string
+concatenation), per [`rules/translation.md`](../../rules/translation.md).
 
 ### expected_amount_cents / expected_currency / received_amount_cents / received_currency (Paymob Audit Entry)
 
@@ -269,9 +288,12 @@ callback). `Long Int`, never `Currency` — these are minor units, not a display
 
 **Functional:** Who or what caused this record to exist, and when.
 
-**Technical:** `actor` is a plain `Data` field — the fully-qualified path of the system job for
-every entry this phase writes (`paymob_integration.paymob.processor.process_transaction`);
-Phase 11's human-triggered refund/void audit entries will carry `frappe.session.user` instead.
+**Technical:** `actor` is a plain `Data` field — the fully-qualified path of the caller that
+invoked `paymob.audit.record`, passed explicitly as a required parameter
+([ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module)):
+`paymob_integration.paymob.processor.process_transaction` for the first three event kinds,
+`paymob_integration.paymob.ledger.post_payment` for `Duplicate Payment`. Phase 11's
+human-triggered refund/void audit entries will carry `frappe.session.user` instead.
 `occurred_at` is `transaction.received_at` when the entry is tied to a stored transaction, falling
 back to `frappe.utils.now_datetime()` otherwise — deliberately **system-timezone**, matching
 `Paymob Transaction.received_at`, not literal UTC; two datetime conventions in one app would be a

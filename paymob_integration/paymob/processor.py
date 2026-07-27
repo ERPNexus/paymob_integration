@@ -1,12 +1,15 @@
 """The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md,
-rules/audit-trail.md). Drives Paymob Payment Attempt.state from a verified event and holds an
-authentic amount/currency mismatch for a human — it never creates a Payment Entry (Phase 08).
+rules/audit-trail.md). Drives Paymob Payment Attempt.state from a verified event, holds an
+authentic amount/currency mismatch for a human, and posts the Payment Entry through
+`paymob.ledger.post_payment` — the only function that creates one (rules/payments.md rule 1).
 """
 
 import frappe
 from frappe import _
 
-from paymob_integration.paymob import amounts, states
+from paymob_integration.paymob import amounts, audit, ledger, states
+
+ACTOR = "paymob_integration.paymob.processor.process_transaction"
 
 
 def process_transaction(transaction):
@@ -16,61 +19,76 @@ def process_transaction(transaction):
 	poller. Re-raising inside the illegal-transition branch would make RQ retry forever and mint
 	a duplicate audit entry on every attempt, so `_refuse` records the audit entry and returns
 	instead of raising a second time.
+
+	Runs as Administrator (ADR-0013): `frappe.enqueue` in webhooks.py inherits the calling
+	request's user, which is `Guest` for the allow_guest processed callback. ERPNext's
+	`create_payment_entry` checks `frappe.has_permission` on the Sales Invoice internally — a
+	check `ignore_permissions=True` on our own document saves cannot reach — so a verified,
+	HMAC-authenticated event needs a privileged actor to post the money it already proves.
 	"""
-	txn = frappe.get_doc("Paymob Transaction", transaction)
-	if txn.processed:
-		return
-
-	target = states.target_state(txn.event_kind)
-	if target is None:
-		return _consume_unmapped(txn)
-
-	if not txn.attempt:
-		return _unattributed(txn, target)
-
-	# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
-	attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
+	original_user = frappe.session.user
+	frappe.set_user("Administrator")
 	try:
-		moved = states.check(attempt.state, target)
-	except states.IllegalTransition:
-		return _refuse(txn, attempt, target)
+		txn = frappe.get_doc("Paymob Transaction", transaction)
+		if txn.processed:
+			return
 
-	mismatch = target == "Paid" and not amounts.amounts_match(
-		attempt.expected_amount_cents, attempt.currency, txn.amount_cents, txn.currency
-	)
+		target = states.target_state(txn.event_kind)
+		if target is None:
+			return _consume_unmapped(txn)
 
-	previous_state = attempt.state
-	if moved:
-		attempt.state = target
-	if mismatch:
-		attempt.needs_human_attention = 1
-	attempt.save(ignore_permissions=True)
+		if not txn.attempt:
+			return _unattributed(txn, target)
 
-	if mismatch:
-		_audit(
-			txn,
-			attempt,
-			event="Amount Mismatch",
-			needs_action=1,
-			description=_("Paymob confirmed {0} {1} but {2} {3} was expected.").format(
-				txn.currency, txn.amount_cents, attempt.currency, attempt.expected_amount_cents
-			),
-			expected_amount_cents=attempt.expected_amount_cents,
-			expected_currency=attempt.currency,
-			received_amount_cents=txn.amount_cents,
-			received_currency=txn.currency,
+		# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
+		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
+		try:
+			moved = states.check(attempt.state, target)
+		except states.IllegalTransition:
+			return _refuse(txn, attempt, target)
+
+		mismatch = target == "Paid" and not amounts.amounts_match(
+			attempt.expected_amount_cents, attempt.currency, txn.amount_cents, txn.currency
 		)
+
+		previous_state = attempt.state
+		if moved:
+			attempt.state = target
+		if mismatch:
+			attempt.needs_human_attention = 1
+		attempt.save(ignore_permissions=True)
+
+		if mismatch:
+			audit.record(
+				txn,
+				attempt,
+				event="Amount Mismatch",
+				needs_action=1,
+				description=_("Paymob confirmed {0} {1} but {2} {3} was expected.").format(
+					txn.currency, txn.amount_cents, attempt.currency, attempt.expected_amount_cents
+				),
+				actor=ACTOR,
+				expected_amount_cents=attempt.expected_amount_cents,
+				expected_currency=attempt.currency,
+				received_amount_cents=txn.amount_cents,
+				received_currency=txn.currency,
+			)
+			frappe.logger("paymob").info(
+				f"amount mismatch payment_request={attempt.payment_request} attempt={attempt.name} "
+				f"txn={txn.paymob_transaction_id} expected={attempt.expected_amount_cents}{attempt.currency} "
+				f"received={txn.amount_cents}{txn.currency}"
+			)
+
+		if target == "Paid" and not mismatch:
+			ledger.post_payment(attempt, txn)
+
+		_mark_processed(txn)
 		frappe.logger("paymob").info(
-			f"amount mismatch payment_request={attempt.payment_request} attempt={attempt.name} "
-			f"txn={txn.paymob_transaction_id} expected={attempt.expected_amount_cents}{attempt.currency} "
-			f"received={txn.amount_cents}{txn.currency}"
+			f"state changed payment_request={attempt.payment_request} attempt={attempt.name} "
+			f"txn={txn.paymob_transaction_id} kind={txn.event_kind} from={previous_state} to={attempt.state}"
 		)
-
-	_mark_processed(txn)
-	frappe.logger("paymob").info(
-		f"state changed payment_request={attempt.payment_request} attempt={attempt.name} "
-		f"txn={txn.paymob_transaction_id} kind={txn.event_kind} from={previous_state} to={attempt.state}"
-	)
+	finally:
+		frappe.set_user(original_user)
 
 
 def _consume_unmapped(txn):
@@ -101,7 +119,7 @@ def _unattributed(txn, target):
 			f"unattributed decline logged txn={txn.paymob_transaction_id} kind={txn.event_kind}"
 		)
 		return
-	_audit(
+	audit.record(
 		txn,
 		None,
 		event="Unattributed Payment",
@@ -109,6 +127,7 @@ def _unattributed(txn, target):
 		description=_("Paymob reported a {0} of {1} {2} that could not be matched to any attempt.").format(
 			_(txn.event_kind), txn.currency, txn.amount_cents
 		),
+		actor=ACTOR,
 		received_amount_cents=txn.amount_cents,
 		received_currency=txn.currency,
 	)
@@ -127,7 +146,7 @@ def _refuse(txn, attempt, target):
 	"""
 	attempt.needs_human_attention = 1
 	attempt.save(ignore_permissions=True)
-	_audit(
+	audit.record(
 		txn,
 		attempt,
 		event="Illegal Transition",
@@ -135,34 +154,12 @@ def _refuse(txn, attempt, target):
 		description=_("Paymob reported {0}, which would move this payment from {1} to {2}.").format(
 			_(txn.event_kind), _(attempt.state), _(target)
 		),
+		actor=ACTOR,
 	)
 	_mark_processed(txn)
 	frappe.logger("paymob").info(
 		f"state change refused payment_request={attempt.payment_request} from={attempt.state} to={target}"
 	)
-
-
-def _audit(txn, attempt, event, needs_action, description, **amounts_fields):
-	"""The one function that creates a Paymob Audit Entry — grepping for "who creates an audit
-	entry" should return this function alone (rules/audit-trail.md).
-	"""
-	entry = frappe.get_doc(
-		{
-			"doctype": "Paymob Audit Entry",
-			"payment_request": attempt.payment_request if attempt else txn.payment_request,
-			"attempt": attempt.name if attempt else None,
-			"paymob_transaction_id": txn.paymob_transaction_id,
-			"event": event,
-			"description": description,
-			"actor": "paymob_integration.paymob.processor.process_transaction",
-			"occurred_at": txn.received_at or frappe.utils.now_datetime(),
-			"needs_action": needs_action,
-			**amounts_fields,
-		}
-	)
-	entry.insert(ignore_permissions=True)
-	entry.submit()
-	return entry
 
 
 def _mark_processed(txn):

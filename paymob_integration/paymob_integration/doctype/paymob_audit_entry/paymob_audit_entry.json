@@ -9,6 +9,7 @@
   "payment_request",
   "attempt",
   "paymob_transaction_id",
+  "paymob_transaction",
   "event",
   "description",
   "expected_amount_cents",
@@ -44,11 +45,18 @@
    "read_only": 1
   },
   {
+   "fieldname": "paymob_transaction",
+   "fieldtype": "Link",
+   "label": "Paymob Transaction",
+   "options": "Paymob Transaction",
+   "read_only": 1
+  },
+  {
    "fieldname": "event",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Event",
-   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment",
+   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment\nDuplicate Payment",
    "read_only": 1,
    "reqd": 1
   },
@@ -111,7 +119,13 @@
   }
  ],
  "is_submittable": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Paymob",
+   "link_doctype": "Paymob Audit Entry",
+   "link_fieldname": "supersedes"
+  }
+ ],
  "modified": "2026-07-26 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Paymob Integration",

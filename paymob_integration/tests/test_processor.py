@@ -1,8 +1,9 @@
-"""Integration paths for paymob.processor.process_transaction. Every scenario counts rows —
-zero Payment Entries anywhere in this phase (that is Phase 08's job).
+"""Integration paths for paymob.processor.process_transaction. A `Success` on a `Pending`
+attempt now posts a Payment Entry through `paymob.ledger.post_payment` — every other scenario
+still counts zero.
 """
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
@@ -22,6 +23,11 @@ def _credentials():
 	return row
 
 
+def _clearing_account():
+	company = frappe.defaults.get_global_default("company")
+	return frappe.get_cached_value("Company", company, "default_cash_account")
+
+
 def _forget_transaction(txn_id):
 	"""Committed cleanup for a bare transaction fixture with no attempt/payment request —
 	those are cleaned up (and committed) via `_cleanup_fixture` instead.
@@ -32,6 +38,14 @@ def _forget_transaction(txn_id):
 
 
 class TestProcessTransaction(IntegrationTestCase):
+	def setUp(self):
+		patcher = patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(payment_account=_clearing_account()),
+		)
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
 	def _given_attempt(self, state="Pending"):
 		payment_request, invoice = given_submitted_payment_request()
 		attempt = api._create_attempt(payment_request, _credentials())
@@ -42,6 +56,13 @@ class TestProcessTransaction(IntegrationTestCase):
 		return attempt, payment_request, invoice
 
 	def _cleanup_fixture(self, attempt_name, payment_request_name, invoice_name):
+		for payment_entry in frappe.get_all(
+			"Payment Entry Reference", {"payment_request": payment_request_name}, pluck="parent"
+		):
+			pe = frappe.get_doc("Payment Entry", payment_entry)
+			if pe.docstatus == 1:
+				pe.cancel()
+			frappe.delete_doc("Payment Entry", payment_entry, force=True, ignore_permissions=True)
 		frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
 		frappe.db.delete("Paymob Transaction", {"payment_request": payment_request_name})
 		frappe.delete_doc("Paymob Payment Attempt", attempt_name, force=True, ignore_permissions=True)
@@ -96,18 +117,82 @@ class TestProcessTransaction(IntegrationTestCase):
 	def test_success_on_pending_attempt_moves_to_paid(self):
 		attempt, payment_request, invoice = self._given_attempt()
 		before = self._payment_entry_count()
-		outstanding_before = invoice.outstanding_amount
 
-		txn = self._given_transaction("Success", "700001", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Success", "700001", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		attempt.reload()
 		txn.reload()
 		invoice.reload()
+		payment_request.reload()
 		self.assertEqual(attempt.state, "Paid")
 		self.assertEqual(txn.processed, 1)
-		self.assertEqual(self._payment_entry_count(), before)
-		self.assertEqual(invoice.outstanding_amount, outstanding_before)
+		self.assertEqual(self._payment_entry_count(), before + 1)
+		self.assertTrue(attempt.payment_entry)
+		payment_entry = frappe.get_doc("Payment Entry", attempt.payment_entry)
+		self.assertEqual(payment_entry.docstatus, 1)
+		reference = payment_entry.references[0]
+		self.assertEqual(reference.reference_name, invoice.name)
+		self.assertEqual(reference.payment_request, payment_request.name)
+		self.assertEqual(invoice.outstanding_amount, 0)
+		self.assertEqual(payment_request.status, "Paid")
+
+	def test_success_posts_payment_entry_when_enqueued_as_guest(self):
+		"""The processed callback is `allow_guest=True` (ADR-0006); `frappe.enqueue` inherits
+		that request's user, so the real job always starts as Guest, not Administrator. ADR-0013.
+		"""
+		attempt, payment_request, invoice = self._given_attempt()
+		txn = self._given_transaction(
+			"Success", "700020", attempt=attempt.name, payment_request=payment_request.name
+		)
+		frappe.set_user("Guest")
+		self.addCleanup(frappe.set_user, "Administrator")
+
+		processor.process_transaction(txn.name)
+
+		self.assertEqual(frappe.session.user, "Guest")
+		attempt.reload()
+		invoice.reload()
+		self.assertEqual(attempt.state, "Paid")
+		self.assertTrue(attempt.payment_entry)
+		self.assertEqual(invoice.outstanding_amount, 0)
+
+	def test_second_genuine_success_is_audited_as_duplicate_payment(self):
+		"""rules/testing.md: 'Two genuine payments for one Payment Request: one Payment Entry,
+		one audit record.'
+		"""
+		attempt, payment_request, invoice = self._given_attempt()
+		before = self._payment_entry_count()
+
+		first = self._given_transaction(
+			"Success", "700012", attempt=attempt.name, payment_request=payment_request.name
+		)
+		processor.process_transaction(first.name)
+		second = self._given_transaction(
+			"Success", "700013", attempt=attempt.name, payment_request=payment_request.name
+		)
+		processor.process_transaction(second.name)
+
+		attempt.reload()
+		second.reload()
+		invoice.reload()
+		self.assertEqual(self._payment_entry_count(), before + 1)
+		self.assertEqual(attempt.state, "Paid")
+		self.assertEqual(attempt.needs_human_attention, 1)
+		self.assertEqual(second.processed, 1)
+		self.assertEqual(invoice.outstanding_amount, 0)
+
+		entries = frappe.get_all(
+			"Paymob Audit Entry",
+			filters={"paymob_transaction_id": "700013"},
+			fields=["event", "needs_action", "paymob_transaction"],
+		)
+		self.assertEqual(len(entries), 1)
+		self.assertEqual(entries[0].event, "Duplicate Payment")
+		self.assertEqual(entries[0].needs_action, 1)
+		self.assertEqual(entries[0].paymob_transaction, second.name)
 
 	def test_decline_on_pending_attempt_moves_to_failed(self):
 		attempt, payment_request, invoice = self._given_attempt()
@@ -115,7 +200,9 @@ class TestProcessTransaction(IntegrationTestCase):
 		gl_before = frappe.db.count("GL Entry", {"voucher_type": "Sales Invoice", "voucher_no": invoice.name})
 		invoice_status_before = invoice.status
 
-		txn = self._given_transaction("Decline", "700002", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Decline", "700002", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		attempt.reload()
@@ -123,25 +210,34 @@ class TestProcessTransaction(IntegrationTestCase):
 		self.assertEqual(attempt.state, "Failed")
 		self.assertEqual(self._payment_entry_count(), before)
 		self.assertEqual(
-			frappe.db.count("GL Entry", {"voucher_type": "Sales Invoice", "voucher_no": invoice.name}), gl_before
+			frappe.db.count("GL Entry", {"voucher_type": "Sales Invoice", "voucher_no": invoice.name}),
+			gl_before,
 		)
 		self.assertEqual(invoice.status, invoice_status_before)
 
 		retry = api._create_attempt(payment_request, _credentials())
-		self.addCleanup(lambda: frappe.delete_doc("Paymob Payment Attempt", retry.name, force=True, ignore_permissions=True))
+		self.addCleanup(
+			lambda: frappe.delete_doc(
+				"Paymob Payment Attempt", retry.name, force=True, ignore_permissions=True
+			)
+		)
 		self.assertEqual(retry.special_reference, f"{payment_request.name}-2")
 
 	def test_success_on_failed_attempt_is_refused_and_audited(self):
 		attempt, payment_request, invoice = self._given_attempt(state="Failed")
 
-		txn = self._given_transaction("Success", "700003", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Success", "700003", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		attempt.reload()
 		self.assertEqual(attempt.state, "Failed")
 		self.assertEqual(attempt.needs_human_attention, 1)
 		entries = frappe.get_all(
-			"Paymob Audit Entry", filters={"paymob_transaction_id": "700003"}, fields=["name", "event", "needs_action", "docstatus"]
+			"Paymob Audit Entry",
+			filters={"paymob_transaction_id": "700003"},
+			fields=["name", "event", "needs_action", "docstatus"],
 		)
 		self.assertEqual(len(entries), 1)
 		self.assertEqual(entries[0].event, "Illegal Transition")
@@ -151,19 +247,21 @@ class TestProcessTransaction(IntegrationTestCase):
 	def test_decline_on_paid_attempt_is_refused_and_audited(self):
 		attempt, payment_request, invoice = self._given_attempt(state="Paid")
 
-		txn = self._given_transaction("Decline", "700004", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Decline", "700004", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		attempt.reload()
 		self.assertEqual(attempt.state, "Paid")
-		self.assertEqual(
-			frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700004"}), 1
-		)
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700004"}), 1)
 
 	def test_decline_on_already_failed_attempt_is_a_noop(self):
 		attempt, payment_request, invoice = self._given_attempt(state="Failed")
 
-		txn = self._given_transaction("Decline", "700005", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Decline", "700005", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		txn.reload()
@@ -180,7 +278,9 @@ class TestProcessTransaction(IntegrationTestCase):
 
 	def test_pending_kind_is_consumed_without_state_change(self):
 		attempt, payment_request, invoice = self._given_attempt()
-		txn = self._given_transaction("Pending", "700007", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Pending", "700007", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		txn.reload()
@@ -195,7 +295,9 @@ class TestProcessTransaction(IntegrationTestCase):
 
 		txn.reload()
 		entries = frappe.get_all(
-			"Paymob Audit Entry", filters={"paymob_transaction_id": "700008"}, fields=["event", "needs_action"]
+			"Paymob Audit Entry",
+			filters={"paymob_transaction_id": "700008"},
+			fields=["event", "needs_action"],
 		)
 		self.assertEqual(len(entries), 1)
 		self.assertEqual(entries[0].event, "Unattributed Payment")
@@ -212,7 +314,9 @@ class TestProcessTransaction(IntegrationTestCase):
 
 	def test_reprocessing_a_processed_row_is_a_noop(self):
 		attempt, payment_request, invoice = self._given_attempt(state="Failed")
-		txn = self._given_transaction("Success", "700010", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Success", "700010", attempt=attempt.name, payment_request=payment_request.name
+		)
 
 		processor.process_transaction(txn.name)
 		processor.process_transaction(txn.name)
@@ -223,11 +327,14 @@ class TestProcessTransaction(IntegrationTestCase):
 
 	def test_audit_entry_is_immutable(self):
 		attempt, payment_request, invoice = self._given_attempt(state="Failed")
-		txn = self._given_transaction("Success", "700011", attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"Success", "700011", attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		entry = frappe.get_doc(
-			"Paymob Audit Entry", frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction_id": "700011"})
+			"Paymob Audit Entry",
+			frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction_id": "700011"}),
 		)
 		entry.description = "tampered"
 		with self.assertRaises(frappe.UpdateAfterSubmitError):
@@ -266,6 +373,14 @@ class TestProcessTransaction(IntegrationTestCase):
 
 
 class TestAmountMismatch(IntegrationTestCase):
+	def setUp(self):
+		patcher = patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(payment_account=_clearing_account()),
+		)
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
 	def _given_attempt(self):
 		payment_request, invoice = given_submitted_payment_request()
 		attempt = api._create_attempt(payment_request, _credentials())
@@ -273,6 +388,13 @@ class TestAmountMismatch(IntegrationTestCase):
 		return attempt, payment_request, invoice
 
 	def _cleanup_fixture(self, attempt_name, payment_request_name, invoice_name):
+		for payment_entry in frappe.get_all(
+			"Payment Entry Reference", {"payment_request": payment_request_name}, pluck="parent"
+		):
+			pe = frappe.get_doc("Payment Entry", payment_entry)
+			if pe.docstatus == 1:
+				pe.cancel()
+			frappe.delete_doc("Payment Entry", payment_entry, force=True, ignore_permissions=True)
 		frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
 		frappe.db.delete("Paymob Transaction", {"payment_request": payment_request_name})
 		frappe.delete_doc("Paymob Payment Attempt", attempt_name, force=True, ignore_permissions=True)
@@ -311,7 +433,9 @@ class TestAmountMismatch(IntegrationTestCase):
 	def test_underpayment_is_held_for_review(self):
 		attempt, payment_request, invoice = self._given_attempt()
 		before = frappe.db.count("Payment Entry")
-		txn = self._given_transaction("800101", 27554, attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"800101", 27554, attempt=attempt.name, payment_request=payment_request.name
+		)
 
 		processor.process_transaction(txn.name)
 
@@ -333,7 +457,9 @@ class TestAmountMismatch(IntegrationTestCase):
 
 	def test_overpayment_is_held_for_review(self):
 		attempt, payment_request, invoice = self._given_attempt()
-		txn = self._given_transaction("800102", 27556, attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"800102", 27556, attempt=attempt.name, payment_request=payment_request.name
+		)
 
 		processor.process_transaction(txn.name)
 
@@ -364,7 +490,10 @@ class TestAmountMismatch(IntegrationTestCase):
 
 	def test_exact_match_raises_no_flag_and_no_audit_entry(self):
 		attempt, payment_request, invoice = self._given_attempt()
-		txn = self._given_transaction("800104", 27555, attempt=attempt.name, payment_request=payment_request.name)
+		before = frappe.db.count("Payment Entry")
+		txn = self._given_transaction(
+			"800104", 27555, attempt=attempt.name, payment_request=payment_request.name
+		)
 
 		processor.process_transaction(txn.name)
 
@@ -372,10 +501,14 @@ class TestAmountMismatch(IntegrationTestCase):
 		self.assertEqual(attempt.state, "Paid")
 		self.assertEqual(attempt.needs_human_attention, 0)
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "800104"}), 0)
+		self.assertEqual(frappe.db.count("Payment Entry"), before + 1)
+		self.assertTrue(attempt.payment_entry)
 
 	def test_mismatch_appears_in_open_audit_entries_report(self):
 		attempt, payment_request, invoice = self._given_attempt()
-		txn = self._given_transaction("800105", 27554, attempt=attempt.name, payment_request=payment_request.name)
+		txn = self._given_transaction(
+			"800105", 27554, attempt=attempt.name, payment_request=payment_request.name
+		)
 		processor.process_transaction(txn.name)
 
 		_columns, rows = execute()

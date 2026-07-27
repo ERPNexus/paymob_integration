@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from paymob_integration.paymob import processor
+
 
 class PaymobTransaction(Document):
 	def autoname(self):
@@ -18,3 +20,15 @@ class PaymobTransaction(Document):
 			# and be silently dropped by the dedup constraint instead of recorded.
 			key = f"{key}:{self.refunded_amount_cents or 0}"
 		self.name = key
+
+
+@frappe.whitelist()
+def process(name):
+	"""Manual rescue button for a row stuck at `processed = 0`. Permission comes from the
+	DocType's own `read` row (paymob_transaction.json) rather than a hardcoded role list, so
+	the two never drift apart — there is no separate write permission on an append-only event
+	log. Calls the same idempotent consumer the webhook enqueues (ADR-0013), never Paymob's API,
+	so re-running it on an already-processed row is a no-op rather than a duplicate side effect.
+	"""
+	frappe.get_doc("Paymob Transaction", name).check_permission("read")
+	processor.process_transaction(name)

@@ -71,7 +71,53 @@ silently accept it — a human reviews it before it hits the books.
   wrong currency is a mismatch too. A mismatch sets `attempt.needs_human_attention = 1` and writes
   one `Amount Mismatch` audit entry with both cents and both currencies; the lifecycle state still
   advances to `Paid` per [states.md](states.md#needs_human_attention) — the flag is orthogonal, not
-  a regression. No Payment Entry exists yet to block; that gate is Phase 08's, reading this flag.
+  a regression. No Payment Entry exists yet to block; that gate is
+  [ADR-0008](#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check),
+  reading this flag.
+
+---
+
+### ADR-0008 — The in-memory `payment_account` assignment and a post-hoc amount check
+
+**Date:** 2026-07-27 · **Status:** Accepted
+
+**Functional:** The clearing account a Paymob payment lands in comes from the Paymob credential
+configuration, not from a value stored on the Payment Request itself — and the posted amount is
+checked against what Paymob actually confirmed, even though ERPNext computes it independently.
+
+**Technical:**
+- **Context:** `PaymentRequest.create_payment_entry(submit=True)` reads `self.payment_account` as
+  the `bank_account` argument to `get_payment_entry(...)`
+  (`erpnext/accounts/doctype/payment_request/payment_request.py:348`), then calls
+  `_allocate_payment_request_to_pe_references` (`:505`, which sets
+  `references[0].payment_request = self.name`) and submits. `Paymob Credential Set.payment_account`
+  is the only place this app stores a clearing account (ADR-0010); the Payment Request DocType has
+  no field for it.
+- **Decision:** `paymob.ledger.post_payment` fetches the Payment Request with `for_update=True`
+  before its duplicate-Payment-Entry lookup, then sets `payment_request.payment_account =
+  credentials.payment_account` on the **in-memory** document, immediately before calling
+  `create_payment_entry(submit=True)`, and never saves that assignment. It then compares the
+  posted amount (converted to minor units) against `transaction.amount_cents` and raises — rolling
+  back the whole write — on any mismatch. The posted amount is read from whichever Payment Entry
+  side is actually denominated in `transaction.currency` — `received_amount`
+  (`paid_to_account_currency`, the clearing-account side this decision just set) if that matches,
+  else `paid_amount` (`paid_from_account_currency`, the party/company side) — not `paid_amount`
+  unconditionally, because the two differ whenever the Payment Request's party account isn't in
+  the Payment Request's own currency.
+- **Consequences / why:** `create_payment_entry` posts `self.outstanding_amount`, read *at call
+  time*, not `attempt.expected_amount_cents` (a snapshot from intention creation, already checked
+  by [ADR-0003](#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted)). If the Payment
+  Request's outstanding amount moved between checkout and settlement — a partial cash payment, a
+  credit note — the two snapshots can legitimately disagree even on an authentic, amount-matched
+  callback. The post-hoc check is what actually guarantees "the ledger entry equals what Paymob
+  collected" in production, not just in a test where nothing else touches the Payment Request in
+  between. `PaymentEntry.update_payment_requests` (`payment_entry.py:320`) derives Payment Request
+  status from the submission itself — nothing in this app writes it directly.
+  The `for_update` lock on the Payment Request (not just the caller's lock on the attempt) is what
+  serialises two different attempts of the *same* Payment Request: a retry is a new attempt row
+  (rules/payments.md), so `frappe.get_doc(..., for_update=True)` on the attempt alone does not
+  block a second, concurrent verified success for a sibling attempt from reaching the duplicate
+  check before the first one's Payment Entry is visible.
 
 ---
 
@@ -238,8 +284,9 @@ that points back at the original.
   level (`UpdateAfterSubmitError`), which is a stronger guarantee than a permission row an
   administrator could edit. No role is granted `write`, `delete`, `submit`, `cancel`, or `amend`
   on the doctype at all — every entry is inserted and submitted by server code
-  (`paymob.processor._audit`) with `ignore_permissions=True`, and a resolution is recorded by
-  inserting a **new** entry whose `supersedes` field names the one it resolves.
+  (`paymob.audit.record`, see [ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module))
+  with `ignore_permissions=True`, and a resolution is recorded by inserting a **new** entry whose
+  `supersedes` field names the one it resolves.
 - **Decision:** The "needs action" view (`Paymob Open Audit Entries`) is a **Script Report**, not
   a Query Report as the Phase 06 outline suggested. The reason a *report* is needed at all is
   unchanged from the outline — a list filter cannot express "has no superseding record" — but the
@@ -248,6 +295,71 @@ that points back at the original.
   [`rules/frappe-discipline.md`](../../rules/frappe-discipline.md)'s "no raw SQL that writes" (and
   the spirit of "no unexplained SQL" generally) clean and is directly unit-testable.
 - **Consequences / why:** grepping for "who creates a Paymob Audit Entry" returns one function
-  (`processor._audit`), matching the single-write-path discipline used for Payment Entries. The
+  (`paymob.audit.record`), matching the single-write-path discipline used for Payment Entries. The
   immutability guarantee holds even against a compromised or careless server-side caller, because
   it is enforced by `docstatus`, not by remembering not to call `.save()` on a submitted doc.
+
+---
+
+### ADR-0012 — The audit writer moved to its own module
+
+**Date:** 2026-07-27 · **Status:** Accepted
+
+**Functional:** Nothing changes for anyone reading an audit entry; this is about where the code
+that writes one lives.
+
+**Technical:**
+- **Context:** [ADR-0009](#adr-0009--audit-entries-are-submittable-and-immutable-a-resolution-is-an-append-via-supersedes)
+  declares `processor._audit` the one function that creates `Paymob Audit Entry` rows. Phase 09's
+  duplicate-payment guard needs to write one from `paymob.ledger` — which `processor.py` already
+  imports (to call `post_payment`), so `ledger.py` importing back would be circular.
+- **Decision:** Extract the function verbatim into `paymob.audit::record(txn, attempt, event,
+  needs_action, description, actor, **amounts_fields)`, imported by both `processor.py` and
+  `ledger.py`. `actor` becomes a required parameter instead of a hardcoded string — each of
+  `processor.py`'s three call sites passes
+  `"paymob_integration.paymob.processor.process_transaction"` explicitly (the same value it got
+  implicitly before), and `ledger.py`'s call site passes
+  `"paymob_integration.paymob.ledger.post_payment"`.
+- **Consequences / why:** "one function creates audit entries" (ADR-0009) stays literally true
+  across two call sites instead of becoming two functions with the same shape. Every future caller
+  of `post_payment` — the Phase 10 poller, the Phase 11 refund path — inherits the duplicate-audit
+  behaviour and the shared writer for free, instead of each having to remember to write one.
+  Proven behaviour-preserving: `test_processor.py` passed unchanged before any new duplicate-guard
+  code was added on top of the move.
+
+### ADR-0013 — `process_transaction` runs as Administrator, and gets a manual rescue button
+
+**Date:** 2026-07-27 · **Status:** Accepted
+
+**Functional:** A Paymob Transaction stuck at "Processed: No" can be manually re-driven from its
+Desk form with a **Process** button, visible to whoever can already read that doctype (System
+Manager, Accounts Manager).
+
+**Technical:**
+- **Context:** [ADR-0006](#adr-0006--the-processed-callback-is-the-apps-only-allow_guesttrue-method)
+  makes `webhooks.processed_callback` the app's only `allow_guest=True` method. `frappe.enqueue`
+  inherits the calling request's user, so the job it schedules for `processor.process_transaction`
+  starts as `Guest`. Live traffic confirmed the failure mode: ERPNext's `create_payment_entry` →
+  `get_payment_reference_details` calls `frappe.has_permission(reference_doctype, "read", ...,
+  throw=True)` on the Sales Invoice — a check no `ignore_permissions=True` on our own document
+  saves can reach, because it fires inside ERPNext core, not our code. Guest has no such
+  permission, the job raised `PermissionError`, and the transaction was left at `processed = 0`
+  with the attempt stuck `Pending` forever — silently, since RQ marks the job failed and nothing
+  polls for that failure yet (that's Phase 10).
+- **Decision:** `process_transaction` sets `frappe.session.user = "Administrator"` for its
+  duration (restored in a `finally`), regardless of who enqueued it. The data it acts on is
+  already HMAC-verified server-to-server fact (ADR-0006), not a user-supplied request, so a
+  privileged system actor is correct here the same way `ignore_permissions=True` already is on
+  every write in this module. Separately, `paymob_transaction.process(name)` is a whitelisted
+  rescue: it checks `frappe.get_doc("Paymob Transaction", name).check_permission("read")` — the
+  DocType's own `permissions` list is the source of truth for who may press the button, not a
+  hardcoded role list that could drift from `paymob_transaction.json` — then calls
+  `processor.process_transaction`. It is not a retry of a Paymob API call (rules/payments.md still
+  forbids auto-retrying capture/refund/void); it is a human re-running our own idempotent
+  consumption of a row already durably stored, safe because `process_transaction` no-ops on
+  `processed = 1`.
+- **Consequences / why:** Every future background job enqueued from the guest webhook — the
+  Phase 10 poller's write path, the Phase 11 refund/void consumer — needs the same privileged-actor
+  treatment; this is the first, and the pattern (`set_user` in a `finally`) is now precedented.
+  The button is a stopgap for exactly the gap Phase 10's poller is meant to close automatically;
+  it does not replace that phase, it covers the interval until it exists.
