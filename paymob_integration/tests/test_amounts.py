@@ -27,6 +27,15 @@ class TestMinorUnits(UnitTestCase):
 		self.assertEqual(amounts.from_minor_units(27555, "EGP"), Decimal("275.55"))
 
 	def test_match_is_exact(self):
-		self.assertTrue(amounts.amounts_match(27555, 27555))
-		self.assertFalse(amounts.amounts_match(27555, 27554))
-		self.assertFalse(amounts.amounts_match(27555, 27556))
+		self.assertTrue(amounts.amounts_match(27555, "EGP", 27555, "EGP"))
+		self.assertFalse(amounts.amounts_match(27555, "EGP", 27554, "EGP"))
+		self.assertFalse(amounts.amounts_match(27555, "EGP", 27556, "EGP"))
+
+	def test_currency_mismatch_is_a_mismatch(self):
+		self.assertFalse(amounts.amounts_match(27555, "EGP", 27555, "SAR"))
+
+	def test_missing_received_currency_is_a_mismatch(self):
+		self.assertFalse(amounts.amounts_match(27555, "EGP", 27555, None))
+
+	def test_currency_comparison_ignores_case_and_whitespace(self):
+		self.assertTrue(amounts.amounts_match(27555, "EGP", 27555, " egp "))

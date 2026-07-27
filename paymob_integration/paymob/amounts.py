@@ -20,9 +20,11 @@ def from_minor_units(cents, currency):
 	return Decimal(int(cents)).scaleb(-_exponent(currency))
 
 
-def amounts_match(expected_cents, received_cents):
-	"""An overpayment is a mismatch, not a bonus."""
-	return int(expected_cents) == int(received_cents)
+def amounts_match(expected_cents, expected_currency, received_cents, received_currency):
+	"""An overpayment is a mismatch, not a bonus — and so is the right number in the wrong currency."""
+	if int(expected_cents) != int(received_cents):
+		return False
+	return str(expected_currency or "").strip().upper() == str(received_currency or "").strip().upper()
 
 
 def _exponent(currency):

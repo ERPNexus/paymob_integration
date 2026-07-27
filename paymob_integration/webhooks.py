@@ -54,7 +54,18 @@ def processed_callback():
 		f"txn={obj.get('id')} kind={kind} mode={credentials.mode}"
 	)
 
-	_store(obj, kind, reference, payment_request)
+	doc = _store(obj, kind, reference, payment_request)
+	if doc:
+		# After the commit, not before — a worker must never look for a row the web request
+		# has not committed yet. job_id + deduplicate means a redelivery that somehow slips
+		# past the primary-key constraint still cannot double-enqueue.
+		frappe.enqueue(
+			"paymob_integration.paymob.processor.process_transaction",
+			queue="short",
+			job_id=f"paymob-process-{doc.name}",
+			deduplicate=True,
+			transaction=doc.name,
+		)
 	# Stored or a known duplicate — either way ADR-0007 says the response is the same: `200`
 	# means "we don't need Paymob to send this again." A persistence failure does not reach
 	# here at all; it propagates past this function and becomes a 500 (see _store).

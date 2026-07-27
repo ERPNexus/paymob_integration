@@ -27,6 +27,10 @@ and mutability. Governed by [../../rules/documentation.md](../../rules/documenta
 
 **Technical:**
 - Boolean flag, **orthogonal** to `state`. See [states.md](states.md#needs_human_attention).
+- Raised by `paymob.processor._refuse` (an illegal transition — the state itself is left
+  unchanged, e.g. a `Success` after `Failed` stays `Failed`) and by `paymob.processor.
+  process_transaction`'s amount/currency check on a `Success` (Phase 07, state still advances to
+  `Paid`). Both paths use `attempt.save(ignore_permissions=True)`, never `db_set`.
 
 ### special_reference / merchant_order_id
 
@@ -208,9 +212,12 @@ signature to check and so are stored with this at `0`.
 
 **Functional:** Whether this event has been used yet to drive the payment's lifecycle state.
 
-**Technical:** `Check`, defaults to `0` and stays `0` on every row this phase writes — the
-consumer that flips it to `1` is Phase 06's state machine, shipped together with the
-`frappe.enqueue` call that hands rows to it. This phase never enqueues anything.
+**Technical:** `Check`, defaults to `0`. `webhooks.processed_callback` enqueues
+`paymob.processor.process_transaction` after every newly-stored row's commit; that job flips this
+to `1` with `txn.db_set("processed", 1)` — the one documented `db_set` exception on this DocType,
+alongside `Paymob Payment Attempt.last_polled_at`, because it is bookkeeping, not money. It stays
+`0` for `Auth`, `Capture`, and `Void` rows, which map to no lifecycle state yet (Phase 11) and are
+deliberately left for that phase to pick up.
 
 ### raw_payload (Paymob Transaction)
 
@@ -236,3 +243,48 @@ from an inbound, unverified-against-ERPNext fact; a `Link` field would throw (an
 would 500, and Paymob would retry forever) the moment Paymob reports a currency ERPNext has no
 `Currency` row for. Comparing it against the attempt's `currency` (a business decision) is Phase
 06's job, not this DocType's.
+
+### event / description (Paymob Audit Entry)
+
+**Functional:** What kind of thing went wrong, and a plain-language account of it a non-developer
+can read without opening the code.
+
+**Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`, or
+`Unattributed Payment` — set once by whichever branch of `paymob.processor` creates the entry.
+`description` is always built with `_()` and named values (never string concatenation), per
+[`rules/translation.md`](../../rules/translation.md).
+
+### expected_amount_cents / expected_currency / received_amount_cents / received_currency (Paymob Audit Entry)
+
+**Functional:** The two numbers (and their currencies) being compared when an entry is about an
+amount mismatch — blank for an `Illegal Transition` entry, which isn't about amounts at all.
+
+**Technical:** Written only by `paymob.processor.process_transaction`'s mismatch branch (Phase 07):
+`expected_*` comes from `attempt.expected_amount_cents` / `attempt.currency` (the immutable
+checkout-time snapshot), `received_*` from `txn.amount_cents` / `txn.currency` (the authentic
+callback). `Long Int`, never `Currency` — these are minor units, not a display amount. See
+[ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted).
+
+### actor / occurred_at (Paymob Audit Entry)
+
+**Functional:** Who or what caused this record to exist, and when.
+
+**Technical:** `actor` is a plain `Data` field — the fully-qualified path of the system job for
+every entry this phase writes (`paymob_integration.paymob.processor.process_transaction`);
+Phase 11's human-triggered refund/void audit entries will carry `frappe.session.user` instead.
+`occurred_at` is `transaction.received_at` when the entry is tied to a stored transaction, falling
+back to `frappe.utils.now_datetime()` otherwise — deliberately **system-timezone**, matching
+`Paymob Transaction.received_at`, not literal UTC; two datetime conventions in one app would be a
+reconciliation bug waiting to happen.
+
+### supersedes / needs_action (Paymob Audit Entry)
+
+**Functional:** How a resolved issue is recorded without ever editing the original record, and
+how the "still needs a look" list is built.
+
+**Technical:** `supersedes` is a self-referencing `Link`, set only when a later entry resolves an
+earlier one — a correction is always a new row, never an edit (see
+[ADR-0009](decisions.md#adr-0009--audit-entries-are-submittable-and-immutable-a-resolution-is-an-append-via-supersedes)).
+`needs_action` drives the `Paymob Open Audit Entries` report, which excludes any entry named in
+another submitted entry's `supersedes` field — a list filter alone cannot express "has no
+superseding record."

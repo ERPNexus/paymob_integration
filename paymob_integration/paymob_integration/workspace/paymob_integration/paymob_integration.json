@@ -1,7 +1,7 @@
 {
  "app": "paymob_integration",
  "charts": [],
- "content": "[{\"id\":\"paymob-settings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Settings\",\"col\":3}},{\"id\":\"paymob-configuration\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}},{\"id\":\"paymob-transactions-shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Transactions\",\"col\":3}},{\"id\":\"paymob-transactions-card\",\"type\":\"card\",\"data\":{\"card_name\":\"Transactions\",\"col\":4}}]",
+ "content": "[{\"id\":\"paymob-settings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Settings\",\"col\":3}},{\"id\":\"paymob-configuration\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}},{\"id\":\"paymob-transactions-shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Transactions\",\"col\":3}},{\"id\":\"paymob-transactions-card\",\"type\":\"card\",\"data\":{\"card_name\":\"Transactions\",\"col\":4}},{\"id\":\"paymob-open-audit-entries-shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Paymob Open Audit Entries\",\"col\":3}},{\"id\":\"paymob-audit-card\",\"type\":\"card\",\"data\":{\"card_name\":\"Audit\",\"col\":4}}]",
  "custom_blocks": [],
  "doctype": "Workspace",
  "for_user": "",
@@ -45,6 +45,35 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Audit",
+   "link_count": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Paymob Audit Entry",
+   "link_count": 0,
+   "link_to": "Paymob Audit Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Paymob Open Audit Entries",
+   "link_count": 0,
+   "link_to": "Paymob Open Audit Entries",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
  "module": "Paymob Integration",
@@ -65,6 +94,13 @@
    "label": "Paymob Transactions",
    "link_to": "Paymob Transaction",
    "type": "DocType"
+  },
+  {
+   "color": "Red",
+   "doc_view": "",
+   "label": "Paymob Open Audit Entries",
+   "link_to": "Paymob Open Audit Entries",
+   "type": "Report"
   }
  ],
  "title": "Paymob Integration"

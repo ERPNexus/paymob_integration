@@ -63,8 +63,12 @@ message that can cause money to be recorded.
     retries, and the Phase 10 poller is the second safety net given Paymob's retry behaviour is
     assumed to be zero.
   - The body is `"ok"` on every 200 — stored or duplicate look identical to the caller, by design.
-- No attempt-state change and no Payment Entry yet from this phase — Phase 06 reads the stored
-  rows (`processed = 0`) and drives the state machine; Phase 08 posts the ledger entry.
+- After the row's commit, `frappe.enqueue`s `paymob.processor.process_transaction` on the
+  `short` queue, with `job_id=f"paymob-process-{doc.name}"` and `deduplicate=True` so a
+  redelivery that somehow slips past the primary-key constraint still cannot double-enqueue. A
+  duplicate delivery (`doc` is `None`) enqueues nothing — there is no new row to process.
+- No Payment Entry yet from this phase — Phase 06/07's job drives the state machine and holds a
+  mismatch for review; Phase 08 posts the ledger entry.
 - Ledger authority: **yes** — see [ADR-0001](decisions.md#adr-0001--ledger-writes-are-triggered-only-by-the-server-to-server-processed-callback).
 
 ### Response callback (browser redirect target)
@@ -158,8 +162,38 @@ for the same transaction (e.g. a refund after a success, or a second partial ref
 
 **Functional:** An authentic callback whose amount differs from what we expected is held for review.
 
-**Technical:** Block auto Payment Entry, raise `needs_human_attention`
-([ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted)).
+**Technical:** `paymob.processor.process_transaction` compares `txn.amount_cents`/`txn.currency`
+against `attempt.expected_amount_cents`/`attempt.currency` with `amounts.amounts_match` (integer
+cents, currency case/whitespace-insensitive) whenever the event targets `Paid`. A mismatch — under,
+over, or right-amount-wrong-currency — sets `attempt.needs_human_attention = 1` and writes one
+`Amount Mismatch` `Paymob Audit Entry` with both amounts and both currencies; **the lifecycle state
+still moves to `Paid`**, per [ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted) —
+the flag blocks the not-yet-built Phase 08 Payment Entry creation, it does not regress the state.
+No Payment Entry exists from any path in this phase, mismatched or not.
+
+### Illegal transition
+
+**Functional:** A callback that would move a payment backward (e.g. reporting a decline for a
+payment already paid) is refused and left for a human, without crashing or retrying forever.
+
+**Technical:** `paymob.processor.process_transaction` loads the attempt with `for_update=True` and
+calls `paymob.states.check(current, target)`; only `states.IllegalTransition` is caught. The
+attempt's state is left unchanged, `needs_human_attention` is set, one `Illegal Transition`
+`Paymob Audit Entry` is written, and the transaction row is marked `processed = 1` so the job does
+not requeue on a transition that will never become legal. The exception is not re-raised — doing
+so would be a second exception on top of the one `states.check` already threw.
+
+### Unattributed payment
+
+**Functional:** A genuine `Success` or `Refund` that cannot be matched to any attempt is real
+money that cannot be posted anywhere — held for a human rather than silently dropped. A stray
+`Decline` with no matching attempt (a scan, not a real checkout) is just logged.
+
+**Technical:** `paymob.processor._unattributed` writes one `Unattributed Payment` audit entry
+(`needs_action = 1`, `attempt` blank) for `Success`/`Refund` rows whose `attempt` link is empty —
+the case `webhooks._resolve_attempt` produces when `merchant_order_id` doesn't resolve, or
+resolves to an attempt whose frozen `paymob_order_id` doesn't match the signed `order.id`. A
+`Decline` with no attempt writes no audit entry. Both mark the row `processed = 1`.
 
 ### Missing callback (abandoned / lost)
 

@@ -298,6 +298,42 @@ class TestProcessedCallback(IntegrationTestCase):
 		self.assertFalse(txn.attempt)
 		self.assertFalse(txn.payment_request)
 
+	@patch("paymob_integration.webhooks.frappe.enqueue")
+	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
+	def test_authentic_callback_enqueues_processing_once(self, enabled_credential_sets, enqueue):
+		enabled_credential_sets.return_value = [_credentials()]
+		digest = _sign_processed(VALID_OBJ)
+
+		_post({"obj": VALID_OBJ}, digest)
+
+		enqueue.assert_called_once()
+		kwargs = enqueue.call_args.kwargs
+		self.assertEqual(kwargs["transaction"], "123456:Success")
+		self.assertEqual(kwargs["job_id"], "paymob-process-123456:Success")
+		self.assertTrue(kwargs["deduplicate"])
+
+	@patch("paymob_integration.webhooks.frappe.enqueue")
+	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
+	def test_duplicate_delivery_does_not_enqueue(self, enabled_credential_sets, enqueue):
+		enabled_credential_sets.return_value = [_credentials()]
+		digest = _sign_processed(VALID_OBJ)
+
+		_post({"obj": VALID_OBJ}, digest)
+		enqueue.reset_mock()
+		_post({"obj": VALID_OBJ}, digest)
+
+		enqueue.assert_not_called()
+
+	@patch("paymob_integration.webhooks.frappe.enqueue")
+	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
+	def test_refused_callback_does_not_enqueue(self, enabled_credential_sets, enqueue):
+		enabled_credential_sets.return_value = [_credentials(secret="other_secret")]
+		digest = _sign_processed(VALID_OBJ)
+
+		_post({"obj": VALID_OBJ}, digest)
+
+		enqueue.assert_not_called()
+
 	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
 	def test_persist_failure_raises_and_stores_nothing(self, enabled_credential_sets):
 		enabled_credential_sets.return_value = [_credentials()]

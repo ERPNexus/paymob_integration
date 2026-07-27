@@ -7,6 +7,13 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 > and *separately* may carry a review flag (does a human need to look?). "Settled but flagged"
 > is a valid combination. Never regress a lifecycle state to represent "needs review."
 
+> `paymob.states.LEGAL` is this table's executable form, and `paymob.states.EVENT_TARGET` is the
+> event-kind-to-target mapping just below. Change the table and the module together — a mismatch
+> between the two means the docs describe a transition the code refuses, or the reverse.
+> `Auth`/`Capture`/`Void` map to no target state yet: there is no `voided` state here, and the
+> auth/capture flow ships in Phase 11. `paymob.processor` leaves those rows unprocessed
+> (`processed = 0`) rather than inventing a transition, so Phase 11 can consume them.
+
 ## Lifecycle states
 
 ### pending
@@ -75,6 +82,11 @@ it as final. The customer still sees the normal "payment received" result.
 - **Does NOT change the lifecycle state.** The record stays `paid` (or whatever it was); this is
   a flag *alongside* it. Resolve by human decision → keep `paid`, or move to `refunded`, etc.
 - See decision [ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted).
+- Raised by two code paths in `paymob.processor.process_transaction`: an illegal state
+  transition (`states.IllegalTransition`, e.g. a `Success` callback arriving for an attempt
+  already `Failed`) and an authentic amount/currency mismatch on a `Success` (Phase 07). Both
+  paths write a `Paymob Audit Entry` — see
+  [ADR-0009](decisions.md#adr-0009--audit-entries-are-submittable-and-immutable-a-resolution-is-an-append-via-supersedes).
 
 ## Event kinds (Paymob Transaction)
 

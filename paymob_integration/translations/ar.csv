@@ -52,3 +52,30 @@ This payment did not go through. You can try again.,لم تكتمل عملية �
 This payment link has expired.,انتهت صلاحية رابط الدفع هذا.
 This payment has been refunded.,تم استرداد هذه الدفعة.
 A Paymob Transaction needs a transaction ID and an event kind.,تحتاج معاملة باي موب إلى رقم معاملة ونوع حدث.
+A Paymob payment cannot move from {0} to {1}.,لا يمكن لعملية دفع باي موب أن تنتقل من {0} إلى {1}.
+Paymob confirmed {0} {1} but {2} {3} was expected.,أكد باي موب {0} {1} بينما كان المتوقع {2} {3}.
+Paymob reported a {0} of {1} {2} that could not be matched to any attempt.,أبلغ باي موب عن {0} بقيمة {1} {2} لم يتم مطابقتها مع أي محاولة دفع.
+"Paymob reported {0}, which would move this payment from {1} to {2}.","أبلغ باي موب عن {0}، مما قد ينقل هذه الدفعة من {1} إلى {2}."
+Illegal Transition,انتقال غير مسموح به
+Amount Mismatch,عدم تطابق المبلغ
+Unattributed Payment,دفعة غير مرتبطة
+Success,نجاح
+Decline,رفض
+Refund,استرداد
+Void,إبطال
+Capture,تحصيل
+Auth,تفويض
+Attempt,المحاولة
+Paymob Transaction ID,معرف معاملة باي موب
+Event,الحدث
+Description,الوصف
+Expected Currency,العملة المتوقعة
+Received Amount Cents,المبلغ المستلم بالوحدات الصغرى
+Received Currency,العملة المستلمة
+Actor,المنفذ
+Occurred At,وقت الحدوث
+Needs Action,يتطلب إجراء
+Supersedes,يحل محل
+Audit Entry,قيد التدقيق
+Paymob Open Audit Entries,قيود التدقيق المفتوحة لباي موب
+Audit,التدقيق

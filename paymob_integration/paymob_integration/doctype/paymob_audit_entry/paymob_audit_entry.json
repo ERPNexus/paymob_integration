@@ -1,0 +1,133 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "PMB-AUD-.YYYY.-.#####",
+ "creation": "2026-07-26 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "payment_request",
+  "attempt",
+  "paymob_transaction_id",
+  "event",
+  "description",
+  "expected_amount_cents",
+  "expected_currency",
+  "received_amount_cents",
+  "received_currency",
+  "actor",
+  "occurred_at",
+  "needs_action",
+  "supersedes"
+ ],
+ "fields": [
+  {
+   "fieldname": "payment_request",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Payment Request",
+   "options": "Payment Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attempt",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Attempt",
+   "options": "Paymob Payment Attempt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paymob_transaction_id",
+   "fieldtype": "Data",
+   "label": "Paymob Transaction ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "event",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Event",
+   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Expected Amount Cents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_currency",
+   "fieldtype": "Data",
+   "label": "Expected Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Received Amount Cents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_currency",
+   "fieldtype": "Data",
+   "label": "Received Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Data",
+   "label": "Actor",
+   "read_only": 1
+  },
+  {
+   "fieldname": "occurred_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Occurred At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "needs_action",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Needs Action",
+   "read_only": 1
+  },
+  {
+   "fieldname": "supersedes",
+   "fieldtype": "Link",
+   "label": "Supersedes",
+   "options": "Paymob Audit Entry",
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-07-26 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Paymob Integration",
+ "name": "Paymob Audit Entry",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

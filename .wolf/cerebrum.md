@@ -66,9 +66,15 @@
   `document.update({"field": value})` before saving.
 - [2026-07-26] Run repository-scoped Git commands from the app root, not the Bench root; the latter
   is not a Git worktree.
+- [2026-07-27] Do not add a third `paymob_integration` package level for Frappe artifacts. In this
+  single-module app, `Paymob Integration` maps to `paymob_integration/paymob_integration/`; its
+  DocTypes and reports already belong directly under that package's `doctype/` and `report/`.
 
 ## Decision Log
 
 <!-- Significant technical decisions with rationale. Why X was chosen over Y. -->
 - [2026-07-26] Commit OpenWolf's shared protocol, configuration, identity, and hooks; ignore its
   generated session state and visual-review output to keep repository history useful and clean.
+- Frappe standard DocType and Report artifacts for the `Paymob Integration` module must live under
+  `paymob_integration/paymob_integration/{doctype,report}/...`; placing their JSON/Python files at
+  `paymob_integration/{doctype,report}/...` leaves migration unable to sync them and imports broken.

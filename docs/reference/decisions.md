@@ -65,6 +65,13 @@ silently accept it — a human reviews it before it hits the books.
   lifecycle state is not regressed.
 - **Consequences / why:** protects the ledger from posting the wrong amount while still keeping a
   full, tamper-evident record for reconciliation.
+- **Implementation:** `paymob.processor.process_transaction` (Phase 07), gated to `target ==
+  "Paid"` only — a `Refund` carries a deliberately partial amount and is not compared here.
+  `amounts.amounts_match` takes both amounts *and* both currencies, since the right number in the
+  wrong currency is a mismatch too. A mismatch sets `attempt.needs_human_attention = 1` and writes
+  one `Amount Mismatch` audit entry with both cents and both currencies; the lifecycle state still
+  advances to `Paid` per [states.md](states.md#needs_human_attention) — the flag is orthogonal, not
+  a regression. No Payment Entry exists yet to block; that gate is Phase 08's, reading this flag.
 
 ---
 
@@ -206,3 +213,41 @@ in to ERPNext — because the message never comes from a customer's browser.
   carries no explanation and touches no document. A genuine callback matches exactly one
   credential set, at which point acting "as" the merchant account that set matches is exactly what
   should happen. No other endpoint in this app may follow this pattern.
+
+---
+
+### ADR-0009 — Audit entries are submittable and immutable; a resolution is an append via `supersedes`
+
+**Date:** 2026-07-26 · **Status:** Accepted
+
+**Functional:** A record of "something needed a human's attention" can never be quietly edited or
+deleted afterward — including by the person who resolves it. Resolving one writes a *new* record
+that points back at the original.
+
+**Technical:**
+- **Context:** [`rules/audit-trail.md`](../../rules/audit-trail.md) requires that audit records
+  are immutable and that "a correction is a new record that refers to the earlier one." A
+  permission table (no `write`/`delete` role) can always be loosened by a future change or an
+  administrator; it is discipline, not a guarantee.
+- **Decision:** `Paymob Audit Entry` is `is_submittable: 1` with **no `amended_from` field** in
+  its DocType JSON. Frappe's DocType-sync path (`frappe.modules.import_file.import_doc`) loads
+  fixture JSON with `flags.ignore_validate = True`, so the framework's usual "add `amended_from`
+  when `is_submittable`" step (`DocType.make_amendable`) never runs for a doctype whose schema is
+  shipped this way — the field stays absent, and with no `amended_from` there is no Amend action
+  to offer. Frappe itself refuses to write a submitted (`docstatus = 1`) document at the ORM
+  level (`UpdateAfterSubmitError`), which is a stronger guarantee than a permission row an
+  administrator could edit. No role is granted `write`, `delete`, `submit`, `cancel`, or `amend`
+  on the doctype at all — every entry is inserted and submitted by server code
+  (`paymob.processor._audit`) with `ignore_permissions=True`, and a resolution is recorded by
+  inserting a **new** entry whose `supersedes` field names the one it resolves.
+- **Decision:** The "needs action" view (`Paymob Open Audit Entries`) is a **Script Report**, not
+  a Query Report as the Phase 06 outline suggested. The reason a *report* is needed at all is
+  unchanged from the outline — a list filter cannot express "has no superseding record" — but the
+  anti-join (collect every `supersedes` target, then exclude those names from the
+  `needs_action = 1` rows) is four lines of `frappe.get_all` with no SQL string, which keeps
+  [`rules/frappe-discipline.md`](../../rules/frappe-discipline.md)'s "no raw SQL that writes" (and
+  the spirit of "no unexplained SQL" generally) clean and is directly unit-testable.
+- **Consequences / why:** grepping for "who creates a Paymob Audit Entry" returns one function
+  (`processor._audit`), matching the single-write-path discipline used for Payment Entries. The
+  immutability guarantee holds even against a compromised or careless server-side caller, because
+  it is enforced by `docstatus`, not by remembering not to call `.save()` on a submitted doc.

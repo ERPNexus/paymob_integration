@@ -1,7 +1,11 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T12:28:37.818Z
-> Files: 141 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-26T16:47:20.320Z
+> Files: 150 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../../.claude/plans/
+
+- `floating-inventing-swan.md` — Phases 06 + 07 — State Machine, Audit Trail & Amount Verification (~5554 tok)
 
 ## ./
 
@@ -120,11 +124,11 @@
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~3023 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~2512 tok)
-- `fields.md` — Fields (~3073 tok)
+- `decisions.md` — Decisions (ADRs) (~3888 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~3132 tok)
+- `fields.md` — Fields (~3902 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~1397 tok)
+- `states.md` — States & Transitions (~1645 tok)
 
 ## docs/user-guide/
 
@@ -145,7 +149,7 @@
 - `hooks.py` — Declares views (~1899 tok)
 - `modules.txt` (~5 tok)
 - `patches.txt` (~73 tok)
-- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~1587 tok)
+- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~1712 tok)
 
 ## paymob_integration/config/
 
@@ -162,13 +166,15 @@
 ## paymob_integration/paymob/
 
 - `__init__.py` (~0 tok)
-- `amounts.py` — Convert ERPNext amounts to Paymob integer minor units. (~272 tok)
+- `amounts.py` — Convert ERPNext amounts to Paymob integer minor units. (~330 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
 - `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~445 tok)
 - `events.py` — There is no event-type field in the processed callback payload — the flags *are* the type. (~167 tok)
 - `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
 - `intention.py` — Create a Paymob Intention once per payment attempt; never retry it automatically. (~326 tok)
+- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~1750 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~511 tok)
+- `states.py` — The executable form of docs/reference/states.md. Change both together. (~360 tok)
 - `test_settings.py` — Tests: includes_country, explicit_mode_overrides_site_mode, disabled_returns_empty (~414 tok)
 
 ## paymob_integration/paymob_integration/
@@ -179,6 +185,12 @@
 ## paymob_integration/paymob_integration/doctype/
 
 - `__init__.py` (~0 tok)
+
+## paymob_integration/paymob_integration/doctype/paymob_audit_entry/
+
+- `__init__.py` (~0 tok)
+- `paymob_audit_entry.json` (~760 tok)
+- `paymob_audit_entry.py` — For license information, please see license.txt (~56 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_credential_set/
 
@@ -212,9 +224,15 @@
 - `paymob_transaction.json` (~827 tok)
 - `paymob_transaction.py` — For license information, please see license.txt (~253 tok)
 
+## paymob_integration/paymob_integration/report/paymob_open_audit_entries/
+
+- `__init__.py` (~0 tok)
+- `paymob_open_audit_entries.json` (~175 tok)
+- `paymob_open_audit_entries.py` — The "needs action" view rules/audit-trail.md requires — a list filter cannot express "has no (~530 tok)
+
 ## paymob_integration/paymob_integration/workspace/paymob_integration/
 
-- `paymob_integration.json` (~515 tok)
+- `paymob_integration.json` (~830 tok)
 
 ## paymob_integration/public/
 
@@ -236,16 +254,18 @@
 
 - `__init__.py` (~0 tok)
 - `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~674 tok)
-- `test_amounts.py` — Tests: two_decimal_currency, decimal_arithmetic_is_exact, three_decimal_currency, half_a_minor_unit_rounds_up + 3 more (~306 tok)
+- `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
 - `test_checkout.py` — Tests: returns_the_three_identifiers, authenticates_with_the_secret_key, sends_the_amount_as_an_integer, only_browser_safe_values_are_in_the_url + ... (~2719 tok)
 - `test_events.py` — Tests: void_flag_wins, refund_flag_wins_over_success, capture_flag, auth_flag + 5 more (~421 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
+- `test_processor.py` — Integration paths for paymob.processor.process_transaction. Every scenario counts rows — (~4280 tok)
 - `test_result_page.py` — Tests: paid_attempt_with_valid_signature_renders_paid, paid_attempt_with_bad_signature_renders_pending, unknown_reference_renders_neutral_without_r... (~1539 tok)
-- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~3618 tok)
+- `test_states.py` — TestCheck: test_all_pairs, test_failed_to_paid_is_illegal, test_paid_to_failed_is_illegal, test_succ (~480 tok)
+- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~4026 tok)
 
 ## paymob_integration/translations/
 
-- `ar.csv` (~798 tok)
+- `ar.csv` (~1075 tok)
 
 ## paymob_integration/workspace_sidebar/
 
