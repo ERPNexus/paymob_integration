@@ -51,6 +51,17 @@ doctype_js = {"Payment Request": "public/js/payment_request.js"}
 # include app icons in desk
 # app_include_icons = "paymob_integration/public/icons.svg"
 
+# Fixtures
+# --------
+
+fixtures = [
+	{"doctype": "Role", "filters": [["name", "in", ["Paymob Refund Manager"]]]},
+	{
+		"doctype": "Number Card",
+		"filters": [["name", "in", ["Pending Attempts", "Needs Attention", "Unprocessed Transactions"]]],
+	},
+]
+
 # Home Pages
 # ----------
 
