@@ -159,6 +159,9 @@
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->
+- [2026-07-28] Do not infer the viewed Payment Request from a nearby live record. For refund support,
+  verify the exact Payment Request, attempt, transaction, and Payment Entry links before explaining
+  why a button is absent.
 - [2026-07-26] For optional Frappe fields at a validation boundary, use `doc.get()` and report
   missing references separately from missing linked values; dynamic attribute access produces an
   opaque `AttributeError`.
@@ -239,3 +242,9 @@
   `attempt.expected_amount_cents` (the pre-charge snapshot) and the verified charge's own
   `amount_cents` only drift when there was already an amount mismatch, but the two call sites
   disagreeing at all lets the API accept a refund the processor then silently refuses.
+- The Payment Request client script must still run its paid-attempt refund lookup after a Payment
+  Request becomes `Paid`; only checkout is unavailable at that point. Returning for `Paid` hides
+  the Refund button even for an Administrator with the custom `refund` permission.
+- For Paymob gateway errors, never expose a raw response. The client may show only an allowlisted
+  string `detail` or `message` with the HTTP status; this preserves useful diagnostics without
+  exposing echoed credentials, customer data, or newly-added gateway fields.

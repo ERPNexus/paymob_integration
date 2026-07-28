@@ -5,6 +5,7 @@ import requests
 from frappe import _
 
 DEFAULT_TIMEOUT = 30
+_ERROR_RESPONSE_FIELDS = ("detail", "message")
 
 
 class PaymobError(frappe.ValidationError):
@@ -37,8 +38,11 @@ def request(method, url, *, headers=None, json_body=None, timeout=DEFAULT_TIMEOU
 		) from exc
 
 	if response.status_code >= 400:
+		detail = _error_detail(response)
 		raise PaymobAPIError(
-			_("Paymob rejected the request. Check the credentials and try again."),
+			_("Paymob rejected the request (HTTP {0}){1}").format(
+				response.status_code, f": {detail}" if detail else "."
+			),
 			status_code=response.status_code,
 		)
 
@@ -48,3 +52,17 @@ def request(method, url, *, headers=None, json_body=None, timeout=DEFAULT_TIMEOU
 		raise PaymobAPIError(
 			_("Paymob returned an invalid response. Please try again."), status_code=response.status_code
 		) from exc
+
+
+def _error_detail(response):
+	"""Expose Paymob's diagnostic text, never an arbitrary gateway response."""
+	try:
+		body = response.json()
+	except requests.JSONDecodeError:
+		return None
+	if not isinstance(body, dict):
+		return None
+	for field in _ERROR_RESPONSE_FIELDS:
+		if isinstance(body.get(field), str):
+			return body[field]
+	return None
