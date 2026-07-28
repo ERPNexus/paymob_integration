@@ -427,3 +427,26 @@ the audit trail ([ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module)
   its own job owns the row" for free instead of needing its own duplicate check. Proven
   behavior-preserving: `test_webhook.py` passed unchanged after the extraction, before any
   Phase 10 code was added on top of the move.
+
+## ADR-0016 — Reversals are on-account Pay Payment Entries
+
+- **Decision:** A verified refund or void creates an unallocated `Pay` Payment Entry from the
+  Paymob clearing account to the original customer receivable. The original incoming entry stays
+  intact; money-out is written only by `ledger.post_refund`.
+
+## ADR-0017 — A refund delta comes only from a signed child transaction
+
+- **Decision:** `has_parent_transaction` and the child transaction's `amount_cents` determine the
+  posted refund. Paymob's cumulative `refunded_amount_cents` is unsigned, so parent resends are
+  stored and marked processed but never post money.
+
+## ADR-0018 — A lock needs an in-progress marker
+
+- **Decision:** The outbound request holds the attempt row lock and sets `refund_requested_at`
+  before calling Paymob. The callback alone clears it, because a failed HTTP response cannot prove
+  Paymob did not receive the request.
+
+## ADR-0019 — Refund capability is a DocType permission
+
+- **Decision:** The `Paymob Refund Manager` role grants the custom `refund` permission on a
+  Payment Attempt. Server and Desk both query that permission; neither hardcodes a role name.

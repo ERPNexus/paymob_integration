@@ -122,6 +122,65 @@ confirmation message never arrives.
 - Ledger authority: **yes**, indirectly — the same `process_transaction` → `paymob.ledger.
   post_payment` path the webhook uses, not a second write path (rules/payments.md rule 1).
 
+### Request refund
+
+**Functional:** A staff member holding the `Paymob Refund Manager` role's `refund` permission
+refunds a paid Paymob payment, in full or in part, from the Payment Request.
+
+**Technical:**
+- `paymob_integration.api.request_refund(attempt, amount_cents)`, whitelisted `POST`.
+- `attempt = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)` — the row lock,
+  taken **before** the permission check or anything slow, so a concurrent second request blocks
+  here rather than racing past. `attempt.check_permission("refund")` — the custom Permission Type
+  gate, derived from the DocType's own `permissions` list, not a hardcoded role name. See
+  [ADR-0019](decisions.md#adr-0019--refund-capability-is-a-doctype-permission).
+- If `attempt.refund_requested_at` is already set, throws [Refund already in progress](#refund-already-in-progress)
+  — this is what actually stops a double submit; the lock alone does not, because a second request
+  simply waits for the first to commit and then proceeds. See
+  [ADR-0018](decisions.md#adr-0018--a-lock-needs-an-in-progress-marker).
+- `amount_cents` is browser-supplied and validated against **verified Paymob data only**: it must
+  be a positive integer, and it is capped by `paymob.transactions.verified_success_charge(attempt)`
+  (the attempt's own HMAC-verified `Success` row) minus `attempt.refunded_amount_cents` — never
+  against a client-supplied total. The `transaction_id` sent to Paymob comes from that same
+  verified row, never from the browser.
+- Sets the in-progress marker (`refund_requested_at`), writes a `Refund Requested`
+  `Paymob Audit Entry` naming `frappe.session.user`, then calls the Paymob refund endpoint below.
+  **No Payment Entry is created here** — the response body is not read for money. If the outbound
+  call raises, the marker stays set; only the verified callback clears it (Task 5 below).
+- Ledger authority: **no**. The reversing entry is written only by `paymob.ledger.post_refund`,
+  only from a verified callback.
+
+### Request void
+
+**Functional:** The same as Request refund, for voiding a `Paid` attempt in full — no amount
+parameter, since a void reverses everything.
+
+**Technical:** `paymob_integration.api.request_void(attempt)`, whitelisted `POST`. Same lock,
+permission gate, and in-progress marker as Request refund; the state guard requires `Paid`
+exactly (not `Partially Refunded` — a partially refunded attempt has already had money returned
+and is refunded further, not voided). Writes a `Void Requested` audit entry. Ledger authority:
+**no**, same as Request refund.
+
+### Paymob refund and void calls
+
+**Functional:** The two outbound HTTP calls Request refund/void make to Paymob.
+
+**Technical:**
+- `paymob.void_refund.refund(credentials, transaction_id, amount_cents)` →
+  `POST {base_url}/api/acceptance/void_refund/refund`; `paymob.void_refund.void(credentials,
+  transaction_id)` → `POST {base_url}/api/acceptance/void_refund/void`. Both go through
+  `paymob.auth.get_auth_token` and the app's one network module, `paymob.client.request`.
+- Auth token in the JSON **body** (`auth_token`), the older Accept convention — not an
+  `Authorization` header like Transaction Inquiry. Marked `ponytail` in `void_refund.py`: switch
+  this if a live sandbox call proves otherwise.
+- Retryable: **no** — the opposite of Transaction Inquiry. Capture, refund, and void may never be
+  retried automatically (`rules/payments.md` rule 13); a `PaymobNetworkError` or `PaymobAPIError`
+  propagates straight to the caller, which leaves the in-progress marker set rather than
+  re-issuing the call.
+- Ledger authority: **no** — the HTTP response is not evidence money moved; only the signed
+  callback that follows is (see [Processed callback](#processed-callback-server-to-server-webhook)
+  above — the same route handles refund and void callbacks).
+
 ## Settings
 
 ### Paymob Settings (Single)
@@ -135,9 +194,9 @@ country they sell in, and switches the whole site between test and live.
 - `credential_sets` stores country, currency, mode, base URL, browser-safe `public_key`, encrypted
   `secret_key`/`api_key`/`hmac_secret`, and the clearing `payment_account`.
 - `integration_ids` stores the checkout methods keyed by country, currency, and mode.
-- `intention_expiration_seconds` defaults to 3600, `stale_pending_minutes` to 20, and
-  `reconcile_batch_size` to 50 — the last two govern the reconciliation poller
-  (`paymob.tasks.reconcile_pending_attempts`), scheduled every 15 minutes via `scheduler_events`
+- `intention_expiration_seconds` defaults to 3600 and `stale_pending_minutes` to 20. The
+  reconciliation poller (`paymob.tasks.reconcile_pending_attempts`) processes up to 50 attempts
+  per scheduled run every 15 minutes via `scheduler_events`
   (`"cron": {"*/15 * * * *": [...]}`) in `hooks.py`. The poller returns immediately if `enabled`
   is `0`.
 - Only System Managers can read or edit the settings.
@@ -259,6 +318,21 @@ naming the existing Payment Entry and, when it exists, the sibling transaction i
 transaction row is still marked `processed = 1` so the job does not retry. See
 [ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module).
 
+### Refund already in progress
+
+**Functional:** A second click on Refund or Void while the first request is still in flight is
+refused, rather than firing a second outbound call to Paymob.
+
+**Technical:** `api.request_refund`/`request_void` check `attempt.refund_requested_at` immediately
+after taking the row lock and the permission check. The row lock alone does not prevent this —
+without the marker, a second concurrent request would simply block until the first commits, then
+proceed and call Paymob a second time. `refund_requested_at` is set inside the same lock as the
+check, so it becomes visible to a blocked second request the instant the first commits, and is
+cleared only when the verified refund/void callback is processed — never by the outbound call's
+HTTP response, success or failure. A stuck marker (the outbound call failed, or its response was
+lost) is not auto-retried; it is a human decision, surfaced as a `Paymob Audit Entry` a human
+resolves. See [ADR-0018](decisions.md#adr-0018--a-lock-needs-an-in-progress-marker).
+
 ### Missing callback (abandoned / lost)
 
 **Functional:** If Paymob never calls back, we find out the status ourselves rather than guess —
@@ -268,7 +342,7 @@ should have told us about it never arrived.
 **Technical:**
 - `paymob.tasks.reconcile_pending_attempts`, scheduled every 15 minutes, selects `Pending` attempts
   whose `creation` and `last_polled_at` (or its absence) are both older than
-  `Paymob Settings.stale_pending_minutes`, oldest first, capped at `reconcile_batch_size` per run.
+  `Paymob Settings.stale_pending_minutes`, oldest first, capped at 50 attempts per run.
 - Each selected attempt is locked (`for_update=True`) and re-checked for `state == "Pending"` — a
   webhook that landed between selection and now means there is nothing left to do.
   `settings.get_credential_set` resolves credentials using the **attempt's own frozen**

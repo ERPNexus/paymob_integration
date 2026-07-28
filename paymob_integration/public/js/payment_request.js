@@ -36,8 +36,65 @@ frappe.ui.form.on("Payment Request", {
 			});
 		});
 
-		frm.add_custom_button(__("Paymob Attempts"), () => {
-			frappe.set_route("List", "Paymob Payment Attempt", { payment_request: frm.doc.name });
-		});
+		frappe.db
+			.get_list("Paymob Payment Attempt", {
+				filters: {
+					payment_request: frm.doc.name,
+					state: ["in", ["Paid", "Partially Refunded"]],
+				},
+				fields: ["name", "state", "expected_amount_cents", "refunded_amount_cents"],
+				order_by: "creation desc",
+				limit: 1,
+			})
+			.then((attempts) => {
+				const attempt = attempts[0];
+				if (!attempt) return;
+				// "refund" is a custom Permission Type; frappe.perm.has_perm only knows the
+				// built-in rights, so the check has to go through the server.
+				frappe
+					.call({
+						method: "frappe.client.has_permission",
+						args: {
+							doctype: "Paymob Payment Attempt",
+							docname: attempt.name,
+							perm_type: "refund",
+						},
+					})
+					.then(({ message }) => {
+						if (message?.has_permission) add_refund_buttons(frm, attempt);
+					});
+			});
 	},
 });
+
+function add_refund_buttons(frm, attempt) {
+	const remaining = attempt.expected_amount_cents - (attempt.refunded_amount_cents || 0);
+	frm.add_custom_button(__("Refund"), () => {
+		frappe.prompt(
+			{
+				fieldname: "amount_cents",
+				fieldtype: "Int",
+				label: __("Refund Amount Cents"),
+				default: remaining,
+				reqd: 1,
+			},
+			({ amount_cents }) =>
+				frappe.call({
+					method: "paymob_integration.api.request_refund",
+					args: { attempt: attempt.name, amount_cents },
+					freeze: true,
+					freeze_message: __("Requesting Paymob refund..."),
+				}),
+			__("Refund")
+		);
+	});
+	if (attempt.state !== "Paid") return;
+	frm.add_custom_button(__("Void"), () => {
+		frappe.call({
+			method: "paymob_integration.api.request_void",
+			args: { attempt: attempt.name },
+			freeze: true,
+			freeze_message: __("Requesting Paymob void..."),
+		});
+	});
+}

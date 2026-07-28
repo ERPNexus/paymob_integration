@@ -13,6 +13,7 @@ from paymob_integration.paymob import audit, auth, client, events, processor, se
 
 ACTOR = "paymob_integration.tasks.reconcile_pending_attempts"
 INQUIRY_PATH = "/api/ecommerce/orders/transaction_inquiry"
+RECONCILE_BATCH_SIZE = 50
 
 
 def reconcile_pending_attempts():
@@ -30,7 +31,7 @@ def reconcile_pending_attempts():
 		or_filters=[["last_polled_at", "is", "not set"], ["last_polled_at", "<", cutoff]],
 		fields=["name", "payment_request"],
 		order_by="creation asc",
-		limit=config.reconcile_batch_size or 50,
+		limit=RECONCILE_BATCH_SIZE,
 	)
 	for row in rows:
 		try:

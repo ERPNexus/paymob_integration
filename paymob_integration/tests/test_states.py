@@ -2,13 +2,16 @@ from frappe.tests import UnitTestCase
 
 from paymob_integration.paymob import states
 
-ALL_STATES = ("Pending", "Paid", "Failed", "Expired", "Refunded")
+ALL_STATES = ("Pending", "Paid", "Failed", "Expired", "Partially Refunded", "Refunded", "Voided")
 
 LEGAL_PAIRS = {
 	("Pending", "Paid"),
 	("Pending", "Failed"),
 	("Pending", "Expired"),
+	("Paid", "Partially Refunded"),
 	("Paid", "Refunded"),
+	("Paid", "Voided"),
+	("Partially Refunded", "Refunded"),
 }
 
 
@@ -41,8 +44,10 @@ class TestTargetState(UnitTestCase):
 	def test_decline_targets_failed(self):
 		self.assertEqual(states.target_state("Decline"), "Failed")
 
-	def test_refund_targets_refunded(self):
-		self.assertEqual(states.target_state("Refund"), "Refunded")
+	def test_refund_target_uses_the_local_total(self):
+		self.assertEqual(states.refund_target(10000, 27555), "Partially Refunded")
+		self.assertEqual(states.refund_target(27555, 27555), "Refunded")
+		self.assertEqual(states.refund_target(30000, 27555), "Refunded")
 
 	def test_pending_has_no_target(self):
 		self.assertIsNone(states.target_state("Pending"))
@@ -53,5 +58,5 @@ class TestTargetState(UnitTestCase):
 	def test_capture_has_no_target(self):
 		self.assertIsNone(states.target_state("Capture"))
 
-	def test_void_has_no_target(self):
-		self.assertIsNone(states.target_state("Void"))
+	def test_void_targets_voided(self):
+		self.assertEqual(states.target_state("Void"), "Voided")

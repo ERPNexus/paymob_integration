@@ -19,7 +19,9 @@
   "client_secret",
   "expires_at",
   "last_polled_at",
-  "payment_entry"
+  "payment_entry",
+  "refunded_amount_cents",
+  "refund_requested_at"
  ],
  "fields": [
   {
@@ -45,7 +47,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "State",
-   "options": "Pending\nPaid\nFailed\nExpired\nRefunded",
+   "options": "Pending\nPaid\nFailed\nExpired\nPartially Refunded\nRefunded\nVoided",
    "read_only": 1
   },
   {
@@ -120,6 +122,18 @@
    "label": "Payment Entry",
    "options": "Payment Entry",
    "read_only": 1
+  },
+  {
+   "fieldname": "refunded_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Refunded Amount Cents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "refund_requested_at",
+   "fieldtype": "Datetime",
+   "label": "Refund Requested At",
+   "read_only": 1
   }
  ],
  "links": [],
@@ -138,6 +152,11 @@
   {
    "read": 1,
    "role": "Accounts Manager"
+  },
+  {
+   "read": 1,
+   "role": "Paymob Refund Manager",
+   "refund": 1
   }
  ],
  "sort_field": "modified",

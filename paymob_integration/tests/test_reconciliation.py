@@ -83,7 +83,6 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 		self.settings = frappe._dict(
 			enabled=1,
 			stale_pending_minutes=0,
-			reconcile_batch_size=50,
 			intention_expiration_seconds=3600,
 		)
 		settings_patcher = patch(
@@ -218,16 +217,18 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 
 	# -- selection -------------------------------------------------------------------------------
 
-	def test_batch_size_is_bounded(self):
+	def test_batch_size_uses_the_backend_default(self):
 		self._given_attempt()
 		self._given_attempt()
 		self._given_attempt()
-		self.settings.reconcile_batch_size = 2
-		fake = self._patched_client([client.PaymobAPIError("not found", status_code=404) for _ in range(2)])
+		fake = self._patched_client([client.PaymobAPIError("not found", status_code=404) for _ in range(3)])
 
-		tasks.reconcile_pending_attempts()
+		with patch("paymob_integration.tasks.frappe.get_all", wraps=frappe.get_all) as get_all:
+			tasks.reconcile_pending_attempts()
 
-		self.assertEqual(len(fake.inquiry_calls), 2)
+		self.assertEqual(tasks.RECONCILE_BATCH_SIZE, 50)
+		self.assertEqual(get_all.call_args.kwargs["limit"], tasks.RECONCILE_BATCH_SIZE)
+		self.assertEqual(len(fake.inquiry_calls), 3)
 
 	def test_selection_skips_fresh_and_settled_attempts(self):
 		self.settings.stale_pending_minutes = 999999  # cutoff far in the past: nothing is stale

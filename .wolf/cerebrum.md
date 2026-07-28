@@ -7,6 +7,7 @@
 ## User Preferences
 
 <!-- How the user likes things done. Code style, tools, patterns, communication. -->
+- [2026-07-28] For the reported missing refunds, refunds were initiated in Paymob, not from Frappe; diagnose signed inbound refund callbacks and worker processing rather than the Frappe refund-request UI.
 - Commit and push requested repository work directly on `version-16`; do not create an `agent/*`
   branch unless the user asks for one.
 - Repository commitments should include a dedicated Conventional Commits rule for consistency.
@@ -16,10 +17,13 @@
 - Do not treat a plan's own housekeeping tasks (e.g. "rewrite the outline into a full phase plan")
   as mandatory just because the plan document says so — confirm or skip busywork like that; the
   user has flagged it as useless before. See [[feedback-outline-not-full-plans]].
+- Keep non-user-facing reconciliation limits as backend defaults rather than Settings fields.
+- Prefer native Frappe dashboard connections over redundant custom buttons that only open a linked list.
 
 ## Key Learnings
 
 - **Project:** paymob_integration
+- Paymob's current callback documentation says transaction callbacks cover successful or declined payments only. Dashboard refunds therefore need a separate authenticated Transaction Inquiry recovery path; do not expect a `Refund` webhook row.
 - **Description:** Seamless integration for paymob with ERPNext
 - Country, currency, and mode jointly identify Paymob credentials and integration IDs; callers must
   supply all three to avoid selecting a regional account by row order.
@@ -31,18 +35,27 @@
 - App-level `workspace_sidebar` and `desktop_icon` fixtures must include their document `name`.
 - Existing Frappe users with a saved `Desktop Layout` do not receive new standard icons automatically;
   append the new icon to their saved layout rather than resetting it.
+- Native Number Cards can provide permission-aware operational counts with `type = "Document Type"`,
+  `function = "Count"`, and `filters_json`; keep percentage stats off for queue sizes.
+- Fixture imports retain a locally newer record; include a newer `modified` timestamp when changing an
+  existing exported fixture that must overwrite the site copy.
 - Frappe's app launcher and sidebar reserve a small square logo area; use a compact official mark
   when one is available, otherwise a full wordmark will render crisply but small.
 - The app is installed on the `capital` site. `bench --site capital run-tests --app
   paymob_integration` aborts during global test-record setup — `hrms` regional setup for India
   fails on a stale `Attendance Permissions` document link, unrelated to this app. Add
   `--lightmode` to skip that bootstrap and run the suite.
+- Extend ERPNext's Payment Request dashboard through `override_doctype_dashboards`; appending a
+  `Paymob Payment Attempt` transaction group makes Frappe filter the connection by its
+  `payment_request` Link field without a custom route button.
 - `prettier` and `eslint` skip `.wolf/` in `.pre-commit-config.yaml`; those hook scripts are
   vendored from cytostack/openwolf and must stay byte-identical to upstream.
 - Paymob billing country is the uppercase ISO value of Frappe `Country.code`, not the display name.
 - A Desk `Workspace Sidebar` linking to a Workspace must have that public Workspace fixture under
   the module package's `workspace/<slug>/` directory; a direct URL can render without it, but the
   Desk launcher cannot generate a click route.
+- Workspace shortcut/card blocks are only rendered when their names match the corresponding
+  `shortcuts`/`links` child-table labels; use short labels at four columns to prevent Desk truncation.
 - A trusted result-page state requires both a valid response HMAC and equality between its signed
   Paymob order ID and the selected attempt's stored `paymob_order_id`; credential lookup must use
   the attempt's frozen mode because site mode can change while checkout is open.
@@ -138,6 +151,10 @@
   destructive-outside-tests; `bench console` with ORM calls was allowed). Before writing a test
   that queries a Paymob doctype without scoping by name, check whether the site actually is clean.
 
+- Frappe translation CSV rows may have a blank third context field; a non-empty descriptive context
+  changes the lookup key to `source:context` and will not match ordinary `_()` calls without that
+  context. Use quoted `"source","translation",""` rows for catalog-wide translations.
+
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
@@ -194,3 +211,31 @@
 - Frappe standard DocType and Report artifacts for the `Paymob Integration` module must live under
   `paymob_integration/paymob_integration/{doctype,report}/...`; placing their JSON/Python files at
   `paymob_integration/{doctype,report}/...` leaves migration unable to sync them and imports broken.
+- Paymob's cumulative `refunded_amount_cents` is not HMAC-signed. Refund posting must use only the
+  signed child transaction's `amount_cents` when `has_parent_transaction` is true; parent resends
+  are bookkeeping only.
+- A `for_update=True` row lock serializes refund requests but does not reject a second request after
+  the first commits. Set an in-progress marker inside the lock and clear it only from the verified callback.
+- `frappe.perm.rights` (frappe/public/js/frappe/model/perm.js) is a hardcoded array of the 14
+  built-in rights; `frappe.perm.has_perm(doctype, level, ptype)` can never return true for a
+  custom Permission Type ptype (e.g. this app's "refund"), regardless of what the server-side
+  DocType permissions say. It also silently returns `{read}` only when `frappe.get_meta(doctype)`
+  hasn't been loaded for a doctype other than the current form's. The only correct client-side
+  gate for a custom ptype is a server round-trip — the built-in whitelisted
+  `frappe.client.has_permission(doctype, docname, perm_type)` takes an arbitrary `perm_type` string
+  and works for this without writing a new endpoint.
+- ERPNext's Payment Entry controller (`set_source_exchange_rate`/`set_target_exchange_rate`)
+  only recomputes an exchange rate when the field is falsy on the doc being validated — passing an
+  explicit `1` (even when correct for the same-currency case) silently wins over the controller's
+  own computation the moment either side's account currency differs from company currency, and
+  `set_received_amount()` only auto-derives `received_amount` from `paid_amount` when
+  `paid_from_account_currency == paid_to_account_currency`. A manually-built cross-currency
+  Payment Entry (not built through `create_payment_entry`) must compute both rates via
+  `erpnext.setup.utils.get_exchange_rate` and `received_amount` itself before `insert()` —
+  `validate_mandatory()` runs before the controller's own amount auto-fill.
+- When a business rule (e.g. "how much can still be refunded") is checked on both the outbound
+  request path (`api.py`) and an inbound callback guard (`processor.py`), read it from one shared
+  function (`paymob.transactions.verified_success_charge`, not two different attempt fields) —
+  `attempt.expected_amount_cents` (the pre-charge snapshot) and the verified charge's own
+  `amount_cents` only drift when there was already an amount mismatch, but the two call sites
+  disagreeing at all lets the API accept a refund the processor then silently refuses.

@@ -41,6 +41,20 @@ def event_key(paymob_transaction_id, event_kind, refunded_amount_cents=None):
 	return key
 
 
+def verified_success_charge(attempt_name):
+	"""The one verified, HMAC-authenticated charge for an attempt — the only trustworthy answer to
+	"how much was actually charged". Both `api._verified_charge` (the outbound refund request) and
+	`processor`'s refund-amount guard (the inbound callback) read this same row, so a refund cap
+	can never drift between the two directions.
+	"""
+	return frappe.db.get_value(
+		"Paymob Transaction",
+		{"attempt": attempt_name, "event_kind": "Success", "hmac_verified": 1, "processed": 1},
+		["paymob_transaction_id", "amount_cents", "currency"],
+		as_dict=True,
+	)
+
+
 def store(obj, kind, reference, payment_request, *, source, hmac_verified):
 	"""Insert one Paymob Transaction row and commit before returning, so the caller's
 	acknowledgement means "durably stored" (ADR-0007). `frappe.DuplicateEntryError` is the only
@@ -61,6 +75,7 @@ def store(obj, kind, reference, payment_request, *, source, hmac_verified):
 			"pending": obj.get("pending"),
 			"is_refunded": obj.get("is_refunded"),
 			"is_voided": obj.get("is_voided"),
+			"has_parent_transaction": obj.get("has_parent_transaction"),
 			"refunded_amount_cents": obj.get("refunded_amount_cents"),
 			"source": source,
 			"hmac_verified": hmac_verified,

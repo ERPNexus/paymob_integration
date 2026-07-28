@@ -10,9 +10,11 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 > `paymob.states.LEGAL` is this table's executable form, and `paymob.states.EVENT_TARGET` is the
 > event-kind-to-target mapping just below. Change the table and the module together — a mismatch
 > between the two means the docs describe a transition the code refuses, or the reverse.
-> `Auth`/`Capture`/`Void` map to no target state yet: there is no `voided` state here, and the
-> auth/capture flow ships in Phase 11. `paymob.processor` leaves those rows unprocessed
-> (`processed = 0`) rather than inventing a transition, so Phase 11 can consume them.
+> `Auth`/`Capture` map to no target state yet — the auth-then-capture integration is a later
+> slice, and `paymob.processor` leaves those rows unprocessed (`processed = 0`) rather than
+> inventing a transition. `Void` and `Refund` are handled from Phase 11 onward (see `voided`,
+> `partially refunded`, and `refunded` below); a `Refund` row's target additionally depends on
+> `has_parent_transaction`, not on the event kind alone — see the event-kind table.
 
 ## Lifecycle states
 
@@ -66,14 +68,45 @@ The customer sees "This payment link has expired."
   `Paymob Audit Entry` (`needs_action = 0` — nothing for a human to act on, just a record of why).
 - Terminal: yes.
 
+### partially refunded
+
+**Functional:** Some, but not all, of a settled payment was returned to the customer. The
+customer sees "Part of this payment has been refunded."
+
+**Technical:**
+- Entered from `paid` on a genuine refund event whose running total is less than the amount
+  charged; entered from itself again on a further partial refund (`paymob.states.check`'s
+  `current == target` no-op — the state does not move, but the caller still posts the new delta).
+- The running total lives on `Paymob Payment Attempt.refunded_amount_cents`, updated only from
+  the signed child transaction's `amount_cents` — never from Paymob's unsigned cumulative
+  `refunded_amount_cents` field. See [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).
+- Exits to: `refunded`, once the running total reaches the verified charged amount.
+- Terminal: no.
+
 ### refunded
 
-**Functional:** Previously settled money was returned to the customer. The customer sees "This
+**Functional:** All settled money was returned to the customer. The customer sees "This
 payment has been refunded."
 
 **Technical:**
-- Entered from `paid` only, on a genuine, separately-signed **refund event**.
-- Produces its own reversing ledger entry — it is a new event, not a rollback of the original.
+- Entered from `paid` (a single full refund) or from `partially refunded` (the running total
+  reaches the verified charged amount) — never the reverse.
+- Each refund event, full or partial, produces its own reversing ledger entry
+  (`paymob.ledger.post_refund`) — it is a new, unallocated `Pay` Payment Entry, not a rollback or
+  edit of the original. See [ADR-0016](decisions.md#adr-0016--reversals-are-on-account-pay-payment-entries).
+- Terminal: yes.
+
+### voided
+
+**Functional:** A paid attempt was cancelled and any money that moved was returned in full. The
+customer sees "This payment has been voided."
+
+**Technical:**
+- Entered from `paid` only, on a genuine, separately-signed **void event**. There is no partial
+  void.
+- If no Payment Entry was ever posted for the attempt (nothing to reverse), the state still moves
+  to `voided` and `paymob.ledger.post_refund` posts nothing — recorded as a `Nothing To Reverse`
+  audit entry (`needs_action = 0`).
 - Terminal: yes.
 
 ## Review flags (orthogonal to lifecycle state)
@@ -130,3 +163,10 @@ success, a decline, a wallet payment still settling, a reversal, or an authoriza
   same kind": its name also carries `refunded_amount_cents`, because Paymob resends the same
   parent transaction id for each cumulative partial refund — one row per distinct cumulative
   amount, not one row total.
+- A `Refund` row's effect on the lifecycle depends on `has_parent_transaction`, not on
+  `event_kind` alone: Paymob sends **two** callbacks per refund — a child row (`has_parent_
+  transaction = true`, its own `id`, `amount_cents` = the refund delta, HMAC-signed) that is the
+  money-bearing message, and a parent re-send (`has_parent_transaction = false`, the *original*
+  charge's `id`, a growing unsigned `refunded_amount_cents`) that is bookkeeping only — stored,
+  marked processed, and never posted. See
+  [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).

@@ -99,6 +99,22 @@ def payment_entry_count():
 	return frappe.db.count("Payment Entry")
 
 
+def given_user_with_role(role):
+	"""A fresh user holding exactly one role, for permission-gate tests."""
+	email = f"paymob-{frappe.scrub(role)}@example.test"
+	if not frappe.db.exists("User", email):
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": role,
+				"send_welcome_email": 0,
+				"roles": [{"role": role}],
+			}
+		).insert(ignore_permissions=True)
+	return email
+
+
 def given_submitted_payment_request(grand_total="275.55", currency="EGP"):
 	"""Create a submitted invoice and its matching incoming Payment Request."""
 	invoice = given_submitted_sales_invoice(grand_total, currency)

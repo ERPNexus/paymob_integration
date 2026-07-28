@@ -15,6 +15,7 @@
   "pending",
   "is_refunded",
   "is_voided",
+  "has_parent_transaction",
   "refunded_amount_cents",
   "source",
   "hmac_verified",
@@ -89,6 +90,12 @@
    "fieldname": "is_voided",
    "fieldtype": "Check",
    "label": "Is Voided",
+   "read_only": 1
+  },
+  {
+   "fieldname": "has_parent_transaction",
+   "fieldtype": "Check",
+   "label": "Has Parent Transaction",
    "read_only": 1
   },
   {

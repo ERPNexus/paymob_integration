@@ -4,7 +4,9 @@ processor now, the Phase 10 poller and Phase 11 refund path later — routes thr
 """
 
 import frappe
+from erpnext.setup.utils import get_exchange_rate
 from frappe import _
+from frappe.utils import flt, nowdate
 
 from paymob_integration.paymob import amounts, audit, settings
 
@@ -135,3 +137,72 @@ def _audit_duplicate(attempt, transaction, existing_payment_entry):
 		f"txn={transaction.paymob_transaction_id} sibling_txn={sibling_transaction_id} "
 		f"existing_payment_entry={existing_payment_entry}"
 	)
+
+
+def post_refund(attempt, transaction, delta_cents):
+	"""Create the sole money-out entry from a verified refund/void callback.
+
+	`attempt` must already be locked by the caller. A reversal is deliberately on-account: the
+	original incoming entry remains allocated to the Payment Request as historical evidence.
+	"""
+	if not attempt.payment_entry:
+		audit.record(
+			transaction,
+			attempt,
+			event="Nothing To Reverse",
+			needs_action=0,
+			description=_("Paymob confirmed a reversal, but no original Payment Entry exists to reverse."),
+			actor=ACTOR,
+		)
+		return None
+
+	original = frappe.get_doc("Payment Entry", attempt.payment_entry)
+	credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+	amount = amounts.from_minor_units(delta_cents, transaction.currency)
+
+	# Mirrors what Payment Entry's own validate() would compute (set_exchange_rate,
+	# set_received_amount) — done here explicitly because validate_mandatory() requires
+	# received_amount before that auto-fill runs, and only for the same-currency case.
+	# Hardcoding both rates to 1 (as before) silently wins over the controller's own
+	# recomputation, producing wrong GL amounts whenever a side isn't in company currency.
+	company_currency = frappe.get_cached_value("Company", original.company, "default_currency")
+	paid_from_currency = frappe.get_cached_value("Account", credentials.payment_account, "account_currency")
+	paid_to_currency = frappe.get_cached_value("Account", original.paid_from, "account_currency")
+	source_exchange_rate = get_exchange_rate(paid_from_currency, company_currency, nowdate())
+	target_exchange_rate = (
+		source_exchange_rate
+		if paid_to_currency == paid_from_currency
+		else get_exchange_rate(paid_to_currency, company_currency, nowdate())
+	)
+	received_amount = flt(amount * source_exchange_rate / target_exchange_rate)
+
+	payment_entry = frappe.get_doc(
+		{
+			"doctype": "Payment Entry",
+			"payment_type": "Pay",
+			"company": original.company,
+			"party_type": original.party_type,
+			"party": original.party,
+			"paid_from": credentials.payment_account,
+			"paid_to": original.paid_from,
+			"paid_amount": amount,
+			"received_amount": received_amount,
+			"source_exchange_rate": source_exchange_rate,
+			"target_exchange_rate": target_exchange_rate,
+			"reference_no": transaction.paymob_transaction_id,
+			"reference_date": nowdate(),
+		}
+	)
+	payment_entry.insert(ignore_permissions=True)
+	if amounts.to_minor_units(payment_entry.paid_amount, transaction.currency) != delta_cents:
+		frappe.throw(
+			_("Posted refund amount {0} does not match the confirmed refund amount {1}.").format(
+				amounts.to_minor_units(payment_entry.paid_amount, transaction.currency), delta_cents
+			)
+		)
+	payment_entry.submit()
+	frappe.logger("paymob").info(
+		f"refund entry posted payment_request={attempt.payment_request} attempt={attempt.name} "
+		f"txn={transaction.paymob_transaction_id} payment_entry={payment_entry.name}"
+	)
+	return payment_entry.name

@@ -74,6 +74,41 @@ that way.
 `attempt.save(ignore_permissions=True)`, never `db_set` — it is money-adjacent, not bookkeeping.
 See [ADR-0008](decisions.md#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check).
 
+### refunded_amount_cents (Paymob Payment Attempt)
+
+**Functional:** How much of this payment has actually been posted back to the customer so far.
+
+**Technical:**
+- `Long Int`, read-only, integer minor units. Blank (`NULL`) on rows that predate this field —
+  every reader treats it as `(attempt.refunded_amount_cents or 0)`, never a bare truthiness or
+  equality check on the column itself. This is the app's **own** running
+  total of what `paymob.ledger.post_refund` has posted — it is written only from a signed child
+  transaction's `amount_cents` (`processor.process_transaction`), never from Paymob's unsigned
+  cumulative `refunded_amount_cents` on the transaction row. See
+  [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).
+- Caps both directions of a refund: `api._verified_charge` (the outbound request) and
+  `processor`'s refund guard (the inbound callback) both read
+  `paymob.transactions.verified_success_charge` for the amount actually charged, and compare it
+  against this running total — the same source in both places, so the two can never disagree
+  about how much remains refundable.
+
+### refund_requested_at (Paymob Payment Attempt)
+
+**Functional:** Whether a refund or void is currently in flight for this attempt, so a second
+click cannot fire a second outbound call.
+
+**Technical:**
+- `Datetime`, read-only, blank when no refund/void is in progress. Set with `attempt.db_set(...)`
+  — the documented `db_set` exception, bookkeeping not money — inside the same `for_update=True`
+  lock `api.request_refund`/`api.request_void` already hold, so it becomes visible to a second
+  concurrent request exactly when the first commits. See
+  [ADR-0018](decisions.md#adr-0018--a-lock-needs-an-in-progress-marker).
+- Cleared in exactly one place: `processor.process_transaction`, once the verified refund/void
+  callback lands and `paymob.ledger.post_refund` has run. A network error on the outbound call
+  leaves it set on purpose — a lost response does not prove the request failed, so re-issuing is
+  a human decision (`rules/payments.md` rule 13). A refund arriving with no marker set is
+  legitimate too (a merchant refunded from the Paymob dashboard directly); it posts normally.
+
 ### enabled (Paymob Settings, Paymob Credential Set, Paymob Integration ID)
 
 **Functional:** Three separate on/off switches, at three different levels. `Paymob Settings.enabled`
@@ -186,15 +221,6 @@ a Paymob intention.
 subtracts this from now to compute the selection cutoff: a `Pending` attempt is eligible once both
 its `creation` and its `last_polled_at` (or the absence of one) are older than that cutoff.
 
-### reconcile_batch_size (Paymob Settings)
-
-**Functional:** How many pending payments the reconciliation check looks at in one pass.
-
-**Technical:** Administrator-controlled Int, default 50. Passed as the `limit` on
-`tasks.reconcile_pending_attempts`'s `frappe.get_all` selection (oldest `creation` first), so one
-scheduled run never processes an unbounded number of attempts. A permanently-failing attempt
-cannot starve newer ones out of a run — see `last_polled_at` above.
-
 ### name / event_key (Paymob Transaction)
 
 **Functional:** The same webhook delivered twice never creates two records.
@@ -280,22 +306,55 @@ would 500, and Paymob would retry forever) the moment Paymob reports a currency 
 `Currency` row for. Comparing it against the attempt's `currency` (a business decision) is Phase
 06's job, not this DocType's.
 
+### has_parent_transaction (Paymob Transaction)
+
+**Functional:** Distinguishes the two callbacks a single Paymob refund produces — this one, or
+the original charge being re-announced with a growing total.
+
+**Technical:** `Check`, read-only, written by `paymob.transactions.store` from the signed
+`has_parent_transaction` payload field. `true` on the child refund row (own `id`, `amount_cents`
+= the delta) — the money-bearing message. `false` on the parent re-send (the *original* charge's
+`id`) — bookkeeping only; `processor.process_transaction` stores and marks it processed without
+posting. See [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).
+
+### refunded_amount_cents (Paymob Transaction)
+
+**Functional:** Paymob's own running total of how much of the original charge has been refunded
+so far, as reported on this event.
+
+**Technical:** `Long Int`, read-only. **Unsigned and never used for money** —
+`hmac_verify.PROCESSED_CALLBACK_FIELDS` does not include this field, so an attacker who reaches
+the guest webhook endpoint cannot forge the HMAC but could still send an arbitrary value here
+without invalidating the signature. Every refund posting reads the child transaction's own
+signed `amount_cents` instead (see [refunded_amount_cents (Paymob Payment Attempt)](#refunded_amount_cents-paymob-payment-attempt)
+above); this field is stored for correlation with Paymob's dashboard only, and
+`transactions.event_key` appends it to a `Refund` row's own name so each distinct cumulative
+total gets its own row.
+
 ### event / description (Paymob Audit Entry)
 
 **Functional:** What kind of thing went wrong, and a plain-language account of it a non-developer
 can read without opening the code.
 
 **Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
-`Unattributed Payment`, `Duplicate Payment`, `Poller Recovery`, or `Attempt Expired` — set once by
+`Unattributed Payment`, `Duplicate Payment`, `Poller Recovery`, `Attempt Expired`,
+`Refund Requested`, `Void Requested`, or `Nothing To Reverse` — set once by
 whichever caller of `paymob.audit.record` creates the entry: `paymob.processor` for the first
-three, `paymob.ledger.post_payment` for `Duplicate Payment`, and `paymob.tasks` (the reconciliation
-poller) for the last two. `Poller Recovery` (`needs_action = 0`) is written by `tasks._audit_recovery`
+three plus `Nothing To Reverse` (via `paymob.ledger.post_refund`), `paymob.ledger.post_payment`
+for `Duplicate Payment`, `paymob.tasks` (the reconciliation poller) for `Poller Recovery` and
+`Attempt Expired`, and `paymob.api.request_refund`/`request_void` for `Refund Requested`/
+`Void Requested`. `Poller Recovery` (`needs_action = 0`) is written by `tasks._audit_recovery`
 only when reconciliation actually moved an attempt's state — a `Pending` inquiry result that
 changes nothing gets no audit row, since `process_transaction` already audits any mismatch, illegal
 transition, or duplicate payment on its own; this entry records only *that reconciliation, not a
 callback, drove the change*. `Attempt Expired` (`needs_action = 0`) is written by
 `tasks._expire_if_due` and carries no `paymob_transaction`/`paymob_transaction_id` — `audit.record`
-accepts `txn=None` for exactly this case, an event with no Paymob transaction behind it. `description`
+accepts `txn=None` for exactly this case, an event with no Paymob transaction behind it.
+`Refund Requested`/`Void Requested` (`needs_action = 0`) are written synchronously inside the
+outbound whitelisted call, before Paymob is contacted, and carry `txn=None` too — there is no
+transaction row yet at request time. `Nothing To Reverse` (`needs_action = 0`) is written when a
+verified void/refund callback lands for an attempt with no `payment_entry` (an uncaptured
+authorization was voided; nothing was ever posted). `description`
 is always built with `_()` and named values (never string concatenation), per
 [`rules/translation.md`](../../rules/translation.md).
 
@@ -314,12 +373,16 @@ callback). `Long Int`, never `Currency` — these are minor units, not a display
 
 **Functional:** Who or what caused this record to exist, and when.
 
-**Technical:** `actor` is a plain `Data` field — the fully-qualified path of the caller that
-invoked `paymob.audit.record`, passed explicitly as a required parameter
-([ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module)):
-`paymob_integration.paymob.processor.process_transaction` for the first three event kinds,
-`paymob_integration.paymob.ledger.post_payment` for `Duplicate Payment`. Phase 11's
-human-triggered refund/void audit entries will carry `frappe.session.user` instead.
+**Technical:** `actor` is a plain `Data` field. For the code-triggered event kinds it is the
+fully-qualified path of the caller that invoked `paymob.audit.record`, passed explicitly as a
+required parameter ([ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module)):
+`paymob_integration.paymob.processor.process_transaction` for `Illegal Transition`,
+`Amount Mismatch`, and `Unattributed Payment`; `paymob_integration.paymob.ledger.post_payment`
+for both `Duplicate Payment` **and** `Nothing To Reverse` — `ledger.py` has one module-level
+`ACTOR` constant shared by `post_payment` and `post_refund`, so the string names the module, not
+the specific function that wrote the entry. For the two human-triggered refund/void events,
+`api.request_refund`/`request_void` pass `frappe.session.user` instead — the person who clicked
+the button, not a module path.
 `occurred_at` is `transaction.received_at` when the entry is tied to a stored transaction, falling
 back to `frappe.utils.now_datetime()` otherwise — deliberately **system-timezone**, matching
 `Paymob Transaction.received_at`, not literal UTC; two datetime conventions in one app would be a

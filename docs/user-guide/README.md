@@ -14,7 +14,6 @@ to find the value in your Paymob dashboard.
 | **Mode** | Choose **Test** or **Live** for the whole site. Test mode uses fake money, so you can try the flow safely. Live mode charges real customers. Paymob never falls back from Live to Test — if your Live credentials are missing or wrong, payments fail, they do not quietly switch to Test. |
 | **Intention Expiration Seconds** | How many seconds a checkout link stays valid before it expires. Default is 3600 (one hour). If a customer opens the checkout page after this time, they must start again. |
 | **Stale Pending Minutes** | How many minutes a payment can stay "pending" before the system checks with Paymob to find out what really happened. Default is 20. This is a safety net for payments where Paymob's confirmation message never arrives. |
-| **Reconcile Batch Size** | How many pending payments the system checks in one pass, every 15 minutes. Default is 50 — high traffic sites may want a smaller number so one check never takes too long. |
 
 A word on "**Enabled**": you will see this same checkbox three times — once here, once on each
 credential row, and once on each payment-method row. They do not all mean the same thing. This one
@@ -109,6 +108,13 @@ records it exactly as if the original message had arrived — the Payment Reques
 checkout link's time is up, the attempt is marked **Expired** instead, so the customer can start a
 fresh attempt. Either way, nothing is guessed from a failed or slow connection to Paymob — if
 Paymob cannot be reached, the payment is simply checked again at the next 15-minute pass.
+
+## Refund a Paymob payment
+
+A user granted **Paymob Refund Manager** can open a paid Payment Request and choose **Refund**
+(full or partial) or **Void**. ERPNext sends one request to Paymob, then waits for Paymob's signed
+confirmation before posting the reversing entry. If a request remains in progress after a network
+error, do not send it again: Paymob may still have received it. Review the linked audit entry.
 
 ## Planned topics (filled as slices land)
 

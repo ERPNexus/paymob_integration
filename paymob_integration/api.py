@@ -7,10 +7,82 @@ from frappe import _
 from frappe.contacts.doctype.address.address import get_default_address
 from frappe.utils import add_to_date, get_url, now_datetime, validate_email_address
 
-from paymob_integration.paymob import amounts, intention, settings
+from paymob_integration.paymob import amounts, audit, intention, settings, transactions, void_refund
 
 WEBHOOK_PATH = "/api/method/paymob_integration.webhooks.processed_callback"
 RESULT_PATH = "/paymob-result"
+
+
+@frappe.whitelist(methods=["POST"])
+def request_refund(attempt: str, amount_cents: int):
+	"""Request one refund under a row lock; its signed callback remains ledger authority."""
+	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
+	attempt_doc.check_permission("refund")
+	if attempt_doc.refund_requested_at:
+		frappe.throw(_("A refund for this payment is already in progress."))
+	if attempt_doc.state not in ("Paid", "Partially Refunded"):
+		frappe.throw(_("Only paid Paymob payments can be refunded."))
+
+	try:
+		amount_cents = int(amount_cents)
+	except (TypeError, ValueError):
+		frappe.throw(_("The refund amount must be greater than zero."))
+	if amount_cents <= 0:
+		frappe.throw(_("The refund amount must be greater than zero."))
+
+	charged = _verified_charge(attempt_doc)
+	remaining = charged.amount_cents - (attempt_doc.refunded_amount_cents or 0)
+	if amount_cents > remaining:
+		frappe.throw(_("The refund amount cannot exceed the remaining paid amount."))
+
+	attempt_doc.db_set("refund_requested_at", now_datetime())
+	audit.record(
+		None,
+		attempt_doc,
+		event="Refund Requested",
+		needs_action=0,
+		description=_("A refund of {0} {1} was requested.").format(attempt_doc.currency, amount_cents),
+		actor=frappe.session.user,
+		received_amount_cents=amount_cents,
+		received_currency=attempt_doc.currency,
+	)
+	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
+	void_refund.refund(credentials, transaction_id=charged.paymob_transaction_id, amount_cents=amount_cents)
+	return {"status": "requested"}
+
+
+@frappe.whitelist(methods=["POST"])
+def request_void(attempt: str):
+	"""Request one void under a row lock; its signed callback remains ledger authority."""
+	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
+	attempt_doc.check_permission("refund")
+	if attempt_doc.refund_requested_at:
+		frappe.throw(_("A refund for this payment is already in progress."))
+	if attempt_doc.state != "Paid":
+		frappe.throw(_("Only paid Paymob payments can be voided."))
+
+	charged = _verified_charge(attempt_doc)
+	attempt_doc.db_set("refund_requested_at", now_datetime())
+	audit.record(
+		None,
+		attempt_doc,
+		event="Void Requested",
+		needs_action=0,
+		description=_("A void was requested for this payment."),
+		actor=frappe.session.user,
+	)
+	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
+	void_refund.void(credentials, transaction_id=charged.paymob_transaction_id)
+	return {"status": "requested"}
+
+
+def _verified_charge(attempt):
+	charged = transactions.verified_success_charge(attempt.name)
+	if not charged:
+		frappe.throw(_("No verified Paymob charge is available to reverse."))
+	if charged.currency != attempt.currency:
+		frappe.throw(_("The verified Paymob charge currency does not match this attempt."))
+	return charged
 
 
 @frappe.whitelist(methods=["POST"])

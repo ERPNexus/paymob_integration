@@ -186,12 +186,10 @@ scheduler_events = {
 # 	"frappe.desk.doctype.event.event.get_events": "paymob_integration.event.get_events"
 # }
 #
-# each overriding function accepts a `data` argument;
-# generated from the base implementation of the doctype dashboard,
-# along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "paymob_integration.task.get_dashboard_data"
-# }
+# Adds Paymob attempts to Payment Request's native Connections dashboard.
+override_doctype_dashboards = {
+	"Payment Request": "paymob_integration.dashboard.get_payment_request_dashboard"
+}
 
 # exempt linked doctypes from being automatically cancelled
 #

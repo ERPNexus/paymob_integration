@@ -7,7 +7,7 @@ authentic amount/currency mismatch for a human, and posts the Payment Entry thro
 import frappe
 from frappe import _
 
-from paymob_integration.paymob import amounts, audit, ledger, states
+from paymob_integration.paymob import amounts, audit, ledger, states, transactions
 
 ACTOR = "paymob_integration.paymob.processor.process_transaction"
 
@@ -33,15 +33,38 @@ def process_transaction(transaction):
 		if txn.processed:
 			return
 
-		target = states.target_state(txn.event_kind)
-		if target is None:
+		if txn.event_kind not in (*states.EVENT_TARGET, "Refund"):
 			return _consume_unmapped(txn)
 
 		if not txn.attempt:
-			return _unattributed(txn, target)
+			return _unattributed(txn, states.target_state(txn.event_kind) or "Refunded")
 
 		# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
 		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
+		if txn.event_kind == "Refund":
+			if not txn.has_parent_transaction:
+				_mark_processed(txn)
+				return
+			delta_cents = txn.amount_cents
+			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
+			# The same verified charge api._verified_charge caps the outbound request against —
+			# not attempt.expected_amount_cents, the pre-charge snapshot — so the two directions
+			# can never disagree about how much was actually charged and can be refunded.
+			charged = transactions.verified_success_charge(attempt.name)
+			charged_cents = charged.amount_cents if charged else 0
+			target = states.refund_target(total_cents, charged_cents)
+		elif txn.event_kind == "Void":
+			delta_cents = attempt.expected_amount_cents - (attempt.refunded_amount_cents or 0)
+			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
+			target = "Voided"
+		else:
+			delta_cents = None
+			total_cents = None
+			target = states.target_state(txn.event_kind)
+		if txn.event_kind == "Refund" and (
+			txn.currency != attempt.currency or delta_cents <= 0 or not charged or total_cents > charged_cents
+		):
+			return _refuse_refund(txn, attempt)
 		try:
 			moved = states.check(attempt.state, target)
 		except states.IllegalTransition:
@@ -81,6 +104,11 @@ def process_transaction(transaction):
 
 		if target == "Paid" and not mismatch:
 			ledger.post_payment(attempt, txn)
+		elif txn.event_kind in ("Refund", "Void"):
+			ledger.post_refund(attempt, txn, delta_cents)
+			attempt.refunded_amount_cents = total_cents
+			attempt.refund_requested_at = None
+			attempt.save(ignore_permissions=True)
 
 		_mark_processed(txn)
 		frappe.logger("paymob").info(
@@ -93,7 +121,7 @@ def process_transaction(transaction):
 
 def _consume_unmapped(txn):
 	"""`Pending` is consumed — there is nothing left to do with a wallet/kiosk in-flight
-	notification. `Auth`/`Capture`/`Void` map to no state yet (Phase 11) and are left
+	notification. `Auth`/`Capture` map to no state yet and are left
 	unprocessed so that phase's poller/consumer can pick the row up.
 	"""
 	if txn.event_kind != "Pending":
@@ -159,6 +187,29 @@ def _refuse(txn, attempt, target):
 	_mark_processed(txn)
 	frappe.logger("paymob").info(
 		f"state change refused payment_request={attempt.payment_request} from={attempt.state} to={target}"
+	)
+
+
+def _refuse_refund(txn, attempt):
+	"""Hold an authentic but impossible refund amount for human review; post nothing."""
+	attempt.needs_human_attention = 1
+	attempt.save(ignore_permissions=True)
+	audit.record(
+		txn,
+		attempt,
+		event="Amount Mismatch",
+		needs_action=1,
+		description=_("Paymob reported a refund amount or currency that cannot be applied to this attempt."),
+		actor=ACTOR,
+		expected_amount_cents=attempt.expected_amount_cents,
+		expected_currency=attempt.currency,
+		received_amount_cents=txn.amount_cents,
+		received_currency=txn.currency,
+	)
+	_mark_processed(txn)
+	frappe.logger("paymob").info(
+		f"refund refused payment_request={attempt.payment_request} attempt={attempt.name} "
+		f"txn={txn.paymob_transaction_id}"
 	)
 
 

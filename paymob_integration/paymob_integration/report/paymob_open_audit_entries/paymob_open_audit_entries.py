@@ -36,13 +36,46 @@ def execute(filters=None):
 
 def _columns():
 	return [
-		{"label": _("Audit Entry"), "fieldname": "name", "fieldtype": "Link", "options": "Paymob Audit Entry", "width": 160},
+		{
+			"label": _("Audit Entry"),
+			"fieldname": "name",
+			"fieldtype": "Link",
+			"options": "Paymob Audit Entry",
+			"width": 160,
+		},
 		{"label": _("Occurred At"), "fieldname": "occurred_at", "fieldtype": "Datetime", "width": 160},
 		{"label": _("Event"), "fieldname": "event", "fieldtype": "Data", "width": 140},
-		{"label": _("Payment Request"), "fieldname": "payment_request", "fieldtype": "Link", "options": "Payment Request", "width": 140},
-		{"label": _("Attempt"), "fieldname": "attempt", "fieldtype": "Link", "options": "Paymob Payment Attempt", "width": 140},
-		{"label": _("Paymob Transaction ID"), "fieldname": "paymob_transaction_id", "fieldtype": "Data", "width": 140},
-		{"label": _("Expected Amount Cents"), "fieldname": "expected_amount_cents", "fieldtype": "Int", "width": 140},
-		{"label": _("Received Amount Cents"), "fieldname": "received_amount_cents", "fieldtype": "Int", "width": 140},
+		{
+			"label": _("Payment Request"),
+			"fieldname": "payment_request",
+			"fieldtype": "Link",
+			"options": "Payment Request",
+			"width": 140,
+		},
+		{
+			"label": _("Attempt"),
+			"fieldname": "attempt",
+			"fieldtype": "Link",
+			"options": "Paymob Payment Attempt",
+			"width": 140,
+		},
+		{
+			"label": _("Paymob Transaction ID"),
+			"fieldname": "paymob_transaction_id",
+			"fieldtype": "Data",
+			"width": 140,
+		},
+		{
+			"label": _("Expected Amount Cents"),
+			"fieldname": "expected_amount_cents",
+			"fieldtype": "Int",
+			"width": 140,
+		},
+		{
+			"label": _("Received Amount Cents"),
+			"fieldname": "received_amount_cents",
+			"fieldtype": "Int",
+			"width": 140,
+		},
 		{"label": _("Description"), "fieldname": "description", "fieldtype": "Data", "width": 300},
 	]
