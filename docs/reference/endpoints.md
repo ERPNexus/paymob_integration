@@ -97,6 +97,31 @@ message that can cause money to be recorded.
   render the same neutral **Pending** page, never a 404 or 500.
 - Ledger authority: **no**.
 
+### Transaction Inquiry
+
+**Functional:** How ERPNext finds out what really happened to a payment when Paymob's own
+confirmation message never arrives.
+
+**Technical:**
+- Route: `POST {base_url}/api/ecommerce/orders/transaction_inquiry`, called from
+  `paymob.tasks._post_inquiry` — never called directly by a user, only from the scheduled
+  `paymob.tasks.reconcile_pending_attempts` cron job.
+- Auth: **Bearer auth token** (`paymob.auth.get_auth_token`, API key → 45-minute cached token) —
+  **not** the secret key `paymob.intention` uses to create an intention. Body:
+  `{"merchant_order_id": attempt.special_reference}`.
+- Retryable: **yes** — this is a read (`rules/implementation-gate.md` §10). On a `401`, the poller
+  refreshes the token once (`force_refresh=True`) and retries the inquiry exactly once; a second
+  `401` is not retried again. A timeout or `5xx` changes nothing and leaves the attempt for the
+  next scheduled run — see
+  [ADR-0014](decisions.md#adr-0014--only-an-answered-inquiry-may-expire-an-attempt).
+- A `404` means "no transaction exists for this reference" — the one answer that may lead to
+  `Expired` (only if `attempt.expires_at` has also passed). A found transaction is written through
+  `paymob.transactions.store(..., source="Inquiry", hmac_verified=0)` and handed to
+  `paymob.processor.process_transaction` — the very same consumer the webhook enqueues, called
+  directly rather than enqueued, since the poller is already a background job.
+- Ledger authority: **yes**, indirectly — the same `process_transaction` → `paymob.ledger.
+  post_payment` path the webhook uses, not a second write path (rules/payments.md rule 1).
+
 ## Settings
 
 ### Paymob Settings (Single)
@@ -110,7 +135,11 @@ country they sell in, and switches the whole site between test and live.
 - `credential_sets` stores country, currency, mode, base URL, browser-safe `public_key`, encrypted
   `secret_key`/`api_key`/`hmac_secret`, and the clearing `payment_account`.
 - `integration_ids` stores the checkout methods keyed by country, currency, and mode.
-- `intention_expiration_seconds` defaults to 3600 and `stale_pending_minutes` to 20.
+- `intention_expiration_seconds` defaults to 3600, `stale_pending_minutes` to 20, and
+  `reconcile_batch_size` to 50 — the last two govern the reconciliation poller
+  (`paymob.tasks.reconcile_pending_attempts`), scheduled every 15 minutes via `scheduler_events`
+  (`"cron": {"*/15 * * * *": [...]}`) in `hooks.py`. The poller returns immediately if `enabled`
+  is `0`.
 - Only System Managers can read or edit the settings.
 
 ### Test Connection
@@ -232,7 +261,33 @@ transaction row is still marked `processed = 1` so the job does not retry. See
 
 ### Missing callback (abandoned / lost)
 
-**Functional:** If Paymob never calls back, we find out the status ourselves rather than guess.
+**Functional:** If Paymob never calls back, we find out the status ourselves rather than guess —
+whether that means the customer walked away, or a payment genuinely happened but the webhook that
+should have told us about it never arrived.
 
-**Technical:** Scheduled **Transaction Inquiry** (API key → auth token → inquiry); resolve to
-`paid`/`failed`/`expired` without deleting audit history.
+**Technical:**
+- `paymob.tasks.reconcile_pending_attempts`, scheduled every 15 minutes, selects `Pending` attempts
+  whose `creation` and `last_polled_at` (or its absence) are both older than
+  `Paymob Settings.stale_pending_minutes`, oldest first, capped at `reconcile_batch_size` per run.
+- Each selected attempt is locked (`for_update=True`) and re-checked for `state == "Pending"` — a
+  webhook that landed between selection and now means there is nothing left to do.
+  `settings.get_credential_set` resolves credentials using the **attempt's own frozen**
+  `country`/`currency`/`mode`, not the site's current settings, because those can change while a
+  checkout is open.
+- The [Transaction Inquiry](#transaction-inquiry) call above answers one of three ways:
+  - **A transaction is found** — stored via `paymob.transactions.store(source="Inquiry",
+    hmac_verified=0)` and handed to `paymob.processor.process_transaction`, exactly as a webhook
+    delivery would be. If the same transaction was already stored by a webhook that simply hasn't
+    finished processing yet, the store's own duplicate-key guard returns `None` and the poller
+    does nothing further — "the webhook already stored it; its own job owns the row." If
+    reconciliation is what actually moved the attempt's state, one `Poller Recovery`
+    `Paymob Audit Entry` records that fact.
+  - **No transaction, past `expires_at`** — the attempt moves to `Expired`, with one
+    `Attempt Expired` audit entry. See [states.md](states.md#expired) and
+    [ADR-0014](decisions.md#adr-0014--only-an-answered-inquiry-may-expire-an-attempt).
+  - **No transaction, before `expires_at`** — nothing changes; the attempt is still within its
+    window and stays `Pending` for the next run.
+- A timeout, a `5xx`, or a repeated `401` leaves the attempt `Pending` — the poller never guesses
+  from a failure to reach Paymob. `last_polled_at` is updated regardless of outcome, so one
+  permanently-failing attempt cannot starve newer ones out of every bounded batch.
+- Audit history is preserved in every case; no record is ever deleted.

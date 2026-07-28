@@ -1,21 +1,28 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-27T11:31:27.695Z
-> Files: 165 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-28T07:22:33.274Z
+> Files: 172 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../.claude/plans/
 
 - `floating-inventing-swan.md` — Phases 06 + 07 — State Machine, Audit Trail & Amount Verification (~5554 tok)
+- `let-s-plan-plans-10-reconciliation-polle-steady-feigenbaum.md` — Phase 10 — Reconciliation & Expiry (~4626 tok)
+- `plan-sir-plans-11-refund-and-void-md-robust-rabin.md` — Phase 11 — Refund & Void, and Phase 12 — Pre-Go-Live Verification (~8797 tok)
 - `would-you-plan-plans-08-ledger-write-pat-nested-pelican.md` — Phase 08 + 09 — Expanded Outlines: Ledger Write Path & Duplicate Payment Guard (~3418 tok)
 
 ## ../../../.claude/projects/-home-frappe-frappe-bench-16-apps-paymob-integration/memory/
 
 - `feedback-no-hardcoded-roles.md` (~393 tok)
 - `MEMORY.md` — Memory Index (~351 tok)
+- `paymob-learning-mission.md` (~861 tok)
 
 ## ../../../.claude/skills/github-issues/
 
 - `SKILL.md` — GitHub Issues & Project Fields (~1400 tok)
+
+## ../../sites/capital/
+
+- `site_config.json` (~121 tok)
 
 ## ./
 
@@ -134,15 +141,15 @@
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~5855 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~3708 tok)
-- `fields.md` — Fields (~4130 tok)
+- `decisions.md` — Decisions (ADRs) (~6912 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~4715 tok)
+- `fields.md` — Fields (~4734 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~1645 tok)
+- `states.md` — States & Transitions (~1825 tok)
 
 ## docs/user-guide/
 
-- `README.md` — Project documentation (~2029 tok)
+- `README.md` — Project documentation (~2301 tok)
 
 ## learning/paymob-integration/
 
@@ -157,10 +164,11 @@
 - `__init__.py` (~7 tok)
 - `_debug_probe.py` — run (~113 tok)
 - `api.py` — Whitelisted entry points for logged-in Desk users. (~1690 tok)
-- `hooks.py` — Declares views (~1899 tok)
+- `hooks.py` — Declares views (~1880 tok)
 - `modules.txt` (~5 tok)
 - `patches.txt` (~73 tok)
-- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~1712 tok)
+- `tasks.py` — Recovers a lost webhook and expires an abandoned checkout. Paymob's webhook retry behaviour (~2010 tok)
+- `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~962 tok)
 
 ## paymob_integration/config/
 
@@ -179,7 +187,7 @@
 - `__init__.py` (~0 tok)
 - `amounts.py` — Convert ERPNext amounts to Paymob integer minor units. (~330 tok)
 - `analysis.py` — Shared renderer for the per-doctype "Analysis" HTML field. Each doctype's controller builds (~185 tok)
-- `audit.py` — The one function that creates a Paymob Audit Entry — grepping for "who creates an audit (~279 tok)
+- `audit.py` — The one function that creates a Paymob Audit Entry — grepping for "who creates an audit (~342 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
 - `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~445 tok)
 - `events.py` — There is no event-type field in the processed callback payload — the flags *are* the type. (~167 tok)
@@ -190,6 +198,7 @@
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~511 tok)
 - `states.py` — The executable form of docs/reference/states.md. Change both together. (~360 tok)
 - `test_settings.py` — Tests: includes_country, explicit_mode_overrides_site_mode, disabled_returns_empty (~414 tok)
+- `transactions.py` — The one function that inserts a Paymob Transaction row — webhook and poller both. Grepping (~1055 tok)
 
 ## paymob_integration/paymob_integration/
 
@@ -204,7 +213,7 @@
 
 - `__init__.py` (~0 tok)
 - `paymob_audit_entry.js` — For license information, please see license.txt (~106 tok)
-- `paymob_audit_entry.json` (~796 tok)
+- `paymob_audit_entry.json` (~858 tok)
 - `paymob_audit_entry.py` — For license information, please see license.txt (~56 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_credential_set/
@@ -230,7 +239,7 @@
 
 - `__init__.py` (~0 tok)
 - `paymob_settings.js` — For license information, please see license.txt (~292 tok)
-- `paymob_settings.json` (~485 tok)
+- `paymob_settings.json` (~529 tok)
 - `paymob_settings.py` — For license information, please see license.txt (~253 tok)
 - `test_paymob_settings.py` — Tests: connection_surfaces_paymob_errors (~353 tok)
 
@@ -239,7 +248,7 @@
 - `__init__.py` (~0 tok)
 - `paymob_transaction.js` — For license information, please see license.txt (~204 tok)
 - `paymob_transaction.json` (~827 tok)
-- `paymob_transaction.py` — For license information, please see license.txt (~441 tok)
+- `paymob_transaction.py` — For license information, please see license.txt (~335 tok)
 
 ## paymob_integration/paymob_integration/report/paymob_open_audit_entries/
 
@@ -270,13 +279,14 @@
 ## paymob_integration/tests/
 
 - `__init__.py` (~0 tok)
-- `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~763 tok)
+- `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~1634 tok)
 - `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
 - `test_checkout.py` — Tests: returns_the_three_identifiers, authenticates_with_the_secret_key, sends_the_amount_as_an_integer, only_browser_safe_values_are_in_the_url + ... (~2719 tok)
 - `test_events.py` — Tests: void_flag_wins, refund_flag_wins_over_success, capture_flag, auth_flag + 5 more (~421 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
 - `test_ledger.py` — Direct tests for paymob.ledger.post_payment — the single Payment Entry write path (~2146 tok)
-- `test_processor.py` — Integration paths for paymob.processor.process_transaction. A `Success` on a `Pending` (~5384 tok)
+- `test_processor.py` — Integration paths for paymob.processor.process_transaction. A `Success` on a `Pending` (~4881 tok)
+- `test_reconciliation.py` — Tests for paymob.tasks.reconcile_pending_attempts (Phase 10). `client.request` is the only (~3828 tok)
 - `test_result_page.py` — Tests: paid_attempt_with_valid_signature_renders_paid, paid_attempt_with_bad_signature_renders_pending, unknown_reference_renders_neutral_without_r... (~1539 tok)
 - `test_states.py` — TestCheck: test_all_pairs, test_failed_to_paid_is_illegal, test_paid_to_failed_is_illegal, test_succ (~480 tok)
 - `test_transaction_process_button.py` — The Desk 'Process' button (ADR-0013): a manual rescue for a row stuck at `processed = 0`, (~939 tok)
@@ -284,7 +294,7 @@
 
 ## paymob_integration/translations/
 
-- `ar.csv` (~1075 tok)
+- `ar.csv` (~1178 tok)
 
 ## paymob_integration/workspace_sidebar/
 

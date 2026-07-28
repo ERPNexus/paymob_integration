@@ -56,7 +56,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Event",
-   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment\nDuplicate Payment",
+   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment\nDuplicate Payment\nPoller Recovery\nAttempt Expired",
    "read_only": 1,
    "reqd": 1
   },

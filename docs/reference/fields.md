@@ -58,8 +58,13 @@ and mutability. Governed by [../../rules/documentation.md](../../rules/documenta
 
 ### last_polled_at
 
-**Technical:** The timestamp of the last reconciliation inquiry. It is the one attempt field that
-Phase 10 may update with `db_set`; money, status, and identifiers are never updated that way.
+**Functional:** When we last checked with Paymob to see what really happened to this payment.
+
+**Technical:** The timestamp of the last reconciliation inquiry, set by `tasks._reconcile`'s
+`finally` block — it runs whether the inquiry succeeded, failed, or found nothing, so one
+permanently-failing attempt cannot starve newer ones out of every bounded batch. It is the one
+attempt field Phase 10 updates with `db_set`; money, status, and identifiers are never updated
+that way.
 
 ### payment_entry (Paymob Payment Attempt)
 
@@ -177,8 +182,18 @@ a Paymob intention.
 
 **Functional:** How long a pending payment waits before reconciliation checks it.
 
-**Technical:** Administrator-controlled Int, default 20 minutes. Phase 10 uses it to select
-pending attempts for Transaction Inquiry.
+**Technical:** Administrator-controlled Int, default 20 minutes. `tasks.reconcile_pending_attempts`
+subtracts this from now to compute the selection cutoff: a `Pending` attempt is eligible once both
+its `creation` and its `last_polled_at` (or the absence of one) are older than that cutoff.
+
+### reconcile_batch_size (Paymob Settings)
+
+**Functional:** How many pending payments the reconciliation check looks at in one pass.
+
+**Technical:** Administrator-controlled Int, default 50. Passed as the `limit` on
+`tasks.reconcile_pending_attempts`'s `frappe.get_all` selection (oldest `creation` first), so one
+scheduled run never processes an unbounded number of attempts. A permanently-failing attempt
+cannot starve newer ones out of a run — see `last_polled_at` above.
 
 ### name / event_key (Paymob Transaction)
 
@@ -215,16 +230,19 @@ form under **Connections**.
 
 **Functional:** Where this event came from — did Paymob push it to us, or did we ask?
 
-**Technical:** `Select`, `Webhook` or `Inquiry`, required. This phase always writes `Webhook`;
-Phase 10's Transaction Inquiry poller writes `Inquiry` for rows it discovers itself.
+**Technical:** `Select`, `Webhook` or `Inquiry`, required, both written by the single writer
+`paymob.transactions.store` ([ADR-0015](decisions.md#adr-0015--one-writer-for-the-paymob-transaction-log)).
+`webhooks.processed_callback` passes `source="Webhook"`; `tasks._hand_off` (the reconciliation
+poller) passes `source="Inquiry"` for rows it discovers itself.
 
 ### hmac_verified (Paymob Transaction)
 
 **Functional:** Whether this event's authenticity was proven by a signature check.
 
-**Technical:** `Check`, `1` on every row this phase writes (a webhook is only stored after HMAC
-verification succeeds). The field exists for Phase 10's Transaction Inquiry rows, which carry no
-signature to check and so are stored with this at `0`.
+**Technical:** `Check`. `1` on every `Webhook` row — a webhook is only stored after HMAC
+verification succeeds. `0` on every `Inquiry` row from the reconciliation poller: a Transaction
+Inquiry response carries no signature to check; its authenticity guarantee is the authenticated
+Bearer channel plus the fact that the poller asked about a reference it minted itself.
 
 ### processed (Paymob Transaction)
 
@@ -268,10 +286,18 @@ would 500, and Paymob would retry forever) the moment Paymob reports a currency 
 can read without opening the code.
 
 **Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
-`Unattributed Payment`, or `Duplicate Payment` — set once by whichever caller of `paymob.audit.
-record` creates the entry (`paymob.processor` for the first three, `paymob.ledger.post_payment`
-for `Duplicate Payment`). `description` is always built with `_()` and named values (never string
-concatenation), per [`rules/translation.md`](../../rules/translation.md).
+`Unattributed Payment`, `Duplicate Payment`, `Poller Recovery`, or `Attempt Expired` — set once by
+whichever caller of `paymob.audit.record` creates the entry: `paymob.processor` for the first
+three, `paymob.ledger.post_payment` for `Duplicate Payment`, and `paymob.tasks` (the reconciliation
+poller) for the last two. `Poller Recovery` (`needs_action = 0`) is written by `tasks._audit_recovery`
+only when reconciliation actually moved an attempt's state — a `Pending` inquiry result that
+changes nothing gets no audit row, since `process_transaction` already audits any mismatch, illegal
+transition, or duplicate payment on its own; this entry records only *that reconciliation, not a
+callback, drove the change*. `Attempt Expired` (`needs_action = 0`) is written by
+`tasks._expire_if_due` and carries no `paymob_transaction`/`paymob_transaction_id` — `audit.record`
+accepts `txn=None` for exactly this case, an event with no Paymob transaction behind it. `description`
+is always built with `_()` and named values (never string concatenation), per
+[`rules/translation.md`](../../rules/translation.md).
 
 ### expected_amount_cents / expected_currency / received_amount_cents / received_currency (Paymob Audit Entry)
 

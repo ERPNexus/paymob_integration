@@ -12,7 +12,8 @@
   "credential_sets",
   "integration_ids",
   "intention_expiration_seconds",
-  "stale_pending_minutes"
+  "stale_pending_minutes",
+  "reconcile_batch_size"
  ],
  "fields": [
   {
@@ -53,6 +54,12 @@
    "fieldname": "stale_pending_minutes",
    "fieldtype": "Int",
    "label": "Stale Pending Minutes"
+  },
+  {
+   "default": "50",
+   "fieldname": "reconcile_batch_size",
+   "fieldtype": "Int",
+   "label": "Reconcile Batch Size"
   }
  ],
  "grid_page_length": 50,

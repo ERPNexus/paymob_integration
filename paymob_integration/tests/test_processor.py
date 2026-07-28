@@ -12,7 +12,14 @@ from paymob_integration.paymob import processor
 from paymob_integration.paymob_integration.report.paymob_open_audit_entries.paymob_open_audit_entries import (
 	execute,
 )
-from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
+from paymob_integration.tests.helpers import (
+	NoCommitIntegrationTestCase,
+	cleanup_fixture,
+	given_attempt,
+	given_submitted_payment_request,
+	given_transaction,
+	payment_entry_count,
+)
 
 
 def _credentials():
@@ -43,70 +50,20 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.addCleanup(patcher.stop)
 
 	def _given_attempt(self, state="Pending"):
-		payment_request, invoice = given_submitted_payment_request()
-		attempt = api._create_attempt(payment_request, _credentials())
-		if state != "Pending":
-			attempt.state = state
-			attempt.save(ignore_permissions=True)
-		self.addCleanup(self._cleanup_fixture, attempt.name, payment_request.name, invoice.name)
+		attempt, payment_request, invoice = given_attempt(state, credentials=_credentials())
+		self.addCleanup(cleanup_fixture, attempt.name, payment_request.name, invoice.name)
 		return attempt, payment_request, invoice
 
 	def _cleanup_fixture(self, attempt_name, payment_request_name, invoice_name):
-		for payment_entry in frappe.get_all(
-			"Payment Entry Reference", {"payment_request": payment_request_name}, pluck="parent"
-		):
-			pe = frappe.get_doc("Payment Entry", payment_entry)
-			if pe.docstatus == 1:
-				pe.cancel()
-			frappe.delete_doc("Payment Entry", payment_entry, force=True, ignore_permissions=True)
-		frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
-		frappe.db.delete("Paymob Transaction", {"payment_request": payment_request_name})
-		frappe.delete_doc("Paymob Payment Attempt", attempt_name, force=True, ignore_permissions=True)
-		payment_request = frappe.get_doc("Payment Request", payment_request_name)
-		if payment_request.docstatus == 1:
-			payment_request.cancel()
-		frappe.delete_doc("Payment Request", payment_request_name, force=True, ignore_permissions=True)
-		invoice = frappe.get_doc("Sales Invoice", invoice_name)
-		if invoice.docstatus == 1:
-			invoice.cancel()
-		frappe.delete_doc("Sales Invoice", invoice_name, force=True, ignore_permissions=True)
+		cleanup_fixture(attempt_name, payment_request_name, invoice_name)
 
-	def _given_transaction(
-		self,
-		event_kind,
-		txn_id,
-		attempt=None,
-		payment_request=None,
-		amount_cents=27555,
-		currency="EGP",
-		**overrides,
-	):
-		doc = frappe.get_doc(
-			{
-				"doctype": "Paymob Transaction",
-				"paymob_transaction_id": txn_id,
-				"event_kind": event_kind,
-				"attempt": attempt,
-				"payment_request": payment_request,
-				"amount_cents": amount_cents,
-				"currency": currency,
-				"success": event_kind == "Success",
-				"pending": event_kind == "Pending",
-				"is_refunded": event_kind == "Refund",
-				"is_voided": event_kind == "Void",
-				"source": "Webhook",
-				"hmac_verified": 1,
-				"received_at": frappe.utils.now_datetime(),
-				"raw_payload": "{}",
-				**overrides,
-			}
-		)
-		doc.insert(ignore_permissions=True)
+	def _given_transaction(self, event_kind, txn_id, **kwargs):
+		doc = given_transaction(event_kind, txn_id, **kwargs)
 		self.addCleanup(_forget_transaction, txn_id)
 		return doc
 
 	def _payment_entry_count(self):
-		return frappe.db.count("Payment Entry")
+		return payment_entry_count()
 
 	def test_success_on_pending_attempt_moves_to_paid(self):
 		attempt, payment_request, invoice = self._given_attempt()

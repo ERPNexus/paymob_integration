@@ -14,6 +14,7 @@ to find the value in your Paymob dashboard.
 | **Mode** | Choose **Test** or **Live** for the whole site. Test mode uses fake money, so you can try the flow safely. Live mode charges real customers. Paymob never falls back from Live to Test — if your Live credentials are missing or wrong, payments fail, they do not quietly switch to Test. |
 | **Intention Expiration Seconds** | How many seconds a checkout link stays valid before it expires. Default is 3600 (one hour). If a customer opens the checkout page after this time, they must start again. |
 | **Stale Pending Minutes** | How many minutes a payment can stay "pending" before the system checks with Paymob to find out what really happened. Default is 20. This is a safety net for payments where Paymob's confirmation message never arrives. |
+| **Reconcile Batch Size** | How many pending payments the system checks in one pass, every 15 minutes. Default is 50 — high traffic sites may want a smaller number so one check never takes too long. |
 
 A word on "**Enabled**": you will see this same checkbox three times — once here, once on each
 credential row, and once on each payment-method row. They do not all mean the same thing. This one
@@ -96,6 +97,18 @@ directly between Paymob's servers and ERPNext, and that message can arrive a mom
 after the customer's browser redirect does. This is normal, not a stall or a bug, and needs no
 action from you. The status the customer sees always matches what ERPNext has recorded, once both
 messages have arrived. See [states.md](../reference/states.md) for what each status means.
+
+## What happens if a payment goes missing
+
+Sometimes Paymob's confirmation message never reaches ERPNext — a network hiccup, a server
+restart, anything. You do not need to do anything about this: every 15 minutes, ERPNext quietly
+asks Paymob directly what happened to any payment that has been "pending" for a while (see
+**Stale Pending Minutes** above). If Paymob confirms the payment actually went through, ERPNext
+records it exactly as if the original message had arrived — the Payment Request still ends up
+**Paid**, with a normal Payment Entry. If Paymob confirms nothing was ever charged and the
+checkout link's time is up, the attempt is marked **Expired** instead, so the customer can start a
+fresh attempt. Either way, nothing is guessed from a failed or slow connection to Paymob — if
+Paymob cannot be reached, the payment is simply checked again at the next 15-minute pass.
 
 ## Planned topics (filled as slices land)
 

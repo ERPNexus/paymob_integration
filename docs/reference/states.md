@@ -54,8 +54,16 @@ attempt). The customer sees "This payment did not go through. You can try again.
 The customer sees "This payment link has expired."
 
 **Technical:**
-- Entered when: no callback arrived and a scheduled **Transaction Inquiry** confirms no completion.
-- Audit history is preserved; the record is not deleted.
+- Entered only by `paymob.tasks.reconcile_pending_attempts` (`tasks._expire_if_due`), and only
+  when **both** hold: an *answered* Transaction Inquiry found no transaction for the reference
+  (Paymob's HTTP 404), **and** `attempt.expires_at` has already passed. A 404 before `expires_at`
+  leaves the attempt `Pending` — still checking, not abandoned.
+- Never entered on a network error, a 5xx, or a repeated 401 — those propagate out of
+  `tasks._inquire` as exceptions and leave the attempt `Pending` for the next scheduled run. Auth-
+  token expiry and intention expiry share no code path — see
+  [ADR-0014](decisions.md#adr-0014--only-an-answered-inquiry-may-expire-an-attempt).
+- Audit history is preserved; the record is not deleted. Expiring writes one `Attempt Expired`
+  `Paymob Audit Entry` (`needs_action = 0` — nothing for a human to act on, just a record of why).
 - Terminal: yes.
 
 ### refunded

@@ -147,23 +147,13 @@ doctype_js = {"Payment Request": "public/js/payment_request.js"}
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"paymob_integration.tasks.all"
-# 	],
-# 	"daily": [
-# 		"paymob_integration.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"paymob_integration.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"paymob_integration.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"paymob_integration.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"cron": {
+		# Paymob's webhook retry behaviour is undocumented and assumed to be zero, so this is the
+		# only thing that recovers a lost callback.
+		"*/15 * * * *": ["paymob_integration.tasks.reconcile_pending_attempts"],
+	}
+}
 
 # Testing
 # -------

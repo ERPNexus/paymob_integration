@@ -79,3 +79,8 @@ Supersedes,يحل محل
 Audit Entry,قيد التدقيق
 Paymob Open Audit Entries,قيود التدقيق المفتوحة لباي موب
 Audit,التدقيق
+Reconcile Batch Size,حجم دفعة المطابقة
+Poller Recovery,استرداد تلقائي
+Attempt Expired,انتهت صلاحية المحاولة
+The customer never completed checkout and Paymob confirmed no transaction exists.,لم يكمل العميل عملية الدفع، وأكد باي موب عدم وجود أي معاملة.
+Reconciliation recovered a payment that Paymob's webhook never delivered.,استرجعت عملية المطابقة دفعة لم يصل بشأنها إشعار من باي موب.

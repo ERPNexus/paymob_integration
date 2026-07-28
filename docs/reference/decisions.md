@@ -363,3 +363,67 @@ Manager, Accounts Manager).
   treatment; this is the first, and the pattern (`set_user` in a `finally`) is now precedented.
   The button is a stopgap for exactly the gap Phase 10's poller is meant to close automatically;
   it does not replace that phase, it covers the interval until it exists.
+
+---
+
+### ADR-0014 — Only an answered inquiry may expire an attempt
+
+**Date:** 2026-07-28 · **Status:** Accepted
+
+**Functional:** A checkout is only ever declared abandoned when Paymob has actually confirmed
+there is nothing there — never because the network was slow or the connection failed.
+
+**Technical:**
+- **Context:** A 401 (expired auth token) and a genuinely expired checkout intention are two
+  different kinds of "expired" that must never share a code path
+  ([rules/implementation-gate.md](../../rules/implementation-gate.md) §11). Both can arrive at
+  `paymob.tasks._reconcile` for the same stale attempt, and confusing the two would let a
+  transient auth-token expiry or a timeout wrongly kill a payment that is still very much alive.
+- **Decision:** `tasks._expire_if_due` is reachable from exactly one place: the `None` return of
+  `tasks._inquire`, which only happens when Paymob answers with an HTTP 404 ("no transaction for
+  this reference"). Every other failure — a timeout (`client.PaymobNetworkError`), a 5xx, or a
+  second 401 — propagates as an exception out of `_inquire`, through `_reconcile`'s `finally`
+  (which only updates the bookkeeping `last_polled_at`), to the batch loop's
+  `except client.PaymobError`, which logs and leaves the attempt `Pending` for the next run.
+  `_expire_if_due` additionally requires `attempt.expires_at` to be set and in the past — a 404
+  before expiry just means "still checking," not "abandoned."
+- **Consequences / why:** An attempt can only ever move to `Expired` when Paymob has *positively
+  confirmed* no transaction exists for that reference, past its own deadline. A flaky network or
+  an expired auth token — Paymob-side housekeeping, not a customer decision — can never be
+  mistaken for a customer walking away. Proven by
+  `test_a_network_failure_never_expires_an_attempt`: an attempt with `expires_at` in the past,
+  facing a timeout, still ends the test `Pending`.
+
+---
+
+### ADR-0015 — One writer for the Paymob Transaction log
+
+**Date:** 2026-07-28 · **Status:** Accepted
+
+**Functional:** Nothing changes for anyone reading a Paymob Transaction row; this is about where
+the code that writes one lives — the same discipline already applied to the ledger
+([ADR-0008](#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check)) and
+the audit trail ([ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module)).
+
+**Technical:**
+- **Context:** Before Phase 10, `webhooks._store`/`webhooks._redact` were the only writer of a
+  Paymob Transaction row, private to the webhook module. Phase 10's poller needs to write the
+  identical row shape from a completely different trigger (Transaction Inquiry, not a webhook),
+  and duplicating the insert logic in `tasks.py` would leave two places that could drift on field
+  list, redaction, or the duplicate-delivery guard.
+- **Decision:** `_store`/`_redact`/`_RAW_PAYLOAD_FIELDS` moved verbatim into a new
+  `paymob.transactions` module as `store(obj, kind, reference, payment_request, *, source,
+  hmac_verified)` and `redact(obj)`. `source` and `hmac_verified` become required keyword
+  parameters instead of hardcoded `"Webhook"`/`1` — `webhooks.processed_callback` passes
+  `source="Webhook", hmac_verified=1` (the same values it used implicitly before), and
+  `tasks._hand_off` passes `source="Inquiry", hmac_verified=0` (an inquiry response carries no
+  signature — the authenticity guarantee is the authenticated Bearer channel plus the fact that
+  the poller asked about a reference it minted itself). The duplicate-delivery guard
+  (`frappe.DuplicateEntryError` → rollback to the savepoint → log → return `None`) is unchanged
+  and now shared by both callers.
+- **Consequences / why:** grepping for "who writes a Paymob Transaction row" returns one module.
+  A webhook redelivery and a poller re-discovering a transaction the webhook already stored both
+  hit the exact same primary-key guard, so `tasks._hand_off` gets "the webhook already stored it;
+  its own job owns the row" for free instead of needing its own duplicate check. Proven
+  behavior-preserving: `test_webhook.py` passed unchanged after the extraction, before any
+  Phase 10 code was added on top of the move.
