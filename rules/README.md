@@ -27,6 +27,7 @@ blocks a merge.
 | [documentation.md](documentation.md) | Every slice ships with docs; published docs 100% cover the app | Convention (Definition of Done) |
 | [translation.md](translation.md) | Every user-facing string is translatable; Arabic lives in `ar.csv` | Convention (Definition of Done) |
 | [workspace.md](workspace.md) | Every new DocType, report, or page is reachable from the `Paymob Integration` workspace | Convention (Definition of Done) |
+| [design.md](design.md) | Visible surfaces follow the documented design system and accessibility baseline | Convention (blocking at review) |
 
 ### Craft
 

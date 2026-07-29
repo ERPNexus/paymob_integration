@@ -450,3 +450,22 @@ the audit trail ([ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module)
 
 - **Decision:** The `Paymob Refund Manager` role grants the custom `refund` permission on a
   Payment Attempt. Server and Desk both query that permission; neither hardcodes a role name.
+
+## ADR-0020 — Payer links are signed app redirects
+
+**Functional:** A Payment Request email remains usable even after a Paymob checkout session expires.
+
+**Technical:** `payment_url` points to signed `GET /paymob-pay`, not a short-lived Paymob URL. The
+website route verifies the signature before any document lookup, then reuses only a ready, unexpired
+attempt or creates one as Administrator. It is a guest website route, not an `allow_guest` money API;
+the signed URL is the capability and no browser input supplies payment facts.
+
+## ADR-0021 — Notifications are native seeded records
+
+**Functional:** Merchants can edit or disable each Paymob alert in Desk without changing settings or code.
+
+**Technical:** The app seeds non-standard `Notification` documents only if absent. A one-time corrective
+patch refreshes the seven shipped templates; later patches never overwrite a merchant's choice. This is the
+scoped exception to the Settings-only configuration rule: notification recipients, templates, and enabled
+flag already have a native per-record UI. Customer-facing branding reads the Company through the linked
+Payment Request, while Frappe's configured Email Account supplies the delivery identity.

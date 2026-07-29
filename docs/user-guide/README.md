@@ -82,6 +82,16 @@ then the customer's primary address.
 Use **Paymob Attempts** on the same Payment Request to see each checkout try. If a card is declined,
 start a new payment; the previous attempt remains as history.
 
+By default, ERPNext emails the payer a signed payment link when you submit an incoming Payment Request.
+It opens a fresh checkout if the earlier one has expired. Turn off **Send Payment Link Email** in Paymob
+Settings to disable this site-wide, or use the request's existing **Mute Email** option for one request.
+
+Paymob payment alerts are editable native **Notifications**. Open **Notifications** in Desk to edit their
+recipients, content, or enabled state. They are on by default for payment received, failure, expiry,
+refunds, review-needed audit entries, refund/void activity, and poller recovery. The linked Payment
+Request's Company appears in customer-facing email branding; your configured site **Email Account**
+controls the actual From address and display name.
+
 **Audience:** the merchant / ERPNext user operating Paymob payments.
 
 Plain-language, task-oriented docs — how to *use* the app, no code. Written as features ship

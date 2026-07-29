@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-28T13:36:22.800Z
-> Files: 184 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-29T10:21:50.509Z
+> Files: 186 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/5d55d25e-714b-4e8a-98f0-665c2c4d5396/scratchpad/
 
@@ -10,6 +10,8 @@
 
 ## ../../../.claude/plans/
 
+- `cosmic-hopping-acorn.md` — Phase 13 — Authorize & Capture (issue #5) (~5634 tok)
+- `eager-doodling-falcon.md` — Plan — Payer payment link + notification catalogue (~3882 tok)
 - `floating-inventing-swan.md` — Phases 06 + 07 — State Machine, Audit Trail & Amount Verification (~5554 tok)
 - `let-s-plan-plans-10-reconciliation-polle-steady-feigenbaum.md` — Phase 10 — Reconciliation & Expiry (~4626 tok)
 - `plan-sir-plans-11-refund-and-void-md-robust-rabin.md` — Phase 11 — Refund & Void, and Phase 12 — Pre-Go-Live Verification (~8797 tok)
@@ -172,9 +174,13 @@
 - `_probe.py` — run (~432 tok)
 - `api.py` — Whitelisted entry points for logged-in Desk users. (~2526 tok)
 - `dashboard.py` — Adds Paymob attempts to the Payment Request Connections dashboard. (~64 tok)
+- `email.py` — Shared inline, mobile-safe email card renderer for Paymob messages. (~700 tok)
 - `hooks.py` — Declares views (~1912 tok)
+- `notifications.py` — Idempotently seeds editable Paymob Notification records. (~700 tok)
 - `modules.txt` (~5 tok)
 - `patches.txt` (~73 tok)
+- `pay_link.py` — Builds Frappe-signed payer payment links. (~60 tok)
+- `payment_request.py` — Sets ERPNext Payment Request URLs before submit. (~300 tok)
 - `tasks.py` — Recovers a lost webhook and expires an abandoned checkout. Paymob's webhook retry behaviour (~2010 tok)
 - `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~962 tok)
 
@@ -194,6 +200,12 @@
 ## paymob_integration/patches/
 
 - `__init__.py` (~0 tok)
+
+## paymob_integration/patches/v1_0/
+
+- `__init__.py` (~0 tok)
+- `refresh_notification_defaults.py` — One-time refresh of the seven shipped notification templates. (~30 tok)
+- `seed_notifications.py` — Runs the notification seed after model sync. (~30 tok)
 
 ## paymob_integration/paymob/
 
@@ -324,6 +336,8 @@
 ## paymob_integration/www/
 
 - `__init__.py` (~0 tok)
+- `paymob_pay.py` — Verifies a signed payer link and redirects to checkout. (~300 tok)
+- `paymob-pay.html` — Generic error page for an unavailable payer checkout. (~40 tok)
 - `paymob_result.py` — Customer-facing result page after Paymob checkout. Renders our own stored (~903 tok)
 - `paymob-result.html` (~46 tok)
 

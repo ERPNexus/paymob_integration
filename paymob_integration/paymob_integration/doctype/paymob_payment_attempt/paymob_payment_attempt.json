@@ -21,7 +21,8 @@
   "last_polled_at",
   "payment_entry",
   "refunded_amount_cents",
-  "refund_requested_at"
+  "refund_requested_at",
+  "contact_email"
  ],
  "fields": [
   {
@@ -133,6 +134,13 @@
    "fieldname": "refund_requested_at",
    "fieldtype": "Datetime",
    "label": "Refund Requested At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact_email",
+   "fieldtype": "Data",
+   "label": "Contact Email",
+   "options": "Email",
    "read_only": 1
   }
  ],

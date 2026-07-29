@@ -12,7 +12,9 @@
   "credential_sets",
   "integration_ids",
   "intention_expiration_seconds",
-  "stale_pending_minutes"
+  "stale_pending_minutes",
+  "notifications_section",
+  "send_payment_link_email"
  ],
  "fields": [
   {
@@ -53,6 +55,18 @@
    "fieldname": "stale_pending_minutes",
    "fieldtype": "Int",
    "label": "Stale Pending Minutes"
+  },
+  {
+   "fieldname": "notifications_section",
+   "fieldtype": "Section Break",
+   "label": "Notifications"
+  },
+  {
+   "default": "1",
+   "description": "Email the payer ERPNext's Payment Request link when the request is submitted.",
+   "fieldname": "send_payment_link_email",
+   "fieldtype": "Check",
+   "label": "Send Payment Link Email"
   }
  ],
  "grid_page_length": 50,

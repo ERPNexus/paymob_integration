@@ -55,6 +55,27 @@ None yet — all default Frappe Desk chrome. The only visual additions are:
 
 Frappe default (Inter/system stack). No overrides, no web fonts loaded.
 
+## Email system
+
+**Audience / task / success state:** payers need an unambiguous payment or refund update; accounts
+staff need enough context to review an operational event. A successful email makes the state clear
+at a glance and gives one relevant next action when action is needed.
+
+All eight payment emails use `paymob_integration.email.render`: ERPNext's native Payment Request
+message plus the seven editable Paymob Notification records. It deliberately stays inside
+Frappe's native email shell and uses no remote images or web fonts.
+
+| Element | Rule |
+|---|---|
+| Layout | 600px maximum-width presentation table, fluid at narrow widths, with inline styles only. |
+| Brand | `#0180fd` header and plain-text Payment Request Company name; branding remains usable when images are blocked. Paymob is named only where operationally relevant. |
+| Card | White detail surface on `#f3f6f9`; 32px inner spacing, 16px body text, and one optional blue CTA. |
+| Status | Success `#166534` / `#dcfce7`; action required `#b91c1c` / `#fee2e2`; expiry `#92400e` / `#fef3c7`; info `#075985` / `#e0f2fe`; neutral `#374151` / `#f3f4f6`. Color reinforces an explicit status label; it is never the only signal. |
+| RTL | Every content cell uses Frappe's `is_rtl()` Jinja helper to set `dir` plus matching `align`; no `left`/`right` CSS is hardcoded. |
+
+The renderer accepts only app-controlled Jinja fragments. Continue to escape document values by
+default; never mark email content or webhook data `safe`.
+
 ## Motion
 
 None. No transitions/animations added by this app.
@@ -87,3 +108,5 @@ logical properties or mirror explicitly).
 - If a portal/result page is built later (Phase 03), it's a **web page**, not
   Desk — it gets its own `web_include_css`/theme entry, and needs its own
   "Surfaces styled" section here since Desk overrides don't reach it.
+- Email clients strip style blocks and may block images. Keep this email system table-based,
+  inline-styled, image-independent, and preview it in an inbox before shipping.

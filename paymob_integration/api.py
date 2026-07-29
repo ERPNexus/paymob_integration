@@ -90,12 +90,25 @@ def start_checkout(payment_request: str):
 	"""Create a checkout from the stored Payment Request, never browser-supplied money."""
 	request = frappe.get_doc("Payment Request", payment_request)
 	request.check_permission("write")
+	return _checkout(request)
+
+
+def _checkout(request, reuse_pending=False):
+	"""Create, or safely reuse, the hosted checkout for a submitted request."""
 	_validate_payable(request)
+	if reuse_pending:
+		attempt = _active_attempt(request.name)
+		if attempt:
+			credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+			return {
+				"attempt": attempt.name,
+				"checkout_url": build_checkout_url(credentials, attempt.get_password("client_secret")),
+			}
 
 	source = frappe.get_doc(request.reference_doctype, request.reference_name)
 	country = _merchant_country(request, source)
 	credentials = settings.get_credential_set(country, request.currency)
-	attempt = _create_attempt(request, credentials)
+	attempt = _create_attempt(request, credentials, _contact_email(request, source))
 	result = intention.create_intention(
 		credentials,
 		amount_cents=attempt.expected_amount_cents,
@@ -124,6 +137,22 @@ def start_checkout(payment_request: str):
 		"attempt": attempt.name,
 		"checkout_url": build_checkout_url(credentials, result["client_secret"]),
 	}
+
+
+def _active_attempt(payment_request):
+	"""Return a ready, unexpired checkout so a browser refresh does not mint another one."""
+	name = frappe.db.get_value(
+		"Paymob Payment Attempt",
+		{
+			"payment_request": payment_request,
+			"state": "Pending",
+			"expires_at": [">", now_datetime()],
+			"paymob_intention_id": ["is", "set"],
+		},
+		"name",
+		order_by="expires_at desc",
+	)
+	return name and frappe.get_doc("Paymob Payment Attempt", name)
 
 
 def build_checkout_url(credentials, client_secret):
@@ -164,7 +193,7 @@ def _merchant_country(request, source):
 	return country
 
 
-def _create_attempt(request, credentials):
+def _create_attempt(request, credentials, contact_email=None):
 	"""Persist the reference before Paymob is called, so failures cannot reuse it."""
 	sequence = frappe.db.count("Paymob Payment Attempt", {"payment_request": request.name}) + 1
 	config = settings.get_settings()
@@ -178,6 +207,7 @@ def _create_attempt(request, credentials):
 			"currency": request.currency,
 			"country": credentials.country,
 			"mode": credentials.mode,
+			"contact_email": contact_email,
 			"expires_at": add_to_date(now_datetime(), seconds=config.intention_expiration_seconds),
 		}
 	)
@@ -199,9 +229,7 @@ def _billing_data(request, source):
 		"last_name": contact.get("last_name") or "NA",
 		# Unlike the other "NA" placeholders below, Paymob format-validates this field and
 		# rejects both "NA" and non-email values such as a fallback user ID.
-		"email": validate_email_address(source.get("contact_email"))
-		or validate_email_address(request.email_to)
-		or "na@na.com",
+		"email": _contact_email(request, source) or "na@na.com",
 		"phone_number": source.get("contact_mobile") or request.get("phone_number") or "NA",
 		"street": "NA",
 		"building": "NA",
@@ -211,6 +239,10 @@ def _billing_data(request, source):
 		"state": "NA",
 		"country": _billing_country(request, source),
 	}
+
+
+def _contact_email(request, source):
+	return validate_email_address(source.get("contact_email")) or validate_email_address(request.email_to)
 
 
 def _billing_country(request, source):

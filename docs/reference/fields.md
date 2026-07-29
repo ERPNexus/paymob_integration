@@ -74,6 +74,14 @@ that way.
 `attempt.save(ignore_permissions=True)`, never `db_set` — it is money-adjacent, not bookkeeping.
 See [ADR-0008](decisions.md#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check).
 
+### contact_email (Paymob Payment Attempt)
+
+**Functional:** The payer receives status and retry notifications at the address used for checkout.
+
+**Technical:** Read-only `Data` with `Email` options, populated from the linked document's
+`contact_email` or the Payment Request's `email_to`, the same fallback sent to Paymob as billing data.
+It stores no additional source of customer data and is never logged.
+
 ### refunded_amount_cents (Paymob Payment Attempt)
 
 **Functional:** How much of this payment has actually been posted back to the customer so far.

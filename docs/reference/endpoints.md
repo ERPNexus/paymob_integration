@@ -200,6 +200,19 @@ country they sell in, and switches the whole site between test and live.
   (`"cron": {"*/15 * * * *": [...]}`) in `hooks.py`. The poller returns immediately if `enabled`
   is `0`.
 - Only System Managers can read or edit the settings.
+- `send_payment_link_email` defaults to `1`. When it is enabled, an eligible submitted inward
+  Payment Request receives an app-owned signed payment URL through ERPNext's existing email flow;
+  `mute_email` remains the per-request opt-out.
+
+### Payer payment link
+
+**Functional:** The link in a Payment Request email opens a current Paymob checkout for the payer.
+
+**Technical:** `GET /paymob-pay?ref=...&_signature=...` is served by
+`paymob_integration/www/paymob_pay.py` with `no_cache = 1`. `verify_request()` runs before its only
+database access. The route reuses a ready `Pending` attempt only while `expires_at` is in the future;
+otherwise it calls the shared checkout path and redirects to Paymob. Validation or gateway failures show
+a translated generic page, log the Payment Request reference, and leave payment state unchanged.
 
 ### Test Connection
 

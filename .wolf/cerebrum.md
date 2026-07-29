@@ -22,7 +22,19 @@
 
 ## Key Learnings
 
+- Native Frappe Notification templates can query the linked Payment Request's `company` through
+  `frappe.db.get_value`; leave sender identity to the configured site Email Account rather than adding
+  per-company SMTP configuration.
 - **Project:** paymob_integration
+- Frappe Notification and Payment Request email bodies both render Jinja, so one app-owned
+  inline table fragment can preserve Frappe's native delivery/opt-out behavior while keeping
+  visual treatment consistent across all payment messages.
+- In email Jinja, use Frappe's built-in `is_rtl()` helper for `dir` and `align`; the restricted
+  `frappe` Jinja global does not expose the request-local language object reliably.
+- A standalone Frappe process must run from the Bench `sites/` directory before `connect()` so
+  its relative site log handler resolves to `<site>/logs`, matching `bench` commands.
+- `frappe.sendmail(..., delayed=False)` still registers its immediate send as an after-commit
+  callback; direct scripts must commit, then verify `Email Queue Recipient.status` is `Sent`.
 - Paymob's current callback documentation says transaction callbacks cover successful or declined payments only. Dashboard refunds therefore need a separate authenticated Transaction Inquiry recovery path; do not expect a `Refund` webhook row.
 - **Description:** Seamless integration for paymob with ERPNext
 - Country, currency, and mode jointly identify Paymob credentials and integration IDs; callers must
@@ -158,6 +170,8 @@
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
+- [2026-07-29] `apply_patch` cannot update a file created in the same patch; add it once with final content.
+- [2026-07-29] `Mock(name="x")` labels a mock; set `.name` explicitly when the code reads it.
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->
 - [2026-07-28] Do not infer the viewed Payment Request from a nearby live record. For refund support,
   verify the exact Payment Request, attempt, transaction, and Payment Entry links before explaining
