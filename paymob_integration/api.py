@@ -14,12 +14,51 @@ RESULT_PATH = "/paymob-result"
 
 
 @frappe.whitelist(methods=["POST"])
+def request_capture(attempt: str):
+	"""Capture one authorization under a row lock; its signed callback remains ledger authority."""
+	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
+	# ponytail: `refund` is this app's single manual Paymob-money right. Split it only for
+	# merchants that need separation of duties.
+	attempt_doc.check_permission("refund")
+	if attempt_doc.capture_requested_at:
+		frappe.throw(_("A capture for this payment is already in progress."))
+	if attempt_doc.refund_requested_at:
+		frappe.throw(_("A refund for this payment is already in progress."))
+	if attempt_doc.state != "Authorized":
+		frappe.throw(_("Only authorized Paymob payments can be captured."))
+
+	authorization = _verified_authorization(attempt_doc)
+	attempt_doc.db_set("capture_requested_at", now_datetime())
+	audit.record(
+		None,
+		attempt_doc,
+		event="Capture Requested",
+		needs_action=0,
+		description=_("A capture of {0} {1} was requested.").format(
+			attempt_doc.currency, authorization.amount_cents
+		),
+		actor=frappe.session.user,
+		received_amount_cents=authorization.amount_cents,
+		received_currency=attempt_doc.currency,
+	)
+	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
+	void_refund.capture(
+		credentials,
+		transaction_id=authorization.paymob_transaction_id,
+		amount_cents=authorization.amount_cents,
+	)
+	return {"status": "requested"}
+
+
+@frappe.whitelist(methods=["POST"])
 def request_refund(attempt: str, amount_cents: int):
 	"""Request one refund under a row lock; its signed callback remains ledger authority."""
 	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
 	attempt_doc.check_permission("refund")
 	if attempt_doc.refund_requested_at:
 		frappe.throw(_("A refund for this payment is already in progress."))
+	if attempt_doc.capture_requested_at:
+		frappe.throw(_("A capture for this payment is already in progress."))
 	if attempt_doc.state not in ("Paid", "Partially Refunded"):
 		frappe.throw(_("Only paid Paymob payments can be refunded."))
 
@@ -58,10 +97,16 @@ def request_void(attempt: str):
 	attempt_doc.check_permission("refund")
 	if attempt_doc.refund_requested_at:
 		frappe.throw(_("A refund for this payment is already in progress."))
-	if attempt_doc.state != "Paid":
-		frappe.throw(_("Only paid Paymob payments can be voided."))
+	if attempt_doc.capture_requested_at:
+		frappe.throw(_("A capture for this payment is already in progress."))
+	if attempt_doc.state not in ("Paid", "Authorized"):
+		frappe.throw(_("Only paid or authorized Paymob payments can be voided."))
 
-	charged = _verified_charge(attempt_doc)
+	charged = (
+		_verified_authorization(attempt_doc)
+		if attempt_doc.state == "Authorized"
+		else _verified_charge(attempt_doc)
+	)
 	attempt_doc.db_set("refund_requested_at", now_datetime())
 	audit.record(
 		None,
@@ -77,12 +122,21 @@ def request_void(attempt: str):
 
 
 def _verified_charge(attempt):
-	charged = transactions.verified_success_charge(attempt.name)
+	charged = transactions.verified_charge(attempt.name)
 	if not charged:
 		frappe.throw(_("No verified Paymob charge is available to reverse."))
 	if charged.currency != attempt.currency:
 		frappe.throw(_("The verified Paymob charge currency does not match this attempt."))
 	return charged
+
+
+def _verified_authorization(attempt):
+	authorization = transactions.verified_authorization(attempt.name)
+	if not authorization:
+		frappe.throw(_("No verified Paymob authorization is available to capture."))
+	if authorization.currency != attempt.currency:
+		frappe.throw(_("The verified Paymob authorization currency does not match this attempt."))
+	return authorization
 
 
 @frappe.whitelist(methods=["POST"])

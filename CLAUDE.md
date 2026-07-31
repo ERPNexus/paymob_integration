@@ -21,7 +21,7 @@ What *does* exist is the design layer, and it is the point of this repo:
 | Folder | Contains | Audience |
 |---|---|---|
 | `rules/` | 14 repo commitments, each ending in a Definition of Done checklist | contributors + AI agents |
-| `plans/` | 12 numbered build phases, in payment-lifecycle order | whoever builds the next slice |
+| `plans/` | 13 numbered build phases, in payment-lifecycle order | whoever builds the next slice |
 | `docs/` | published product documentation (ships with the app) | merchants, integrating developers |
 | `learning/` | the owner's private study notes — gitignored, **not shipped, not a spec** | owner only |
 

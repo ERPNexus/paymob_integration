@@ -469,3 +469,17 @@ patch refreshes the seven shipped templates; later patches never overwrite a mer
 scoped exception to the Settings-only configuration rule: notification recipients, templates, and enabled
 flag already have a native per-record UI. Customer-facing branding reads the Company through the linked
 Payment Request, while Frappe's configured Email Account supplies the delivery identity.
+
+## ADR-0022 — Callback facts determine authorization state
+
+**Functional:** Merchant intent never overrides what Paymob verified happened to the money.
+
+**Technical:** `capture_mode` is inert documentation. Verified `Auth` and `Capture` callbacks map to
+`Authorized` and `Paid` respectively.
+
+## ADR-0023 — Capture is full amount only
+
+**Functional:** Staff capture the complete verified hold or a human reviews a mismatch.
+
+**Technical:** `request_capture` sends the Auth row's amount; a Capture callback with another amount follows
+the existing mismatch path and posts no Payment Entry.

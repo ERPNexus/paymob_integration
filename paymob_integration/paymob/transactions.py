@@ -41,18 +41,27 @@ def event_key(paymob_transaction_id, event_kind, refunded_amount_cents=None):
 	return key
 
 
-def verified_success_charge(attempt_name):
-	"""The one verified, HMAC-authenticated charge for an attempt — the only trustworthy answer to
-	"how much was actually charged". Both `api._verified_charge` (the outbound refund request) and
-	`processor`'s refund-amount guard (the inbound callback) read this same row, so a refund cap
-	can never drift between the two directions.
-	"""
-	return frappe.db.get_value(
-		"Paymob Transaction",
-		{"attempt": attempt_name, "event_kind": "Success", "hmac_verified": 1, "processed": 1},
-		["paymob_transaction_id", "amount_cents", "currency"],
-		as_dict=True,
-	)
+def verified_charge(attempt_name):
+	"""Return verified money movement, never an uncaptured authorization."""
+	return _verified(attempt_name, ("Capture", "Success"))
+
+
+def verified_authorization(attempt_name):
+	"""Return the verified hold used only to capture or void an authorization."""
+	return _verified(attempt_name, ("Auth",))
+
+
+def _verified(attempt_name, kinds):
+	for kind in kinds:
+		row = frappe.db.get_value(
+			"Paymob Transaction",
+			{"attempt": attempt_name, "event_kind": kind, "hmac_verified": 1, "processed": 1},
+			["paymob_transaction_id", "amount_cents", "currency"],
+			as_dict=True,
+		)
+		if row:
+			return row
+	return None
 
 
 def store(obj, kind, reference, payment_request, *, source, hmac_verified):

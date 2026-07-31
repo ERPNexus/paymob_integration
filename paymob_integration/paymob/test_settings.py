@@ -32,3 +32,30 @@ class TestEnabledCredentialSets(FrappeTestCase):
 		get_settings.return_value = frappe._dict(enabled=0, credential_sets=[frappe._dict(enabled=1)])
 
 		self.assertEqual(settings.enabled_credential_sets(), [])
+
+
+class TestIntegrationIds(FrappeTestCase):
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_capture_mode_does_not_filter_integration_ids(self, get_settings):
+		"""`capture_mode` is declared merchant intent only (ADR-0022) — it must never gate
+		which integration IDs `get_integration_ids` returns.
+		"""
+		auto_capture = frappe._dict(
+			enabled=1,
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			capture_mode="Auto Capture",
+			integration_id="1001",
+		)
+		authorize_only = frappe._dict(
+			enabled=1,
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			capture_mode="Authorize Only",
+			integration_id="1002",
+		)
+		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[auto_capture, authorize_only])
+
+		self.assertEqual(settings.get_integration_ids("Egypt", "EGP"), ["1001", "1002"])

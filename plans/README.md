@@ -1,6 +1,6 @@
 # Implementation Plans
 
-Twelve numbered phases that build the Paymob ↔ ERPNext integration. Each phase is one
+Thirteen numbered phases that build the Paymob ↔ ERPNext integration. Each phase is one
 **slice** as defined by [`../rules/slices.md`](../rules/slices.md): one vertical piece of
 working behaviour, small enough to review in one sitting, shipping code + schema +
 permissions + tests + docs + translations in the same change.
@@ -30,6 +30,7 @@ own top-level folder.
 | [10](10-reconciliation-poller.md) | Reconciliation & expiry | A lost webhook is recovered by Transaction Inquiry; an abandoned checkout becomes `expired` |
 | [11](11-refund-and-void.md) | Refund & void | Staff refund from ERPNext under a server-side lock; the reversing entry is posted from the verified callback |
 | [12](12-pre-go-live-verification.md) | Pre-go-live verification | The five undocumented Paymob behaviours are measured, not assumed, before real money moves |
+| [13](13-authorize-and-capture.md) | Authorize & capture | A verified authorization is captured or voided safely by staff |
 
 ## Dependency order
 
@@ -37,12 +38,13 @@ own top-level folder.
 01 ─┬─ 02 ─┬─ 03
     │      └─ 04 ── 05 ── 06 ── 07 ── 08 ─┬─ 09
     │                                     ├─ 10
-    │                                     └─ 11
-    └───────────────────────────────────────── 12 (last, needs everything)
+    │                                     └─ 11 ── 13
+    └────────────────────────────────────────────── 12 (last, needs everything)
 ```
 
 Phases 09, 10 and 11 are independent of one another and may be built in any order once 08 is
-merged.
+merged. 13 depends on 11 alone and may be built as soon as 11 is merged, without waiting for 09,
+10, or 12.
 
 ## Global constraints
 

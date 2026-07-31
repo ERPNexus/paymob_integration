@@ -96,7 +96,7 @@ It stores no additional source of customer data and is never logged.
   [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).
 - Caps both directions of a refund: `api._verified_charge` (the outbound request) and
   `processor`'s refund guard (the inbound callback) both read
-  `paymob.transactions.verified_success_charge` for the amount actually charged, and compare it
+  `paymob.transactions.verified_charge` for the amount actually charged, and compare it
   against this running total — the same source in both places, so the two can never disagree
   about how much remains refundable.
 
@@ -407,3 +407,11 @@ earlier one — a correction is always a new row, never an edit (see
 `needs_action` drives the `Paymob Open Audit Entries` report, which excludes any entry named in
 another submitted entry's `supersedes` field — a list filter alone cannot express "has no
 superseding record."
+
+### Capture controls
+
+**Functional:** Staff can see an authorization awaiting capture and cannot double-submit it.
+
+**Technical:** `Paymob Payment Attempt.capture_requested_at` is a nullable, read-only `Datetime`, set under
+the request lock and cleared only by a verified Capture callback. `Paymob Integration ID.capture_mode`
+documents `Auto Capture` or `Authorize Only`; it is intentionally inert because callback flags determine state.

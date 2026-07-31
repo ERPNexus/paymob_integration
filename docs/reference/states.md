@@ -10,11 +10,11 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 > `paymob.states.LEGAL` is this table's executable form, and `paymob.states.EVENT_TARGET` is the
 > event-kind-to-target mapping just below. Change the table and the module together — a mismatch
 > between the two means the docs describe a transition the code refuses, or the reverse.
-> `Auth`/`Capture` map to no target state yet — the auth-then-capture integration is a later
-> slice, and `paymob.processor` leaves those rows unprocessed (`processed = 0`) rather than
-> inventing a transition. `Void` and `Refund` are handled from Phase 11 onward (see `voided`,
-> `partially refunded`, and `refunded` below); a `Refund` row's target additionally depends on
-> `has_parent_transaction`, not on the event kind alone — see the event-kind table.
+> `Auth` targets `authorized` and `Capture` targets `paid` (see `authorized` below,
+> [ADR-0022](decisions.md#adr-0022--callback-facts-determine-authorization-state)). `Void` and
+> `Refund` are handled from Phase 11 onward (see `voided`, `partially refunded`, and `refunded`
+> below); a `Refund` row's target additionally depends on `has_parent_transaction`, not on the
+> event kind alone — see the event-kind table.
 
 ## Lifecycle states
 
@@ -25,7 +25,25 @@ Payment/record **lifecycle states** and **review flags**. Format: see
 **Technical:**
 - Entered when: intention created and checkout started; no verified processed callback yet. An
   attempt created before a failed Paymob call is also pending and is resolved by the Phase 10 poller.
-- Exits to: `paid` (verified success), `failed` (verified decline), `expired` (abandoned + inquiry finds nothing).
+- Exits to: `paid` (verified success), `authorized` (verified auth-only hold), `failed` (verified
+  decline), `expired` (abandoned + inquiry finds nothing).
+- Terminal: no.
+
+### authorized
+
+**Functional:** An `Auth` callback puts a payment on hold without settling it. The customer sees
+"Your payment has been authorized and is awaiting capture." Staff then capture or void it; only
+capture can create the normal Payment Entry.
+
+**Technical:**
+- Entered when: an authentic processed callback reports an authorization-only `Auth` event
+  (`is_auth`, no `is_capture`/`is_refunded`/`is_voided`).
+- Exits to: `paid` (a verified, matched `Capture` callback), `voided` (a genuine void event). Never
+  expires, fails, or refunds directly: an authorization is a real hold, while `expired` means no
+  transaction ever existed.
+- `capture_mode` (`Paymob Integration ID`) is declared merchant intent only and never gates this
+  transition — only the callback's own flags do. See
+  [ADR-0022](decisions.md#adr-0022--callback-facts-determine-authorization-state).
 - Terminal: no.
 
 ### paid
@@ -35,7 +53,10 @@ customer sees "Payment received. Thank you."
 
 **Technical:**
 - Entered when: an **authentic** (HMAC-verified) **processed callback** reports success **and**
-  the amount matches the immutable intention snapshot.
+  the amount matches the immutable intention snapshot — either a direct `Success` or a verified,
+  amount-matched `Capture` of a prior `authorized` hold (`request_capture` sends the full
+  authorized amount; a `Capture` reporting a different amount follows the same mismatch path and
+  posts no Payment Entry — [ADR-0023](decisions.md#adr-0023--capture-is-full-amount-only)).
 - Exits to: `refunded` (a genuine, separately-signed refund event). Does **not** exit to `failed`.
 - Terminal: effectively yes, except a real refund.
 
@@ -98,15 +119,17 @@ payment has been refunded."
 
 ### voided
 
-**Functional:** A paid attempt was cancelled and any money that moved was returned in full. The
-customer sees "This payment has been voided."
+**Functional:** A paid or authorized attempt was cancelled and any money that moved was returned
+in full. The customer sees "This payment has been voided."
 
 **Technical:**
-- Entered from `paid` only, on a genuine, separately-signed **void event**. There is no partial
-  void.
-- If no Payment Entry was ever posted for the attempt (nothing to reverse), the state still moves
-  to `voided` and `paymob.ledger.post_refund` posts nothing — recorded as a `Nothing To Reverse`
-  audit entry (`needs_action = 0`).
+- Entered from `paid` or `authorized`, on a genuine, separately-signed **void event**. There is no
+  partial void.
+- If no Payment Entry was ever posted for the attempt — always true for an `authorized` void
+  (never had money posted), and also true for a `paid` attempt whose Payment Entry was blocked by
+  an unresolved amount mismatch — the state still moves to `voided` and `paymob.ledger.post_refund`
+  posts nothing, recorded as a `Nothing To Reverse` audit entry (`needs_action = 0`). The delta is
+  keyed on whether `attempt.payment_entry` is actually set, never on the state alone.
 - Terminal: yes.
 
 ## Review flags (orthogonal to lifecycle state)

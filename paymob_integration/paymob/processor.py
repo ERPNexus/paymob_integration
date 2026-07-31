@@ -50,11 +50,12 @@ def process_transaction(transaction):
 			# The same verified charge api._verified_charge caps the outbound request against —
 			# not attempt.expected_amount_cents, the pre-charge snapshot — so the two directions
 			# can never disagree about how much was actually charged and can be refunded.
-			charged = transactions.verified_success_charge(attempt.name)
+			charged = transactions.verified_charge(attempt.name)
 			charged_cents = charged.amount_cents if charged else 0
 			target = states.refund_target(total_cents, charged_cents)
 		elif txn.event_kind == "Void":
-			delta_cents = attempt.expected_amount_cents - (attempt.refunded_amount_cents or 0)
+			posted_cents = attempt.expected_amount_cents if attempt.payment_entry else 0
+			delta_cents = posted_cents - (attempt.refunded_amount_cents or 0)
 			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
 			target = "Voided"
 		else:
@@ -70,7 +71,7 @@ def process_transaction(transaction):
 		except states.IllegalTransition:
 			return _refuse(txn, attempt, target)
 
-		mismatch = target == "Paid" and not amounts.amounts_match(
+		mismatch = target in ("Paid", "Authorized") and not amounts.amounts_match(
 			attempt.expected_amount_cents, attempt.currency, txn.amount_cents, txn.currency
 		)
 
@@ -79,6 +80,8 @@ def process_transaction(transaction):
 			attempt.state = target
 		if mismatch:
 			attempt.needs_human_attention = 1
+		if txn.event_kind == "Capture":
+			attempt.capture_requested_at = None
 		attempt.save(ignore_permissions=True)
 
 		if mismatch:
@@ -120,10 +123,7 @@ def process_transaction(transaction):
 
 
 def _consume_unmapped(txn):
-	"""`Pending` is consumed — there is nothing left to do with a wallet/kiosk in-flight
-	notification. `Auth`/`Capture` map to no state yet and are left
-	unprocessed so that phase's poller/consumer can pick the row up.
-	"""
+	"""`Pending` is consumed — there is nothing left to do with a wallet/kiosk in-flight notification."""
 	if txn.event_kind != "Pending":
 		frappe.logger("paymob").info(
 			f"unmapped event kind left unprocessed payment_request={txn.payment_request or 'unknown'} "
@@ -139,7 +139,9 @@ def _consume_unmapped(txn):
 
 def _unattributed(txn, target):
 	"""A Success/Refund with no resolved attempt is real money we cannot post — audited for a
-	human. A Decline with no attempt is a stray scan callback, not accountant homework.
+	human. An Auth with no resolved attempt is an unmatched authorization hold: no money moved,
+	but a human still needs to locate and void/capture it through Paymob's own tools. A Decline
+	with no attempt is a stray scan callback, not accountant homework.
 	"""
 	if target == "Failed":
 		_mark_processed(txn)
@@ -147,14 +149,21 @@ def _unattributed(txn, target):
 			f"unattributed decline logged txn={txn.paymob_transaction_id} kind={txn.event_kind}"
 		)
 		return
+	if target == "Authorized":
+		description = _(
+			"Paymob reported an authorization hold of {0} {1} that could not be matched to any "
+			"attempt. No money has moved."
+		).format(txn.currency, txn.amount_cents)
+	else:
+		description = _("Paymob reported a {0} of {1} {2} that could not be matched to any attempt.").format(
+			_(txn.event_kind), txn.currency, txn.amount_cents
+		)
 	audit.record(
 		txn,
 		None,
 		event="Unattributed Payment",
 		needs_action=1,
-		description=_("Paymob reported a {0} of {1} {2} that could not be matched to any attempt.").format(
-			_(txn.event_kind), txn.currency, txn.amount_cents
-		),
+		description=description,
 		actor=ACTOR,
 		received_amount_cents=txn.amount_cents,
 		received_currency=txn.currency,

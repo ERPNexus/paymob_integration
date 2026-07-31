@@ -34,3 +34,13 @@ class TestVoidRefund(UnitTestCase):
 				void_refund.void(self.credentials, transaction_id="123")
 
 		request.assert_called_once()
+
+	def test_capture_posts_the_verified_amount_once(self):
+		with patch("paymob_integration.paymob.void_refund.client.request", return_value={}) as request:
+			void_refund.capture(self.credentials, transaction_id="123", amount_cents=10000)
+
+		request.assert_called_once_with(
+			"POST",
+			"https://accept.example.test/api/acceptance/capture",
+			json_body={"auth_token": "token", "transaction_id": "123", "amount_cents": 10000},
+		)

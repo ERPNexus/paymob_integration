@@ -7,6 +7,7 @@
 ## User Preferences
 
 <!-- How the user likes things done. Code style, tools, patterns, communication. -->
+- [2026-07-29] Translate the payment state `Authorized` as `محجوز`, not `التفويض` or `مصرّح به`; it denotes a card-funds hold awaiting capture.
 - [2026-07-28] For the reported missing refunds, refunds were initiated in Paymob, not from Frappe; diagnose signed inbound refund callbacks and worker processing rather than the Frappe refund-request UI.
 - Commit and push requested repository work directly on `version-16`; do not create an `agent/*`
   branch unless the user asks for one.
@@ -22,6 +23,7 @@
 
 ## Key Learnings
 
+- An auth-only payment is a verified hold, not a charge: only `Capture`/`Success` rows can cap refunds; Auth rows are used only to capture or void.
 - Native Frappe Notification templates can query the linked Payment Request's `company` through
   `frappe.db.get_value`; leave sender identity to the configured site Email Account rather than adding
   per-company SMTP configuration.

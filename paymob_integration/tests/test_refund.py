@@ -126,6 +126,15 @@ class TestRequestRefund(_RefundTestCase):
 				api.request_refund(attempt.name, 10000)
 		refund.assert_not_called()
 
+	def test_a_refund_is_refused_while_a_capture_is_in_progress(self):
+		attempt = self._charged_attempt()
+		attempt.db_set("capture_requested_at", frappe.utils.now_datetime())
+		frappe.set_user(self.refund_manager)
+		with patch("paymob_integration.paymob.void_refund.refund") as refund:
+			with self.assertRaises(frappe.ValidationError):
+				api.request_refund(attempt.name, 10000)
+		refund.assert_not_called()
+
 
 class TestRequestVoid(_RefundTestCase):
 	def test_a_user_without_the_role_is_refused(self):
@@ -152,3 +161,22 @@ class TestRequestVoid(_RefundTestCase):
 			with self.assertRaises(frappe.ValidationError):
 				api.request_void(attempt.name)
 		void.assert_not_called()
+
+	def test_a_void_is_refused_while_a_capture_is_in_progress(self):
+		attempt = self._charged_attempt()
+		attempt.db_set("capture_requested_at", frappe.utils.now_datetime())
+		frappe.set_user(self.refund_manager)
+		with patch("paymob_integration.paymob.void_refund.void") as void:
+			with self.assertRaises(frappe.ValidationError):
+				api.request_void(attempt.name)
+		void.assert_not_called()
+
+	def test_void_of_an_authorized_attempt_uses_the_verified_authorization(self):
+		attempt, request, invoice = given_attempt(state="Authorized", credentials=_credentials())
+		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
+		self.addCleanup(frappe.set_user, "Administrator")
+		given_transaction("Auth", f"auth-{attempt.name}", attempt.name, request.name, processed=1)
+		frappe.set_user(self.refund_manager)
+		with patch("paymob_integration.paymob.void_refund.void", return_value={}) as void:
+			api.request_void(attempt.name)
+		self.assertEqual(void.call_args.kwargs["transaction_id"], f"auth-{attempt.name}")

@@ -138,9 +138,13 @@ refunds a paid Paymob payment, in full or in part, from the Payment Request.
   — this is what actually stops a double submit; the lock alone does not, because a second request
   simply waits for the first to commit and then proceeds. See
   [ADR-0018](decisions.md#adr-0018--a-lock-needs-an-in-progress-marker).
+- If `attempt.capture_requested_at` is set, throws
+  [Capture already in progress](#capture-already-in-progress): a capture in flight must resolve
+  before a refund can be requested against the same attempt.
 - `amount_cents` is browser-supplied and validated against **verified Paymob data only**: it must
-  be a positive integer, and it is capped by `paymob.transactions.verified_success_charge(attempt)`
-  (the attempt's own HMAC-verified `Success` row) minus `attempt.refunded_amount_cents` — never
+  be a positive integer, and it is capped by `paymob.transactions.verified_charge(attempt)` — the
+  attempt's own HMAC-verified `Capture` or `Success` row, whichever is verified (a captured
+  authorization has no `Success` row of its own) — minus `attempt.refunded_amount_cents` — never
   against a client-supplied total. The `transaction_id` sent to Paymob comes from that same
   verified row, never from the browser.
 - Sets the in-progress marker (`refund_requested_at`), writes a `Refund Requested`
@@ -152,24 +156,30 @@ refunds a paid Paymob payment, in full or in part, from the Payment Request.
 
 ### Request void
 
-**Functional:** The same as Request refund, for voiding a `Paid` attempt in full — no amount
-parameter, since a void reverses everything.
+**Functional:** The same as Request refund, for voiding a `Paid` or `Authorized` attempt in full —
+no amount parameter, since a void reverses everything (or, for an authorization, releases the
+whole hold).
 
 **Technical:** `paymob_integration.api.request_void(attempt)`, whitelisted `POST`. Same lock,
-permission gate, and in-progress marker as Request refund; the state guard requires `Paid`
-exactly (not `Partially Refunded` — a partially refunded attempt has already had money returned
-and is refunded further, not voided). Writes a `Void Requested` audit entry. Ledger authority:
-**no**, same as Request refund.
+permission gate, and in-progress marker as Request refund, plus the same capture-in-progress
+refusal. The state guard requires `Paid` or `Authorized` (not `Partially Refunded` — a partially
+refunded attempt has already had money returned and is refunded further, not voided). For an
+`Authorized` attempt, the transaction reversed is the verified authorization
+(`paymob.transactions.verified_authorization`), never the verified charge — an authorization has
+no `Success`/`Capture` row of its own to reverse. Writes a `Void Requested` audit entry. Ledger
+authority: **no**, same as Request refund.
 
-### Paymob refund and void calls
+### Paymob refund, void, and capture calls
 
-**Functional:** The two outbound HTTP calls Request refund/void make to Paymob.
+**Functional:** The three outbound HTTP calls Request refund/void/capture make to Paymob.
 
 **Technical:**
 - `paymob.void_refund.refund(credentials, transaction_id, amount_cents)` →
   `POST {base_url}/api/acceptance/void_refund/refund`; `paymob.void_refund.void(credentials,
-  transaction_id)` → `POST {base_url}/api/acceptance/void_refund/void`. Both go through
-  `paymob.auth.get_auth_token` and the app's one network module, `paymob.client.request`.
+  transaction_id)` → `POST {base_url}/api/acceptance/void_refund/void`;
+  `paymob.void_refund.capture(credentials, transaction_id, amount_cents)` →
+  `POST {base_url}/api/acceptance/capture`. All three go through `paymob.auth.get_auth_token` and
+  the app's one network module, `paymob.client.request`.
 - Auth token in the JSON **body** (`auth_token`), the older Accept convention — not an
   `Authorization` header like Transaction Inquiry. Marked `ponytail` in `void_refund.py`: switch
   this if a live sandbox call proves otherwise.
@@ -179,7 +189,7 @@ and is refunded further, not voided). Writes a `Void Requested` audit entry. Led
   re-issuing the call.
 - Ledger authority: **no** — the HTTP response is not evidence money moved; only the signed
   callback that follows is (see [Processed callback](#processed-callback-server-to-server-webhook)
-  above — the same route handles refund and void callbacks).
+  above — the same route handles refund, void, and capture callbacks).
 
 ## Settings
 
@@ -304,14 +314,17 @@ so would be a second exception on top of the one `states.check` already threw.
 ### Unattributed payment
 
 **Functional:** A genuine `Success` or `Refund` that cannot be matched to any attempt is real
-money that cannot be posted anywhere — held for a human rather than silently dropped. A stray
+money that cannot be posted anywhere — held for a human rather than silently dropped. An
+unmatched `Auth` is different: it is an authorization hold, not money that moved, but a human
+still needs to locate and void or capture it directly through Paymob's own tools. A stray
 `Decline` with no matching attempt (a scan, not a real checkout) is just logged.
 
 **Technical:** `paymob.processor._unattributed` writes one `Unattributed Payment` audit entry
-(`needs_action = 1`, `attempt` blank) for `Success`/`Refund` rows whose `attempt` link is empty —
-the case `webhooks._resolve_attempt` produces when `merchant_order_id` doesn't resolve, or
-resolves to an attempt whose frozen `paymob_order_id` doesn't match the signed `order.id`. A
-`Decline` with no attempt writes no audit entry. Both mark the row `processed = 1`.
+(`needs_action = 1`, `attempt` blank) for `Success`/`Refund`/`Auth` rows whose `attempt` link is
+empty — the case `webhooks._resolve_attempt` produces when `merchant_order_id` doesn't resolve, or
+resolves to an attempt whose frozen `paymob_order_id` doesn't match the signed `order.id`. The
+`Auth` case gets a distinct description naming it a hold, not a payment. A `Decline` with no
+attempt writes no audit entry. All mark the row `processed = 1`.
 
 ### Duplicate payment for one Payment Request
 
@@ -346,6 +359,24 @@ HTTP response, success or failure. A stuck marker (the outbound call failed, or 
 lost) is not auto-retried; it is a human decision, surfaced as a `Paymob Audit Entry` a human
 resolves. See [ADR-0018](decisions.md#adr-0018--a-lock-needs-an-in-progress-marker).
 
+### Capture already in progress
+
+**Functional:** A second click on Capture while the first request is still in flight is refused,
+the same as Refund already in progress. A Refund or Void request against an attempt with a
+capture in flight is refused too — the two must never race.
+
+**Technical:** `api.request_capture` checks `attempt.capture_requested_at` immediately after the
+row lock and permission check, exactly like `refund_requested_at` above, and is cleared only when
+`paymob.processor.process_transaction` handles the verified `Capture` callback
+(`processor.py`'s `if txn.event_kind == "Capture": attempt.capture_requested_at = None`) — never
+by the outbound call's HTTP response. `request_refund` and `request_void` each also check
+`attempt.capture_requested_at` and refuse if it is set, so a capture in flight cannot race a
+refund or void of the same attempt. A stuck latch (the outbound call failed, or its response was
+lost) is a human decision, same as a stuck refund marker — this is the "a lost capture callback is
+unrecoverable automatically" case: only a human re-driving the capture, or reconciling directly
+against Paymob, clears it. See
+[ADR-0018](decisions.md#adr-0018--a-lock-needs-an-in-progress-marker).
+
 ### Missing callback (abandoned / lost)
 
 **Functional:** If Paymob never calls back, we find out the status ourselves rather than guess —
@@ -378,3 +409,11 @@ should have told us about it never arrived.
   from a failure to reach Paymob. `last_polled_at` is updated regardless of outcome, so one
   permanently-failing attempt cannot starve newer ones out of every bounded batch.
 - Audit history is preserved in every case; no record is ever deleted.
+
+### Request capture
+
+**Functional:** A Refund Manager captures a verified authorization in full.
+
+**Technical:** `api.request_capture` locks the attempt, checks its existing `refund` permission, uses only
+the verified Auth transaction's ID and integer amount, sets `capture_requested_at`, writes `Capture Requested`,
+then calls `POST /api/acceptance/capture` once. A lost callback leaves the latch set; no retry is automatic.

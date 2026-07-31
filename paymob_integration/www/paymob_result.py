@@ -17,10 +17,13 @@ no_cache = 1
 # first import in this worker. Translate at read time in get_context() instead.
 MESSAGES = {
 	"Pending": "We're confirming your payment.",
+	"Authorized": "Your payment has been authorized and is awaiting capture.",
 	"Paid": "Payment received. Thank you.",
 	"Failed": "This payment did not go through. You can try again.",
 	"Expired": "This payment link has expired.",
 	"Refunded": "This payment has been refunded.",
+	"Partially Refunded": "This payment has been partially refunded.",
+	"Voided": "This payment authorization has been voided.",
 }
 
 

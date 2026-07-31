@@ -219,13 +219,13 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700005"}), 0)
 		self.assertEqual(txn.processed, 1)
 
-	def test_auth_kind_is_left_unprocessed(self):
+	def test_unattributed_auth_is_audited(self):
 		txn = self._given_transaction("Auth", "700006")
 		processor.process_transaction(txn.name)
 
 		txn.reload()
-		self.assertEqual(txn.processed, 0)
-		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700006"}), 0)
+		self.assertEqual(txn.processed, 1)
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700006"}), 1)
 
 	def test_pending_kind_is_consumed_without_state_change(self):
 		attempt, payment_request, invoice = self._given_attempt()

@@ -2,10 +2,22 @@ from frappe.tests import UnitTestCase
 
 from paymob_integration.paymob import states
 
-ALL_STATES = ("Pending", "Paid", "Failed", "Expired", "Partially Refunded", "Refunded", "Voided")
+ALL_STATES = (
+	"Pending",
+	"Authorized",
+	"Paid",
+	"Failed",
+	"Expired",
+	"Partially Refunded",
+	"Refunded",
+	"Voided",
+)
 
 LEGAL_PAIRS = {
 	("Pending", "Paid"),
+	("Pending", "Authorized"),
+	("Authorized", "Paid"),
+	("Authorized", "Voided"),
 	("Pending", "Failed"),
 	("Pending", "Expired"),
 	("Paid", "Partially Refunded"),
@@ -52,11 +64,11 @@ class TestTargetState(UnitTestCase):
 	def test_pending_has_no_target(self):
 		self.assertIsNone(states.target_state("Pending"))
 
-	def test_auth_has_no_target(self):
-		self.assertIsNone(states.target_state("Auth"))
+	def test_auth_targets_authorized(self):
+		self.assertEqual(states.target_state("Auth"), "Authorized")
 
-	def test_capture_has_no_target(self):
-		self.assertIsNone(states.target_state("Capture"))
+	def test_capture_targets_paid(self):
+		self.assertEqual(states.target_state("Capture"), "Paid")
 
 	def test_void_targets_voided(self):
 		self.assertEqual(states.target_state("Void"), "Voided")

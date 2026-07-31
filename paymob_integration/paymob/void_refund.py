@@ -1,9 +1,10 @@
-"""One-shot Paymob refund and void requests; callbacks remain ledger authority."""
+"""One-shot Paymob refund, void and capture requests; callbacks remain ledger authority."""
 
 from paymob_integration.paymob import auth, client, settings
 
 REFUND_PATH = "/api/acceptance/void_refund/refund"
 VOID_PATH = "/api/acceptance/void_refund/void"
+CAPTURE_PATH = "/api/acceptance/capture"
 
 
 def refund(credentials, *, transaction_id, amount_cents):
@@ -18,6 +19,15 @@ def refund(credentials, *, transaction_id, amount_cents):
 def void(credentials, *, transaction_id):
 	"""Make one void request. Never retry: a lost response may still mean it succeeded."""
 	return _post(credentials, VOID_PATH, {"transaction_id": transaction_id})
+
+
+def capture(credentials, *, transaction_id, amount_cents):
+	"""Make one capture request. Never retry: a lost response may still mean it succeeded."""
+	return _post(
+		credentials,
+		CAPTURE_PATH,
+		{"transaction_id": transaction_id, "amount_cents": int(amount_cents)},
+	)
 
 
 def _post(credentials, path, body):

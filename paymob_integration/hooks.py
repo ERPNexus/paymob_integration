@@ -61,7 +61,13 @@ fixtures = [
 	{"doctype": "Role", "filters": [["name", "in", ["Paymob Refund Manager"]]]},
 	{
 		"doctype": "Number Card",
-		"filters": [["name", "in", ["Pending Attempts", "Needs Attention", "Unprocessed Transactions"]]],
+		"filters": [
+			[
+				"name",
+				"in",
+				["Pending Attempts", "Awaiting Capture", "Needs Attention", "Unprocessed Transactions"],
+			]
+		],
 	},
 ]
 

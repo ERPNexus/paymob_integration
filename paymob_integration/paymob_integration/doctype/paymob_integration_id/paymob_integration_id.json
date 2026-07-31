@@ -11,6 +11,7 @@
   "country",
   "currency",
   "mode",
+  "capture_mode",
   "payment_method",
   "integration_id"
  ],
@@ -44,6 +45,15 @@
    "label": "Mode",
    "options": "Test\nLive",
    "reqd": 1
+  },
+  {
+   "default": "Auto Capture",
+   "description": "Declared merchant intent only; callback flags determine the attempt state.",
+   "fieldname": "capture_mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Capture Mode",
+   "options": "Auto Capture\nAuthorize Only"
   },
   {
    "fieldname": "payment_method",

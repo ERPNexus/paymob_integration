@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-29T10:21:50.509Z
-> Files: 186 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-30T10:10:04.128Z
+> Files: 197 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/5d55d25e-714b-4e8a-98f0-665c2c4d5396/scratchpad/
 
@@ -150,10 +150,10 @@
 ## docs/reference/
 
 - `decisions.md` — Decisions (ADRs) (~6912 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~5936 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~6826 tok)
 - `fields.md` — Fields (~5824 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~2440 tok)
+- `states.md` — States & Transitions (~2812 tok)
 
 ## docs/user-guide/
 
@@ -176,8 +176,8 @@
 - `dashboard.py` — Adds Paymob attempts to the Payment Request Connections dashboard. (~64 tok)
 - `email.py` — Shared inline, mobile-safe email card renderer for Paymob messages. (~700 tok)
 - `hooks.py` — Declares views (~1912 tok)
-- `notifications.py` — Idempotently seeds editable Paymob Notification records. (~700 tok)
 - `modules.txt` (~5 tok)
+- `notifications.py` — Idempotently seeds editable Paymob Notification records. (~700 tok)
 - `patches.txt` (~73 tok)
 - `pay_link.py` — Builds Frappe-signed payer payment links. (~60 tok)
 - `payment_request.py` — Sets ERPNext Payment Request URLs before submit. (~300 tok)
@@ -219,10 +219,10 @@
 - `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
 - `intention.py` — Create a Paymob Intention once per payment attempt; never retry it automatically. (~326 tok)
 - `ledger.py` — The single Payment Entry write path (rules/payments.md rule 1). Every caller — the webhook (~2526 tok)
-- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~2400 tok)
+- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~2515 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~511 tok)
 - `states.py` — The executable form of docs/reference/states.md. Change both together. (~360 tok)
-- `test_settings.py` — Tests: includes_country, explicit_mode_overrides_site_mode, disabled_returns_empty (~414 tok)
+- `test_settings.py` — TestCredentialLookup: test_includes_country, test_explicit_mode_overrides_site_mode, test_disabled_r (~647 tok)
 - `transactions.py` — The one function that inserts a Paymob Transaction row — webhook and poller both. Grepping (~1245 tok)
 - `void_refund.py` — One-shot Paymob refund and void HTTP calls; callbacks retain ledger authority. (~310 tok)
 
@@ -311,15 +311,17 @@
 - `__init__.py` (~0 tok)
 - `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~1750 tok)
 - `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
+- `test_authorization_processor.py` — Verified authorization/capture callbacks drive the existing processor. (~635 tok)
+- `test_capture.py` — Capture requests use a verified authorization under the existing refund permission. (~1087 tok)
 - `test_checkout.py` — Tests: returns_the_three_identifiers, authenticates_with_the_secret_key, sends_the_amount_as_an_integer, only_browser_safe_values_are_in_the_url + ... (~2719 tok)
 - `test_events.py` — Tests: void_flag_wins, refund_flag_wins_over_success, capture_flag, auth_flag + 5 more (~421 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
 - `test_ledger.py` — Direct tests for paymob.ledger.post_payment — the single Payment Entry write path (~2146 tok)
 - `test_processor.py` — Integration paths for paymob.processor.process_transaction. A `Success` on a `Pending` (~4881 tok)
 - `test_reconciliation.py` — Tests for paymob.tasks.reconcile_pending_attempts (Phase 10). `client.request` is the only (~3828 tok)
-- `test_refund_ledger.py` — Verified reversal callbacks create on-account Payment Entries exactly once. (~903 tok)
-- `test_refund.py` — Outbound refund/void requests: the lock, the marker, the permission gate, and the amount (~1758 tok)
-- `test_result_page.py` — Tests: paid_attempt_with_valid_signature_renders_paid, paid_attempt_with_bad_signature_renders_pending, unknown_reference_renders_neutral_without_r... (~1539 tok)
+- `test_refund_ledger.py` — Verified reversal callbacks create on-account Payment Entries exactly once. (~1374 tok)
+- `test_refund.py` — Outbound refund/void requests: the lock, the marker, the permission gate, and the amount (~2169 tok)
+- `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 9 mor (~1754 tok)
 - `test_states.py` — TestCheck: test_all_pairs, test_failed_to_paid_is_illegal, test_paid_to_failed_is_illegal, test_succ (~480 tok)
 - `test_transaction_process_button.py` — The Desk 'Process' button (ADR-0013): a manual rescue for a row stuck at `processed = 0`, (~939 tok)
 - `test_void_refund.py` — Unit tests for one-shot refund and void API calls. (~510 tok)
@@ -337,8 +339,8 @@
 
 - `__init__.py` (~0 tok)
 - `paymob_pay.py` — Verifies a signed payer link and redirects to checkout. (~300 tok)
-- `paymob-pay.html` — Generic error page for an unavailable payer checkout. (~40 tok)
 - `paymob_result.py` — Customer-facing result page after Paymob checkout. Renders our own stored (~903 tok)
+- `paymob-pay.html` — Generic error page for an unavailable payer checkout. (~40 tok)
 - `paymob-result.html` (~46 tok)
 
 ## plans/
@@ -355,7 +357,8 @@
 - `10-reconciliation-poller.md` — Phase 10 — Reconciliation & Expiry (outline) (~414 tok)
 - `11-refund-and-void.md` — Phase 11 — Refund & Void (outline) (~442 tok)
 - `12-pre-go-live-verification.md` — Phase 12 — Pre-Go-Live Verification (outline) (~426 tok)
-- `README.md` — Project documentation (~2946 tok)
+- `13-authorize-and-capture.md` — Phase 13 — Authorize & Capture (outline) (~250 tok)
+- `README.md` — Project documentation (~3005 tok)
 
 ## rules/
 
