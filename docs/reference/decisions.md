@@ -508,3 +508,22 @@ this app sets no `payment_gateway`/`payment_account` on the Payment Request
 The payer-facing lifecycle mail after that point belongs to the seeded Notifications
 ([ADR-0021](#adr-0021--notifications-are-native-seeded-records)), switchable via
 `send_status_emails`.
+
+## ADR-0025 — Authorize-only is a per-request choice
+
+**Functional:** A merchant can ask for a hold instead of an immediate charge on one Payment
+Request, without changing how every other payment on the account is captured.
+
+**Technical:** `Payment Request.paymob_authorize_only` (Custom Field, `Check`) is read once in
+`api._checkout` and snapshotted onto the attempt as `Paymob Payment Attempt.authorize_only` — the
+Payment Request can be edited after checkout starts, so the attempt needs its own frozen copy, the
+same reason `mode` and `country` are snapshotted. When set, it is passed as `capture_mode` to
+`paymob.intention.create_intention`, which forwards it to `paymob.settings.get_integration_ids`;
+that function then filters to `Paymob Integration ID` rows whose own `capture_mode` is `Authorize
+Only` and throws before Paymob is ever called if none match, naming the country and currency —
+never falling back to auto-capture silently. A pending attempt is only reused
+(`api._checkout(reuse_pending=True)`, used by the signed payer link) when its stored
+`authorize_only` matches the request's current flag, so ticking the box after an earlier click
+gets a fresh attempt rather than the old auto-capture checkout. This is purely a selection
+mechanism: it never determines attempt state — verified `Auth`/`Capture` callbacks still do that
+alone ([ADR-0022](#adr-0022--callback-facts-determine-authorization-state)).

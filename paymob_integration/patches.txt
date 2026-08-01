@@ -6,4 +6,5 @@
 paymob_integration.patches.v1_0.seed_notifications
 paymob_integration.patches.v1_0.refresh_notification_defaults
 paymob_integration.patches.v1_0.default_send_status_emails
+paymob_integration.patches.v1_0.add_authorize_only_field
 # Patches added in this section will be executed after doctypes are migrated

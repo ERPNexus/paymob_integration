@@ -76,6 +76,17 @@ class TestCreateIntention(UnitTestCase):
 		self.assertEqual(body["amount"], 27555)
 		self.assertEqual(body["payment_methods"], [1234])
 
+	def test_forwards_capture_mode_to_integration_id_lookup(self):
+		with (
+			patch(
+				"paymob_integration.paymob.intention.settings.get_integration_ids", return_value=["1234"]
+			) as get_ids,
+			patch("paymob_integration.paymob.intention.client.request", return_value=INTENTION_RESPONSE),
+		):
+			self.call(capture_mode="Authorize Only")
+
+		get_ids.assert_called_once_with("Egypt", "EGP", "Authorize Only")
+
 
 class _Credentials:
 	base_url = "https://accept.paymob.test"
@@ -196,6 +207,45 @@ class TestCheckoutURL(UnitTestCase):
 		attempt.save.assert_called_once_with(ignore_permissions=True)
 		self.assertEqual(result, {"attempt": attempt.name, "checkout_url": "https://checkout.test"})
 
+	def test_pending_attempt_with_different_flag_is_not_reused(self):
+		request = frappe._dict(
+			name="PR-0001",
+			paymob_authorize_only=1,
+			reference_doctype="Sales Invoice",
+			reference_name="SINV-0001",
+			currency="EGP",
+		)
+		pending = Mock(country="Egypt", currency="EGP", mode="Test", authorize_only=0)
+		pending.name = "PR-0001-1"
+		new_attempt = Mock(expected_amount_cents=27555, currency="EGP", special_reference="PR-0001-2")
+		new_attempt.name = "PR-0001-2"
+		with (
+			patch("paymob_integration.api._validate_payable"),
+			patch("paymob_integration.api._active_attempt", return_value=pending),
+			patch("paymob_integration.api.frappe.get_doc", return_value=frappe._dict()),
+			patch("paymob_integration.api._merchant_country", return_value="Egypt"),
+			patch(
+				"paymob_integration.api.settings.get_credential_set",
+				return_value=Mock(country="Egypt", mode="Test"),
+			),
+			patch("paymob_integration.api._create_attempt", return_value=new_attempt),
+			patch("paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT),
+			patch("paymob_integration.api._billing_data", return_value={}),
+			patch("paymob_integration.api._items", return_value=[]),
+			patch(
+				"paymob_integration.api.settings.get_settings",
+				return_value=Mock(intention_expiration_seconds=3600),
+			),
+			patch(
+				"paymob_integration.api.get_url",
+				side_effect=["https://site.test/webhook", "https://site.test/result"],
+			),
+			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),
+		):
+			result = api._checkout(request, reuse_pending=True)
+
+		self.assertEqual(result["attempt"], "PR-0001-2")
+
 
 class TestStartCheckout(NoCommitIntegrationTestCase):
 	def setUp(self):
@@ -261,3 +311,30 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 		frappe.set_user("Guest")
 		with self.assertRaises(frappe.PermissionError):
 			api.start_checkout(self.payment_request.name)
+
+	def test_authorize_only_flag_is_forwarded_as_capture_mode(self):
+		self.payment_request.db_set("paymob_authorize_only", 1)
+		with (
+			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
+			patch("paymob_integration.api.settings.get_settings", return_value=self.config),
+			patch(
+				"paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT
+			) as create_intention,
+		):
+			result = api.start_checkout(self.payment_request.name)
+
+		self.assertEqual(create_intention.call_args.kwargs["capture_mode"], "Authorize Only")
+		attempt = frappe.get_doc("Paymob Payment Attempt", result["attempt"])
+		self.assertTrue(attempt.authorize_only)
+
+	def test_no_flag_sends_no_capture_mode(self):
+		with (
+			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
+			patch("paymob_integration.api.settings.get_settings", return_value=self.config),
+			patch(
+				"paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT
+			) as create_intention,
+		):
+			api.start_checkout(self.payment_request.name)
+
+		self.assertIsNone(create_intention.call_args.kwargs["capture_mode"])

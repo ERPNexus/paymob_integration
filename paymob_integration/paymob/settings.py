@@ -40,14 +40,29 @@ def enabled_credential_sets():
 	return [row for row in config.credential_sets if row.enabled]
 
 
-def get_integration_ids(country, currency):
-	"""Return enabled integration IDs for a country and currency in the site's current mode."""
+def get_integration_ids(country, currency, capture_mode=None):
+	"""Return enabled integration IDs for a country and currency in the site's current mode.
+
+	`capture_mode` defaults to `None`, returning every enabled row (today's behaviour, unchanged).
+	Pass `"Authorize Only"` to narrow the checkout to integrations configured for a hold in
+	Paymob's own dashboard; throws if none match rather than silently falling back to auto-capture.
+	"""
 	config = get_settings()
-	return [
-		row.integration_id
+	rows = [
+		row
 		for row in config.integration_ids
 		if row.enabled and row.country == country and row.currency == currency and row.mode == config.mode
 	]
+	if capture_mode:
+		rows = [row for row in rows if row.capture_mode == capture_mode]
+		if not rows:
+			frappe.throw(
+				_(
+					"No Authorize Only Paymob Integration ID is configured for {0}, {1}. "
+					"Configure one in Paymob Settings before requesting a hold."
+				).format(country, currency)
+			)
+	return [row.integration_id for row in rows]
 
 
 def base_url(credentials):

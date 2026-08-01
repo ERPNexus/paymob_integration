@@ -37,8 +37,9 @@ class TestEnabledCredentialSets(FrappeTestCase):
 class TestIntegrationIds(FrappeTestCase):
 	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_capture_mode_does_not_filter_integration_ids(self, get_settings):
-		"""`capture_mode` is declared merchant intent only (ADR-0022) — it must never gate
-		which integration IDs `get_integration_ids` returns.
+		"""With no `capture_mode` argument (today's every caller except an authorize-only
+		checkout), `capture_mode` never gates which integration IDs come back — callback flags
+		alone decide attempt state (ADR-0022).
 		"""
 		auto_capture = frappe._dict(
 			enabled=1,
@@ -59,3 +60,40 @@ class TestIntegrationIds(FrappeTestCase):
 		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[auto_capture, authorize_only])
 
 		self.assertEqual(settings.get_integration_ids("Egypt", "EGP"), ["1001", "1002"])
+
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_authorize_only_filters_to_the_auth_row(self, get_settings):
+		auto_capture = frappe._dict(
+			enabled=1,
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			capture_mode="Auto Capture",
+			integration_id="1001",
+		)
+		authorize_only = frappe._dict(
+			enabled=1,
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			capture_mode="Authorize Only",
+			integration_id="1002",
+		)
+		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[auto_capture, authorize_only])
+
+		self.assertEqual(settings.get_integration_ids("Egypt", "EGP", "Authorize Only"), ["1002"])
+
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_authorize_only_with_no_matching_row_throws(self, get_settings):
+		auto_capture = frappe._dict(
+			enabled=1,
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			capture_mode="Auto Capture",
+			integration_id="1001",
+		)
+		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[auto_capture])
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Egypt, EGP"):
+			settings.get_integration_ids("Egypt", "EGP", "Authorize Only")

@@ -14,6 +14,7 @@ def create_intention(
 	notification_url,
 	redirection_url,
 	expiration,
+	capture_mode=None,
 ):
 	"""Create an intention and return the identifiers needed to continue checkout."""
 	response = client.request(
@@ -25,7 +26,9 @@ def create_intention(
 			"currency": currency,
 			"payment_methods": [
 				int(integration_id)
-				for integration_id in settings.get_integration_ids(credentials.country, currency)
+				for integration_id in settings.get_integration_ids(
+					credentials.country, currency, capture_mode
+				)
 			],
 			"items": items,
 			"billing_data": billing_data,

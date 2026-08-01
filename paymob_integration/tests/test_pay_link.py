@@ -75,7 +75,7 @@ class TestPayLink(UnitTestCase):
 
 	def test_checkout_reuses_a_ready_pending_attempt(self):
 		request = frappe._dict(name="PR-0001")
-		attempt = Mock(country="Egypt", currency="EGP", mode="Test")
+		attempt = Mock(country="Egypt", currency="EGP", mode="Test", authorize_only=0)
 		attempt.name = "PR-0001-1"
 		attempt.get_password.return_value = "client-secret"
 		credentials = Mock()
