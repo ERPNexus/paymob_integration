@@ -9,19 +9,23 @@
   "event_kind",
   "attempt",
   "payment_request",
+  "source",
+  "money_section",
   "amount_cents",
   "currency",
+  "refunded_amount_cents",
+  "flags_section",
   "success",
   "pending",
   "is_refunded",
   "is_voided",
+  "flags_column_break",
   "has_parent_transaction",
-  "refunded_amount_cents",
-  "source",
   "hmac_verified",
+  "processed",
+  "payload_section",
   "received_at",
-  "raw_payload",
-  "processed"
+  "raw_payload"
  ],
  "fields": [
   {
@@ -57,6 +61,19 @@
    "read_only": 1
   },
   {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Webhook\nInquiry",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "money_section",
+   "fieldtype": "Section Break",
+   "label": "Money"
+  },
+  {
    "fieldname": "amount_cents",
    "fieldtype": "Long Int",
    "label": "Amount Cents",
@@ -67,6 +84,17 @@
    "fieldtype": "Data",
    "label": "Currency",
    "read_only": 1
+  },
+  {
+   "fieldname": "refunded_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Refunded Amount Cents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "flags_section",
+   "fieldtype": "Section Break",
+   "label": "Flags"
   },
   {
    "fieldname": "success",
@@ -93,30 +121,31 @@
    "read_only": 1
   },
   {
+   "fieldname": "flags_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "has_parent_transaction",
    "fieldtype": "Check",
    "label": "Has Parent Transaction",
    "read_only": 1
   },
   {
-   "fieldname": "refunded_amount_cents",
-   "fieldtype": "Long Int",
-   "label": "Refunded Amount Cents",
-   "read_only": 1
-  },
-  {
-   "fieldname": "source",
-   "fieldtype": "Select",
-   "label": "Source",
-   "options": "Webhook\nInquiry",
-   "read_only": 1,
-   "reqd": 1
-  },
-  {
    "fieldname": "hmac_verified",
    "fieldtype": "Check",
    "label": "HMAC Verified",
    "read_only": 1
+  },
+  {
+   "fieldname": "processed",
+   "fieldtype": "Check",
+   "label": "Processed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload_section",
+   "fieldtype": "Section Break",
+   "label": "Payload"
   },
   {
    "fieldname": "received_at",
@@ -130,12 +159,6 @@
    "fieldtype": "Code",
    "label": "Raw Payload",
    "read_only": 1
-  },
-  {
-   "fieldname": "processed",
-   "fieldtype": "Check",
-   "label": "Processed",
-   "read_only": 1
   }
  ],
  "links": [
@@ -145,7 +168,7 @@
    "link_fieldname": "paymob_transaction"
   }
  ],
- "modified": "2026-07-26 11:32:30.000000",
+ "modified": "2026-08-01 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Paymob Integration",
  "name": "Paymob Transaction",

@@ -8,21 +8,31 @@
  "field_order": [
   "special_reference",
   "payment_request",
+  "identity_column_break",
   "state",
   "needs_human_attention",
+  "money_section",
   "expected_amount_cents",
   "currency",
-  "country",
-  "mode",
+  "money_column_break",
+  "refunded_amount_cents",
+  "paymob_references_section",
   "paymob_intention_id",
   "paymob_order_id",
   "client_secret",
+  "paymob_references_column_break",
+  "mode",
+  "country",
+  "authorize_only",
+  "timestamps_section",
   "expires_at",
   "last_polled_at",
-  "payment_entry",
-  "refunded_amount_cents",
+  "timestamps_column_break",
   "refund_requested_at",
   "capture_requested_at",
+  "outcome_section",
+  "payment_entry",
+  "outcome_column_break",
   "contact_email"
  ],
  "fields": [
@@ -44,6 +54,10 @@
    "reqd": 1
   },
   {
+   "fieldname": "identity_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
    "default": "Pending",
    "fieldname": "state",
    "fieldtype": "Select",
@@ -58,6 +72,11 @@
    "in_list_view": 1,
    "label": "Needs Human Attention",
    "read_only": 1
+  },
+  {
+   "fieldname": "money_section",
+   "fieldtype": "Section Break",
+   "label": "Money"
   },
   {
    "fieldname": "expected_amount_cents",
@@ -75,17 +94,19 @@
    "reqd": 1
   },
   {
-   "fieldname": "country",
-   "fieldtype": "Data",
-   "label": "Country",
+   "fieldname": "money_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "refunded_amount_cents",
+   "fieldtype": "Long Int",
+   "label": "Refunded Amount Cents",
    "read_only": 1
   },
   {
-   "fieldname": "mode",
-   "fieldtype": "Select",
-   "label": "Mode",
-   "options": "Test\nLive",
-   "read_only": 1
+   "fieldname": "paymob_references_section",
+   "fieldtype": "Section Break",
+   "label": "Paymob References"
   },
   {
    "fieldname": "paymob_intention_id",
@@ -107,6 +128,34 @@
    "read_only": 1
   },
   {
+   "fieldname": "paymob_references_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "Test\nLive",
+   "read_only": 1
+  },
+  {
+   "fieldname": "country",
+   "fieldtype": "Data",
+   "label": "Country",
+   "read_only": 1
+  },
+  {
+   "fieldname": "authorize_only",
+   "fieldtype": "Check",
+   "label": "Authorize Only",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timestamps_section",
+   "fieldtype": "Section Break",
+   "label": "Timestamps"
+  },
+  {
    "fieldname": "expires_at",
    "fieldtype": "Datetime",
    "label": "Expires At",
@@ -119,17 +168,8 @@
    "read_only": 1
   },
   {
-   "fieldname": "payment_entry",
-   "fieldtype": "Link",
-   "label": "Payment Entry",
-   "options": "Payment Entry",
-   "read_only": 1
-  },
-  {
-   "fieldname": "refunded_amount_cents",
-   "fieldtype": "Long Int",
-   "label": "Refunded Amount Cents",
-   "read_only": 1
+   "fieldname": "timestamps_column_break",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "refund_requested_at",
@@ -144,6 +184,22 @@
    "read_only": 1
   },
   {
+   "fieldname": "outcome_section",
+   "fieldtype": "Section Break",
+   "label": "Outcome"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "contact_email",
    "fieldtype": "Data",
    "label": "Contact Email",
@@ -152,7 +208,7 @@
   }
  ],
  "links": [],
- "modified": "2026-07-26 10:00:00.000000",
+ "modified": "2026-08-01 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Paymob Integration",
  "name": "Paymob Payment Attempt",
