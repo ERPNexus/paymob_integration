@@ -483,3 +483,21 @@ Payment Request, while Frappe's configured Email Account supplies the delivery i
 
 **Technical:** `request_capture` sends the Auth row's amount; a Capture callback with another amount follows
 the existing mismatch path and posts no Payment Entry.
+
+## ADR-0024 — The payment-link email is decided at `validate`
+
+**Functional:** A submitted Payment Request either emails the payer a working Paymob link or emails
+nothing at all. It never sends ERPNext's generic "Make Payment" mail with a dead link.
+
+**Technical:** ERPNext's `PaymentRequest.before_submit` calls `set_payment_request_url()` and
+`send_email()` inside its own method body, and `frappe.model.document.compose` runs a DocType's own
+controller method ahead of any app's `doc_events` handler for the same event. A `before_submit` hook
+therefore always loses the race. `payment_request.prepare_payment_email` is registered on `validate`
+instead: when Paymob owns the request (enabled, Inward, resolvable credentials) it either sets a
+signed `payment_url` plus the branded default `message`, or sets `mute_email = 1` when
+`send_payment_link_email` is off. ERPNext's `set_payment_request_url()` stays a no-op here because
+this app sets no `payment_gateway`/`payment_account` on the Payment Request
+([ADR-0010](#adr-0010--the-payments-app-is-not-a-dependency)), so it cannot overwrite the link.
+The payer-facing lifecycle mail after that point belongs to the seeded Notifications
+([ADR-0021](#adr-0021--notifications-are-native-seeded-records)), switchable via
+`send_status_emails`.

@@ -212,7 +212,12 @@ country they sell in, and switches the whole site between test and live.
 - Only System Managers can read or edit the settings.
 - `send_payment_link_email` defaults to `1`. When it is enabled, an eligible submitted inward
   Payment Request receives an app-owned signed payment URL through ERPNext's existing email flow;
-  `mute_email` remains the per-request opt-out.
+  when it is disabled, that email is muted rather than sent without a Paymob link. Either way the
+  decision is made on `validate`, before ERPNext's `before_submit` sends the mail
+  ([ADR-0024](decisions.md#adr-0024--the-payment-link-email-is-decided-at-validate)); `mute_email`
+  remains the per-request opt-out.
+- `send_status_emails` defaults to `1` and switches every seeded Paymob Notification on or off in
+  one place.
 
 ### Payer payment link
 

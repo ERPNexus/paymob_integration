@@ -115,8 +115,12 @@ def given_user_with_role(role):
 	return email
 
 
-def given_submitted_payment_request(grand_total="275.55", currency="EGP"):
-	"""Create a submitted invoice and its matching incoming Payment Request."""
+def given_submitted_payment_request(grand_total="275.55", currency="EGP", mute_email=1):
+	"""Create a submitted invoice and its matching incoming Payment Request.
+
+	`mute_email` defaults to 1 so the usual fixture never touches the mail queue; pass 0 to let a
+	test observe what ERPNext's own submit-time email would do.
+	"""
 	invoice = given_submitted_sales_invoice(grand_total, currency)
 	payment_request = frappe.get_doc(
 		{
@@ -131,7 +135,7 @@ def given_submitted_payment_request(grand_total="275.55", currency="EGP"):
 			"currency": currency,
 			"grand_total": grand_total,
 			"payment_channel": "Email",
-			"mute_email": 1,
+			"mute_email": mute_email,
 			"email_to": "customer@example.test",
 			"subject": "Payment Request",
 			"message": "Please pay",

@@ -1,9 +1,11 @@
+from contextlib import contextmanager
 from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests import UnitTestCase
 
-from paymob_integration import api, pay_link, payment_request
+from paymob_integration import api, hooks, pay_link, payment_request
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
 
 
 class TestPayLink(UnitTestCase):
@@ -19,7 +21,30 @@ class TestPayLink(UnitTestCase):
 			)
 
 	def test_payment_request_hook_only_sets_a_valid_paymob_link(self):
-		doc = frappe._dict(
+		doc = self._given_request()
+		with self._given_paymob(send_payment_link_email=1):
+			payment_request.prepare_payment_email(doc)
+
+		self.assertEqual(doc.payment_url, "https://site.test/paymob-pay?signed")
+		self.assertIn("payment_url", doc.message)
+		self.assertFalse(doc.get("mute_email"))
+
+	def test_hook_mutes_the_email_when_no_link_may_be_sent(self):
+		doc = self._given_request()
+		with self._given_paymob(send_payment_link_email=0):
+			payment_request.prepare_payment_email(doc)
+
+		self.assertEqual(doc.mute_email, 1)
+		self.assertIsNone(doc.get("payment_url"))
+
+	def test_hook_runs_on_validate_because_erpnext_mails_inside_before_submit(self):
+		self.assertEqual(
+			hooks.doc_events["Payment Request"],
+			{"validate": "paymob_integration.payment_request.prepare_payment_email"},
+		)
+
+	def _given_request(self):
+		return frappe._dict(
 			name="PR-0001",
 			payment_request_type="Inward",
 			reference_doctype="Sales Invoice",
@@ -27,10 +52,13 @@ class TestPayLink(UnitTestCase):
 			currency="EGP",
 			message=None,
 		)
+
+	@contextmanager
+	def _given_paymob(self, send_payment_link_email):
 		with (
 			patch(
 				"paymob_integration.payment_request.settings.get_settings",
-				return_value=Mock(enabled=1, send_payment_link_email=1),
+				return_value=Mock(enabled=1, send_payment_link_email=send_payment_link_email),
 			),
 			patch(
 				"paymob_integration.payment_request.frappe.get_doc",
@@ -43,10 +71,7 @@ class TestPayLink(UnitTestCase):
 				return_value="https://site.test/paymob-pay?signed",
 			),
 		):
-			payment_request.set_payment_url(doc)
-
-		self.assertEqual(doc.payment_url, "https://site.test/paymob-pay?signed")
-		self.assertIn("payment_url", doc.message)
+			yield
 
 	def test_checkout_reuses_a_ready_pending_attempt(self):
 		request = frappe._dict(name="PR-0001")
@@ -67,3 +92,30 @@ class TestPayLink(UnitTestCase):
 	def test_contact_email_uses_the_same_fallback_as_billing_data(self):
 		request = frappe._dict(email_to="payer@example.test")
 		self.assertEqual(api._contact_email(request, frappe._dict(contact_email=None)), "payer@example.test")
+
+
+class TestSubmitTimeEmail(NoCommitIntegrationTestCase):
+	def test_submitting_an_inward_request_does_not_enqueue_erpnexts_default_email(self):
+		"""The bug this guards: ERPNext mails inside its own before_submit, so a hook that runs
+		after it cannot stop a link-less email. Nothing may reach the queue.
+		"""
+		with (
+			patch(
+				"paymob_integration.payment_request.settings.get_settings",
+				return_value=Mock(enabled=1, send_payment_link_email=0),
+			),
+			patch("paymob_integration.payment_request.api._merchant_country", return_value="Egypt"),
+			patch("paymob_integration.payment_request.settings.get_credential_set"),
+			patch("erpnext.accounts.doctype.payment_request.payment_request.enqueue") as enqueue,
+		):
+			payment_request_doc, invoice = given_submitted_payment_request(mute_email=0)
+		self.addCleanup(self._drop, payment_request_doc, invoice)
+
+		enqueue.assert_not_called()
+		self.assertEqual(payment_request_doc.mute_email, 1)
+
+	def _drop(self, payment_request_doc, invoice):
+		payment_request_doc.cancel()
+		frappe.delete_doc("Payment Request", payment_request_doc.name, force=True)
+		invoice.cancel()
+		frappe.delete_doc("Sales Invoice", invoice.name, force=True)
