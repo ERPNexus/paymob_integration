@@ -229,6 +229,23 @@ a Paymob intention.
 subtracts this from now to compute the selection cutoff: a `Pending` attempt is eligible once both
 its `creation` and its `last_polled_at` (or the absence of one) are older than that cutoff.
 
+### send_payment_link_email / send_status_emails (Paymob Settings)
+
+**Functional:** Two switches for the app's outgoing mail. The first decides whether a submitted
+Payment Request emails the payer a Paymob checkout link. The second turns the whole set of Paymob
+alerts — payment received, payment failed, link expired, refund issued, refund or void activity,
+audit entry needs review, poller recovered — on or off in one place, instead of asking a merchant
+to find and edit seven records in the Notification list.
+
+**Technical:** Both are Checks defaulting to `1`. `payment_request.prepare_payment_email` reads
+`send_payment_link_email` on `validate` and either sets a signed `payment_url` or sets
+`mute_email = 1` ([ADR-0024](decisions.md#adr-0024--the-payment-link-email-is-decided-at-validate)).
+`send_status_emails` is applied by `PaymobSettings.on_update` through
+`notifications.sync_enabled`, which flips `enabled` on the seeded records **by name** — a merchant's
+own Notification on the same DocType is never touched — and then clears Frappe's notification cache.
+Existing sites are backfilled to `1` by the idempotent `default_send_status_emails` patch, so the
+setting never reads as "off by omission".
+
 ### name / event_key (Paymob Transaction)
 
 **Functional:** The same webhook delivered twice never creates two records.

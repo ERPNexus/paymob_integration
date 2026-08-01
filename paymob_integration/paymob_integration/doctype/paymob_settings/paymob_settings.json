@@ -14,7 +14,8 @@
   "intention_expiration_seconds",
   "stale_pending_minutes",
   "notifications_section",
-  "send_payment_link_email"
+  "send_payment_link_email",
+  "send_status_emails"
  ],
  "fields": [
   {
@@ -67,6 +68,13 @@
    "fieldname": "send_payment_link_email",
    "fieldtype": "Check",
    "label": "Send Payment Link Email"
+  },
+  {
+   "default": "1",
+   "description": "Send the Paymob payment, refund and review alerts. Each one stays individually editable in the Notification list.",
+   "fieldname": "send_status_emails",
+   "fieldtype": "Check",
+   "label": "Send Status Emails"
   }
  ],
  "grid_page_length": 50,

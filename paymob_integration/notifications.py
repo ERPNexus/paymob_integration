@@ -1,6 +1,7 @@
 """Seed editable, opt-out-able Paymob notifications once per site."""
 
 import frappe
+from frappe.email.doctype.notification.notification import clear_notification_cache
 
 from paymob_integration import email
 
@@ -11,6 +12,19 @@ def seed():
 	for spec in _spec():
 		if not frappe.db.exists("Notification", spec["name"]):
 			frappe.get_doc(spec).insert(ignore_permissions=True)
+
+
+def sync_enabled(enabled):
+	"""Flip `enabled` on the records this app seeded, and only those.
+
+	Named lookups, not a `document_type` filter — a merchant's own Notification on the same
+	DocType must never be switched off by a Paymob setting.
+	"""
+	value = 1 if enabled else 0
+	for spec in _spec():
+		if frappe.db.exists("Notification", spec["name"]):
+			frappe.db.set_value("Notification", spec["name"], "enabled", value, update_modified=False)
+	clear_notification_cache()
 
 
 def refresh_defaults():

@@ -115,3 +115,43 @@ class TestNotifications(UnitTestCase):
 				{"subject": spec["subject"], "message": spec["message"]},
 				update_modified=False,
 			)
+
+	def test_sync_enabled_flips_only_the_seeded_records(self):
+		specs = notifications._spec()
+		for enabled, expected in ((0, 0), (1, 1)):
+			with (
+				patch("paymob_integration.notifications.frappe.db.exists", return_value=True),
+				patch("paymob_integration.notifications.frappe.db.set_value") as set_value,
+				patch("paymob_integration.notifications.clear_notification_cache") as clear_cache,
+			):
+				notifications.sync_enabled(enabled)
+
+			self.assertEqual(set_value.call_count, len(specs))
+			self.assertEqual(
+				[call.args[1] for call in set_value.call_args_list], [spec["name"] for spec in specs]
+			)
+			for spec in specs:
+				set_value.assert_any_call(
+					"Notification", spec["name"], "enabled", expected, update_modified=False
+				)
+			clear_cache.assert_called_once_with()
+
+	def test_sync_enabled_skips_a_notification_the_merchant_deleted(self):
+		with (
+			patch("paymob_integration.notifications._spec", return_value=[{"name": "gone"}]),
+			patch("paymob_integration.notifications.frappe.db.exists", return_value=False),
+			patch("paymob_integration.notifications.frappe.db.set_value") as set_value,
+			patch("paymob_integration.notifications.clear_notification_cache"),
+		):
+			notifications.sync_enabled(0)
+
+		set_value.assert_not_called()
+
+	def test_settings_save_applies_the_status_email_toggle(self):
+		settings = frappe.get_doc("Paymob Settings")
+		self.assertEqual(settings.meta.get_field("send_status_emails").default, "1")
+		with patch("paymob_integration.notifications.sync_enabled") as sync_enabled:
+			settings.send_status_emails = 0
+			settings.on_update()
+
+		sync_enabled.assert_called_once_with(0)

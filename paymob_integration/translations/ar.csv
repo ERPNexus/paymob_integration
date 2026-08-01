@@ -108,6 +108,8 @@
 "Notifications","الإشعارات",""
 "Send Payment Link Email","إرسال بريد رابط الدفع",""
 "Email the payer ERPNext's Payment Request link when the request is submitted.","أرسل رابط طلب الدفع من ERPNext إلى الدافع عند اعتماد الطلب.",""
+"Send Status Emails","إرسال رسائل حالة الدفع",""
+"Send the Paymob payment, refund and review alerts. Each one stays individually editable in the Notification list.","أرسل تنبيهات الدفع والاسترداد والمراجعة من باي موب. يبقى كل تنبيه قابلاً للتعديل بشكل منفصل من قائمة الإشعارات.",""
 "Contact Email","البريد الإلكتروني لجهة الاتصال",""
 "Please use the link below to pay this request.","يرجى استخدام الرابط أدناه لدفع هذا الطلب.",""
 "Make Payment","إتمام الدفع",""

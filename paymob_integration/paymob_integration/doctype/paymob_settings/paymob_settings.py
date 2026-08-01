@@ -5,11 +5,13 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from paymob_integration import notifications
 from paymob_integration.paymob import auth, client, settings
 
 
 class PaymobSettings(Document):
-	pass
+	def on_update(self):
+		notifications.sync_enabled(self.send_status_emails)
 
 
 @frappe.whitelist()
