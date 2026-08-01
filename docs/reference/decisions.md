@@ -360,9 +360,16 @@ Manager, Accounts Manager).
   `processed = 1`.
 - **Consequences / why:** Every future background job enqueued from the guest webhook — the
   Phase 10 poller's write path, the Phase 11 refund/void consumer — needs the same privileged-actor
-  treatment; this is the first, and the pattern (`set_user` in a `finally`) is now precedented.
-  The button is a stopgap for exactly the gap Phase 10's poller is meant to close automatically;
-  it does not replace that phase, it covers the interval until it exists.
+  treatment; this is the first. The mechanism is `paymob.session.as_administrator()`
+  (issue #8), not a bare `set_user`/`finally` pair: a bare pair is safe in the RQ job this ADR was
+  written for, which has no live session to protect, but the same code also runs synchronously
+  inside the Desk button's HTTP request and inside `paymob_pay.py`'s web request, where
+  `frappe.set_user` stamps `session.sid` to the *username* and empties `session.data` on its way
+  out — corrupting the caller's real session and logging them out on their very next request.
+  `as_administrator()` saves and restores what `set_user` clobbers; every request-reachable
+  privilege switch in this app goes through it. The button is a stopgap for exactly the gap
+  Phase 10's poller is meant to close automatically; it does not replace that phase, it covers the
+  interval until it exists.
 
 ---
 

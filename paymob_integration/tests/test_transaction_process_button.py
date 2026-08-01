@@ -91,3 +91,23 @@ class TestProcessButton(NoCommitIntegrationTestCase):
 		self.assertEqual(attempt.state, "Paid")
 		self.assertEqual(txn.processed, 1)
 		self.assertTrue(attempt.payment_entry)
+
+	def test_process_leaves_the_session_intact(self):
+		"""Regression for #8: the button used to run privileged work through a bare `set_user`
+		pair, whose `finally` stamps `session.sid` to the *username* and empties `session.data`
+		on the way back out — corrupting the real session so the button's own follow-up request
+		(`frm.reload_doc()`) got logged out.
+		"""
+		_, txn = self._given_stuck_transaction()
+		original_sid = frappe.local.session.sid
+		original_data = frappe.local.session.data
+		self.addCleanup(setattr, frappe.local.session, "sid", original_sid)
+		self.addCleanup(setattr, frappe.local.session, "data", original_data)
+		sentinel_data = frappe._dict({"csrf_token": "sentinel-token"})
+		frappe.local.session.sid = "sentinel-sid-issue-8"
+		frappe.local.session.data = sentinel_data
+
+		process(txn.name)
+
+		self.assertEqual(frappe.local.session.sid, "sentinel-sid-issue-8")
+		self.assertIs(frappe.local.session.data, sentinel_data)

@@ -7,7 +7,7 @@ authentic amount/currency mismatch for a human, and posts the Payment Entry thro
 import frappe
 from frappe import _
 
-from paymob_integration.paymob import amounts, audit, ledger, states, transactions
+from paymob_integration.paymob import amounts, audit, ledger, session, states, transactions
 
 ACTOR = "paymob_integration.paymob.processor.process_transaction"
 
@@ -24,11 +24,12 @@ def process_transaction(transaction):
 	request's user, which is `Guest` for the allow_guest processed callback. ERPNext's
 	`create_payment_entry` checks `frappe.has_permission` on the Sales Invoice internally — a
 	check `ignore_permissions=True` on our own document saves cannot reach — so a verified,
-	HMAC-authenticated event needs a privileged actor to post the money it already proves.
+	HMAC-authenticated event needs a privileged actor to post the money it already proves. The
+	Desk "Process" button (paymob_transaction.py) calls this synchronously inside a request, so
+	the privilege switch goes through `session.as_administrator()` rather than a bare
+	`frappe.set_user` pair — a bare pair corrupts the caller's session (issue #8).
 	"""
-	original_user = frappe.session.user
-	frappe.set_user("Administrator")
-	try:
+	with session.as_administrator():
 		txn = frappe.get_doc("Paymob Transaction", transaction)
 		if txn.processed:
 			return
@@ -118,8 +119,6 @@ def process_transaction(transaction):
 			f"state changed payment_request={attempt.payment_request} attempt={attempt.name} "
 			f"txn={txn.paymob_transaction_id} kind={txn.event_kind} from={previous_state} to={attempt.state}"
 		)
-	finally:
-		frappe.set_user(original_user)
 
 
 def _consume_unmapped(txn):

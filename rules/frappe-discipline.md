@@ -49,6 +49,15 @@ opposite entry — never an edit of the original. This is the ledger's whole val
 - Read-then-write on a money field takes a row lock (`for_update=True`) or relies on a unique
   database constraint. An `if` statement is not a lock.
 
+### Session and user switching
+
+- **Never call bare `frappe.set_user` on a path reachable from an HTTP or web request.** It is
+  safe in an enqueued RQ job, which has no live session to protect. Inside a request it stamps
+  `session.sid` to the *username* and empties `session.data`, and restoring the original user
+  with a second bare `set_user` call does the same damage again — the caller's session is
+  corrupted and their next request logs them out (issue #8). Use
+  `paymob.session.as_administrator()`, which saves and restores what `set_user` clobbers.
+
 ## Definition of Done
 
 - [ ] No `db_set` on status or money fields in the change.
@@ -56,6 +65,7 @@ opposite entry — never an edit of the original. This is the ledger's whole val
 - [ ] Submitted ledger documents are corrected by cancel/new, never edited.
 - [ ] DocType JSON committed; data changes have an idempotent patch.
 - [ ] Lifecycle logic sits in controller hooks.
+- [ ] No bare `frappe.set_user` on a request-reachable path; use `paymob.session.as_administrator()`.
 - [ ] `pre-commit run --all-files` passes.
 
 ## What this rule is NOT
