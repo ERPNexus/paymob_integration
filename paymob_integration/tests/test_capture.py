@@ -28,7 +28,7 @@ class TestRequestCapture(NoCommitIntegrationTestCase):
 		credentials.start()
 		self.addCleanup(credentials.stop)
 		self.refund_manager = given_user_with_role("Paymob Refund Manager")
-		self.sales_user = given_user_with_role("Sales User")
+		self.accounts_manager = given_user_with_role("Accounts Manager")
 
 	def _authorized_attempt(self, state="Authorized", with_authorization=True):
 		attempt, request, invoice = given_attempt(state=state, credentials=_credentials())
@@ -52,7 +52,7 @@ class TestRequestCapture(NoCommitIntegrationTestCase):
 
 	def test_permission_and_state_are_enforced_before_the_call(self):
 		attempt = self._authorized_attempt()
-		frappe.set_user(self.sales_user)
+		frappe.set_user(self.accounts_manager)
 		with patch("paymob_integration.paymob.void_refund.capture") as capture:
 			with self.assertRaises(frappe.PermissionError):
 				api.request_capture(attempt.name)

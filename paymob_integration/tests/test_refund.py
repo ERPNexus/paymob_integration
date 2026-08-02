@@ -31,7 +31,7 @@ class _RefundTestCase(NoCommitIntegrationTestCase):
 		credentials.start()
 		self.addCleanup(credentials.stop)
 		self.refund_manager = given_user_with_role("Paymob Refund Manager")
-		self.sales_user = given_user_with_role("Sales User")
+		self.accounts_manager = given_user_with_role("Accounts Manager")
 
 	def _charged_attempt(self, state="Paid", refunded_amount_cents=0, charged_cents=27555):
 		attempt, request, invoice = given_attempt(state=state, credentials=_credentials())
@@ -56,7 +56,7 @@ class _RefundTestCase(NoCommitIntegrationTestCase):
 class TestRequestRefund(_RefundTestCase):
 	def test_a_user_without_the_role_is_refused(self):
 		attempt = self._charged_attempt()
-		frappe.set_user(self.sales_user)
+		frappe.set_user(self.accounts_manager)
 		with patch("paymob_integration.paymob.void_refund.refund") as refund:
 			with self.assertRaises(frappe.PermissionError):
 				api.request_refund(attempt.name, 10000)
@@ -139,7 +139,7 @@ class TestRequestRefund(_RefundTestCase):
 class TestRequestVoid(_RefundTestCase):
 	def test_a_user_without_the_role_is_refused(self):
 		attempt = self._charged_attempt()
-		frappe.set_user(self.sales_user)
+		frappe.set_user(self.accounts_manager)
 		with patch("paymob_integration.paymob.void_refund.void") as void:
 			with self.assertRaises(frappe.PermissionError):
 				api.request_void(attempt.name)
