@@ -52,6 +52,14 @@ class _RefundTestCase(NoCommitIntegrationTestCase):
 		)
 		return attempt
 
+	def _authorized_attempt(self):
+		"""An uncaptured hold — the only shape this app will send a void for."""
+		attempt, request, invoice = given_attempt(state="Authorized", credentials=_credentials())
+		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
+		self.addCleanup(frappe.set_user, "Administrator")
+		given_transaction("Auth", f"auth-{attempt.name}", attempt.name, request.name, processed=1)
+		return attempt
+
 
 class TestRequestRefund(_RefundTestCase):
 	def test_a_user_without_the_role_is_refused(self):
@@ -138,7 +146,7 @@ class TestRequestRefund(_RefundTestCase):
 
 class TestRequestVoid(_RefundTestCase):
 	def test_a_user_without_the_role_is_refused(self):
-		attempt = self._charged_attempt()
+		attempt = self._authorized_attempt()
 		frappe.set_user(self.accounts_manager)
 		with patch("paymob_integration.paymob.void_refund.void") as void:
 			with self.assertRaises(frappe.PermissionError):
@@ -146,7 +154,7 @@ class TestRequestVoid(_RefundTestCase):
 		void.assert_not_called()
 
 	def test_a_double_submitted_void_makes_one_outbound_call(self):
-		attempt = self._charged_attempt()
+		attempt = self._authorized_attempt()
 		frappe.set_user(self.refund_manager)
 		with patch("paymob_integration.paymob.void_refund.void", return_value={}) as void:
 			api.request_void(attempt.name)
@@ -154,8 +162,12 @@ class TestRequestVoid(_RefundTestCase):
 				api.request_void(attempt.name)
 		void.assert_called_once()
 
-	def test_a_void_on_a_non_paid_attempt_is_refused(self):
-		attempt = self._charged_attempt(state="Partially Refunded", refunded_amount_cents=10000)
+	def test_a_void_on_a_paid_attempt_is_refused(self):
+		"""Money that already moved is refunded, not voided — the two are alternatives, and only
+		the inbound `Void` callback (a void taken in Paymob's own dashboard) still reverses a
+		`Paid` attempt.
+		"""
+		attempt = self._charged_attempt()
 		frappe.set_user(self.refund_manager)
 		with patch("paymob_integration.paymob.void_refund.void") as void:
 			with self.assertRaises(frappe.ValidationError):
@@ -163,7 +175,7 @@ class TestRequestVoid(_RefundTestCase):
 		void.assert_not_called()
 
 	def test_a_void_is_refused_while_a_capture_is_in_progress(self):
-		attempt = self._charged_attempt()
+		attempt = self._authorized_attempt()
 		attempt.db_set("capture_requested_at", frappe.utils.now_datetime())
 		frappe.set_user(self.refund_manager)
 		with patch("paymob_integration.paymob.void_refund.void") as void:
@@ -172,10 +184,7 @@ class TestRequestVoid(_RefundTestCase):
 		void.assert_not_called()
 
 	def test_void_of_an_authorized_attempt_uses_the_verified_authorization(self):
-		attempt, request, invoice = given_attempt(state="Authorized", credentials=_credentials())
-		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
-		self.addCleanup(frappe.set_user, "Administrator")
-		given_transaction("Auth", f"auth-{attempt.name}", attempt.name, request.name, processed=1)
+		attempt = self._authorized_attempt()
 		frappe.set_user(self.refund_manager)
 		with patch("paymob_integration.paymob.void_refund.void", return_value={}) as void:
 			api.request_void(attempt.name)

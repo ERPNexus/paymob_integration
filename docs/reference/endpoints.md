@@ -156,18 +156,22 @@ refunds a paid Paymob payment, in full or in part, from the Payment Request.
 
 ### Request void
 
-**Functional:** The same as Request refund, for voiding a `Paid` or `Authorized` attempt in full —
-no amount parameter, since a void reverses everything (or, for an authorization, releases the
-whole hold).
+**Functional:** Releases an uncaptured authorization hold in full — no amount parameter, since a
+void releases the whole hold. Money that already moved is refunded instead, never voided, so the
+Desk offers **Void** only on an `Authorized` attempt and **Refund** only on a `Paid` or
+`Partially Refunded` one; the two are alternatives and are never shown together.
 
 **Technical:** `paymob_integration.api.request_void(attempt)`, whitelisted `POST`. Same lock,
 permission gate, and in-progress marker as Request refund, plus the same capture-in-progress
-refusal. The state guard requires `Paid` or `Authorized` (not `Partially Refunded` — a partially
-refunded attempt has already had money returned and is refunded further, not voided). For an
-`Authorized` attempt, the transaction reversed is the verified authorization
-(`paymob.transactions.verified_authorization`), never the verified charge — an authorization has
-no `Success`/`Capture` row of its own to reverse. Writes a `Void Requested` audit entry. Ledger
-authority: **no**, same as Request refund.
+refusal. The state guard requires `Authorized`; anything else throws. The transaction reversed is
+always the verified authorization (`paymob.transactions.verified_authorization`), never the
+verified charge. Writes a `Void Requested` audit entry. Ledger authority: **no**, same as Request
+refund.
+
+This narrows only what *this app sends*. An inbound verified `Void` callback on a `Paid` attempt
+still processes and still posts its reversal — a merchant can void from Paymob's own dashboard, and
+`states.LEGAL["Paid"]` keeps `Voided` for exactly that
+([ADR-0026](decisions.md#adr-0026--a-hold-paymob-captures-anyway-is-posted-and-audited)).
 
 ### Paymob refund, void, and capture calls
 

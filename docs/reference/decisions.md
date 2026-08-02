@@ -529,3 +529,28 @@ never falling back to auto-capture silently. A pending attempt is only reused
 gets a fresh attempt rather than the old auto-capture checkout. This is purely a selection
 mechanism: it never determines attempt state — verified `Auth`/`Capture` callbacks still do that
 alone ([ADR-0022](#adr-0022--callback-facts-determine-authorization-state)).
+
+## ADR-0026 — A hold Paymob captures anyway is posted and audited
+
+**Functional:** When a merchant asks for an authorization hold and Paymob charges the card anyway,
+the app records that the money moved — because it did — and raises the broken promise as work for
+a human, naming the setting that caused it. It never pretends the payment is still only a hold.
+Separately, **Void** and **Refund** are never offered on the same payment: a hold is voided, a
+charge is refunded.
+
+**Technical:** `capture_mode` on a `Paymob Integration ID` row is a merchant-declared label; Paymob
+only honours a hold if that integration is configured auth-only in Paymob's own dashboard, and
+nothing verifies the two agree. So `processor.process_transaction` flags
+`unrequested_capture = target == "Paid" and attempt.authorize_only and not
+attempt.capture_requested_at`: it sets `needs_human_attention`, records a `Capture Not Requested`
+audit entry (`needs_action = 1`), and **still calls `ledger.post_payment`**. Forcing the state back
+to `Authorized` or withholding the Payment Entry would write state from intent rather than verified
+fact, which [ADR-0022](#adr-0022--callback-facts-determine-authorization-state) forbids.
+`api.request_capture` commits `capture_requested_at` before its outbound HTTP call, so a
+merchant-driven capture can never trip the check; the same expression also catches the
+no-`Auth`-at-all variant (`Pending → Paid` on an authorize-only attempt).
+
+The second half is a narrowing of the outbound void only: `api.request_void` requires
+`Authorized`, and `payment_request.js` offers Capture + Void on `Authorized` and Refund alone on
+`Paid`/`Partially Refunded`. The inbound `Void` branch and `states.LEGAL["Paid"] → "Voided"` are
+deliberately untouched — a void taken in Paymob's dashboard must still post its reversal here.

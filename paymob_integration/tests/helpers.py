@@ -26,12 +26,14 @@ def mock_credentials():
 	return row
 
 
-def given_attempt(state="Pending", credentials=None):
+def given_attempt(state="Pending", credentials=None, authorize_only=False):
 	"""A Paymob Payment Attempt against a fresh submitted Payment Request. Caller registers
 	`cleanup_fixture` via `addCleanup` — this function does not know about the test case.
 	"""
 	payment_request, invoice = given_submitted_payment_request()
-	attempt = api._create_attempt(payment_request, credentials or mock_credentials())
+	attempt = api._create_attempt(
+		payment_request, credentials or mock_credentials(), authorize_only=authorize_only
+	)
 	if state != "Pending":
 		attempt.state = state
 		attempt.save(ignore_permissions=True)

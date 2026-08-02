@@ -60,3 +60,59 @@ class TestAuthorizationProcessor(NoCommitIntegrationTestCase):
 		self.assertEqual(reference.payment_request, self.request.name)
 		self.assertEqual(self.invoice.outstanding_amount, 0)
 		self.assertEqual(self.request.status, "Paid")
+
+
+class TestUnrequestedCapture(NoCommitIntegrationTestCase):
+	"""A hold Paymob captured on its own — the Integration ID is not auth-only in Paymob's
+	dashboard, so the merchant's authorize-only promise was silently broken.
+	"""
+
+	def setUp(self):
+		credentials = patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(payment_account=_clearing_account()),
+		)
+		credentials.start()
+		self.addCleanup(credentials.stop)
+		self.attempt, self.request, self.invoice = given_attempt(
+			credentials=_credentials(), authorize_only=True
+		)
+		self.addCleanup(cleanup_fixture, self.attempt.name, self.request.name, self.invoice.name)
+
+	def _process(self, event_kind):
+		txn = given_transaction(
+			event_kind, f"{event_kind}-{self.attempt.name}", self.attempt.name, self.request.name
+		)
+		processor.process_transaction(txn.name)
+		self.attempt.reload()
+
+	def _flags(self):
+		return frappe.get_all(
+			"Paymob Audit Entry",
+			filters={"attempt": self.attempt.name, "event": "Capture Not Requested"},
+			fields=["name", "needs_action"],
+		)
+
+	def test_a_capture_nobody_requested_still_posts_and_is_flagged(self):
+		before = payment_entry_count()
+
+		self._process("Auth")
+		self.assertEqual(self.attempt.state, "Authorized")
+		self._process("Capture")
+
+		self.assertEqual(self.attempt.state, "Paid")
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(self.attempt.needs_human_attention, 1)
+		flags = self._flags()
+		self.assertEqual(len(flags), 1)
+		self.assertEqual(flags[0].needs_action, 1)
+
+	def test_a_capture_the_merchant_requested_is_not_flagged(self):
+		self._process("Auth")
+		self.attempt.db_set("capture_requested_at", frappe.utils.now_datetime())
+
+		self._process("Capture")
+
+		self.assertEqual(self.attempt.state, "Paid")
+		self.assertEqual(self.attempt.needs_human_attention, 0)
+		self.assertEqual(self._flags(), [])

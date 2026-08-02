@@ -99,14 +99,12 @@ def request_void(attempt: str):
 		frappe.throw(_("A refund for this payment is already in progress."))
 	if attempt_doc.capture_requested_at:
 		frappe.throw(_("A capture for this payment is already in progress."))
-	if attempt_doc.state not in ("Paid", "Authorized"):
-		frappe.throw(_("Only paid or authorized Paymob payments can be voided."))
+	# Money that already moved is refunded, not voided. An inbound `Void` callback still reverses a
+	# Paid attempt (a void taken in Paymob's own dashboard) — this narrows only what we send.
+	if attempt_doc.state != "Authorized":
+		frappe.throw(_("Only authorized Paymob payments can be voided."))
 
-	charged = (
-		_verified_authorization(attempt_doc)
-		if attempt_doc.state == "Authorized"
-		else _verified_charge(attempt_doc)
-	)
+	charged = _verified_authorization(attempt_doc)
 	attempt_doc.db_set("refund_requested_at", now_datetime())
 	audit.record(
 		None,

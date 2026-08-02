@@ -81,11 +81,15 @@ def process_transaction(transaction):
 		mismatch = target in ("Paid", "Authorized") and not amounts.amounts_match(
 			attempt.expected_amount_cents, attempt.currency, txn.amount_cents, txn.currency
 		)
+		# `api.request_capture` commits `capture_requested_at` before its outbound call, so a
+		# merchant-driven capture can never trip this — only Paymob capturing a hold on its own,
+		# which means the Integration ID is not auth-only in Paymob's dashboard (ADR-0026).
+		unrequested_capture = target == "Paid" and attempt.authorize_only and not attempt.capture_requested_at
 
 		previous_state = attempt.state
 		if moved:
 			attempt.state = target
-		if mismatch:
+		if mismatch or unrequested_capture:
 			attempt.needs_human_attention = 1
 		if txn.event_kind == "Capture":
 			attempt.capture_requested_at = None
@@ -110,6 +114,28 @@ def process_transaction(transaction):
 				f"amount mismatch payment_request={attempt.payment_request} attempt={attempt.name} "
 				f"txn={txn.paymob_transaction_id} expected={attempt.expected_amount_cents}{attempt.currency} "
 				f"received={txn.amount_cents}{txn.currency}"
+			)
+
+		if unrequested_capture:
+			audit.record(
+				txn,
+				attempt,
+				event="Capture Not Requested",
+				needs_action=1,
+				description=_(
+					"This payment was requested as an authorization hold, but Paymob captured it without "
+					"a capture request. The Paymob Integration ID used is not configured for authorization "
+					"holds in Paymob's dashboard."
+				),
+				actor=ACTOR,
+				expected_amount_cents=attempt.expected_amount_cents,
+				expected_currency=attempt.currency,
+				received_amount_cents=txn.amount_cents,
+				received_currency=txn.currency,
+			)
+			frappe.logger("paymob").info(
+				f"capture not requested payment_request={attempt.payment_request} attempt={attempt.name} "
+				f"txn={txn.paymob_transaction_id} kind={txn.event_kind}"
 			)
 
 		if target == "Paid" and not mismatch:

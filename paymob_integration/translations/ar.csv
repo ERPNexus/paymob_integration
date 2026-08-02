@@ -149,7 +149,7 @@
 "Capture Requested At","تم طلب التحصيل في",""
 "A capture for this payment is already in progress.","طلب تحصيل هذه الدفعة قيد التنفيذ بالفعل.",""
 "Only authorized Paymob payments can be captured.","يمكن تحصيل دفعات Paymob المفوضة فقط.",""
-"Only paid or authorized Paymob payments can be voided.","يمكن إلغاء دفعات Paymob المدفوعة أو المفوضة فقط.",""
+"Only authorized Paymob payments can be voided.","يمكن إلغاء دفعات Paymob المفوضة فقط.",""
 "No verified Paymob authorization is available to capture.","لا يتوفر تفويض Paymob متحقق لتحصيله.",""
 "The verified Paymob authorization currency does not match this attempt.","عملة تفويض Paymob المتحقق لا تطابق هذه المحاولة.",""
 "A capture of {0} {1} was requested.","تم طلب تحصيل {1} {0}.",""
@@ -157,3 +157,4 @@
 "Your payment has been authorized and is awaiting capture.","مبلغ دفعتك محجوز وبانتظار التحصيل.",""
 "This payment has been partially refunded.","تم رد جزء من هذه الدفعة.",""
 "This payment authorization has been voided.","تم إلغاء تفويض هذه الدفعة.",""
+"This payment was requested as an authorization hold, but Paymob captured it without a capture request. The Paymob Integration ID used is not configured for authorization holds in Paymob's dashboard.","طُلبت هذه الدفعة كحجز تفويض، لكن Paymob حصّلها دون طلب تحصيل. معرّف تكامل Paymob المستخدم غير مُهيّأ لحجوزات التفويض في لوحة تحكم Paymob.",""

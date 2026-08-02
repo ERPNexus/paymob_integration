@@ -366,7 +366,7 @@ can read without opening the code.
 
 **Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
 `Unattributed Payment`, `Refund Requires Review`, `Duplicate Payment`, `Poller Recovery`, `Attempt Expired`,
-`Refund Requested`, `Void Requested`, or `Nothing To Reverse` — set once by
+`Refund Requested`, `Void Requested`, `Capture Not Requested`, or `Nothing To Reverse` — set once by
 whichever caller of `paymob.audit.record` creates the entry: `paymob.processor` for the first
 four plus `Nothing To Reverse` (via `paymob.ledger.post_refund`), `paymob.ledger.post_payment`
 for `Duplicate Payment`, `paymob.tasks` (the reconciliation poller) for `Poller Recovery` and
@@ -382,8 +382,13 @@ accepts `txn=None` for exactly this case, an event with no Paymob transaction be
 outbound whitelisted call, before Paymob is contacted, and carry `txn=None` too — there is no
 transaction row yet at request time. `Nothing To Reverse` (`needs_action = 0`) is written when a
 verified void/refund callback lands for an attempt with no `payment_entry` (an uncaptured
-authorization was voided; nothing was ever posted). `description`
-is always built with `_()` and named values (never string concatenation), per
+authorization was voided; nothing was ever posted). `Capture Not Requested` (`needs_action = 1`,
+and it sets `Paymob Payment Attempt.needs_human_attention`) is written by `paymob.processor` when a
+verified callback moves an `authorize_only` attempt to `Paid` while `capture_requested_at` is
+empty — Paymob captured a hold nobody asked it to capture, so the Integration ID is not configured
+for authorization holds in Paymob's own dashboard. The Payment Entry is still posted; the money is
+real and verified ([ADR-0026](decisions.md#adr-0026--a-hold-paymob-captures-anyway-is-posted-and-audited)).
+`description` is always built with `_()` and named values (never string concatenation), per
 [`rules/translation.md`](../../rules/translation.md).
 
 ### expected_amount_cents / expected_currency / received_amount_cents / received_currency (Paymob Audit Entry)
@@ -405,7 +410,8 @@ callback). `Long Int`, never `Currency` — these are minor units, not a display
 fully-qualified path of the caller that invoked `paymob.audit.record`, passed explicitly as a
 required parameter ([ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module)):
 `paymob_integration.paymob.processor.process_transaction` for `Illegal Transition`,
-`Amount Mismatch`, and `Unattributed Payment`; `paymob_integration.paymob.ledger.post_payment`
+`Amount Mismatch`, `Unattributed Payment`, and `Capture Not Requested`;
+`paymob_integration.paymob.ledger.post_payment`
 for both `Duplicate Payment` **and** `Nothing To Reverse` — `ledger.py` has one module-level
 `ACTOR` constant shared by `post_payment` and `post_refund`, so the string names the module, not
 the specific function that wrote the entry. For the two human-triggered refund/void events,

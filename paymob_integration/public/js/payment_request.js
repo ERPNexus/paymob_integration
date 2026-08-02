@@ -111,13 +111,4 @@ function add_refund_buttons(frm, attempt) {
 			__("Refund")
 		);
 	});
-	if (attempt.state !== "Paid") return;
-	frm.add_custom_button(__("Void"), () => {
-		frappe.call({
-			method: "paymob_integration.api.request_void",
-			args: { attempt: attempt.name },
-			freeze: true,
-			freeze_message: __("Requesting Paymob void..."),
-		});
-	});
 }
