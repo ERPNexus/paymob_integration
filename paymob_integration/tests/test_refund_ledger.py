@@ -87,7 +87,10 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		)
 		self.assertEqual(entry.paid_amount, 100)
 
-	def test_parent_resend_posts_nothing(self):
+	def test_parent_resend_ahead_of_posted_refunds_is_audited(self):
+		"""Paymob's cumulative total on the parent re-send outrunning what this app has actually
+		posted is the #6 symptom — a refund happened at Paymob that never reached the ledger.
+		"""
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
 		parent = given_transaction(
@@ -103,8 +106,49 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		processor.process_transaction(parent.name)
 
 		parent.reload()
+		attempt.reload()
 		self.assertEqual(payment_entry_count(), before)
 		self.assertEqual(parent.processed, 1)
+		self.assertEqual(attempt.state, "Paid")
+		self.assertEqual(attempt.needs_human_attention, 1)
+		audit_entry = frappe.db.get_value(
+			"Paymob Audit Entry",
+			{"paymob_transaction": parent.name},
+			["event", "needs_action", "expected_amount_cents", "received_amount_cents"],
+			as_dict=True,
+		)
+		self.assertEqual(audit_entry.event, "Refund Requires Review")
+		self.assertEqual(audit_entry.needs_action, 1)
+		# The comparison that triggered the hold, not the re-send's amount_cents (the original charge).
+		self.assertEqual(audit_entry.expected_amount_cents, 0)
+		self.assertEqual(audit_entry.received_amount_cents, 10000)
+
+	def test_routine_parent_resend_with_matching_total_is_quiet(self):
+		"""The parent re-send arrives on every refund, signed or not. When Paymob's cumulative
+		total already matches what this app posted, it is routine bookkeeping — no audit entry,
+		no flag, just marked processed.
+		"""
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-routine",
+			attempt.name,
+			request.name,
+			amount_cents=10000,
+			has_parent_transaction=0,
+			refunded_amount_cents=0,
+		)
+
+		processor.process_transaction(parent.name)
+
+		parent.reload()
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(parent.processed, 1)
+		self.assertEqual(attempt.state, "Paid")
+		self.assertFalse(attempt.needs_human_attention)
+		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
 
 	def test_void_of_an_authorized_attempt_posts_nothing(self):
 		"""The void delta is keyed on `attempt.payment_entry` (processor.py), not on

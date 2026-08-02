@@ -71,7 +71,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Event",
-   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment\nDuplicate Payment\nPoller Recovery\nAttempt Expired\nRefund Requested\nVoid Requested\nCapture Requested\nNothing To Reverse",
+   "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment\nRefund Requires Review\nDuplicate Payment\nPoller Recovery\nAttempt Expired\nRefund Requested\nVoid Requested\nCapture Requested\nNothing To Reverse",
    "read_only": 1,
    "reqd": 1
   },

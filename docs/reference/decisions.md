@@ -444,8 +444,10 @@ the audit trail ([ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module)
 ## ADR-0017 — A refund delta comes only from a signed child transaction
 
 - **Decision:** `has_parent_transaction` and the child transaction's `amount_cents` determine the
-  posted refund. Paymob's cumulative `refunded_amount_cents` is unsigned, so parent resends are
-  stored and marked processed but never post money.
+  posted refund. Paymob's cumulative `refunded_amount_cents` is unsigned, so parent resends never
+  post money. A resend whose cumulative total matches what has already been posted is routine
+  bookkeeping and is consumed quietly; one whose total *outruns* the posted refunds is the only
+  evidence that a refund happened outside this app, and is recorded as `Refund Requires Review`.
 
 ## ADR-0018 — A lock needs an in-progress marker
 

@@ -62,6 +62,8 @@
 "Illegal Transition","تغيير حالة غير مسموح",""
 "Amount Mismatch","عدم تطابق المبلغ",""
 "Unattributed Payment","دفعة غير مرتبطة بمحاولة دفع",""
+"Refund Requires Review","الاسترداد يتطلب مراجعة",""
+"Paymob reports {0} {1} refunded in total but only {2} {3} has been posted here, and the re-send carries no signed child transaction to prove the difference. No reversal was posted.","يُبلِّغ باي موب عن رد {0} {1} إجمالاً بينما لم يُسجّل هنا سوى {2} {3}، ولا تحمل الرسالة المعادة معاملة فرعية موقّعة تُثبت الفرق. لم يُسجّل قيد عكسي.",""
 "Success","نجاح",""
 "Decline","رفض",""
 "Refund","استرداد",""

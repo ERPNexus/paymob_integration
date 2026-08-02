@@ -44,6 +44,12 @@ def process_transaction(transaction):
 		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
 		if txn.event_kind == "Refund":
 			if not txn.has_parent_transaction:
+				# The parent re-send is routine bookkeeping on every refund, signed or not — it carries
+				# no amount_cents of its own. Only flag it when Paymob's cumulative total outruns what
+				# this app has posted (the #6 symptom); a parent that lands before its signed child is a
+				# transient false positive, accepted as the safer failure direction.
+				if (txn.refunded_amount_cents or 0) > (attempt.refunded_amount_cents or 0):
+					return _hold_parent_refund(txn, attempt)
 				_mark_processed(txn)
 				return
 			delta_cents = txn.amount_cents
@@ -218,6 +224,39 @@ def _refuse_refund(txn, attempt):
 	frappe.logger("paymob").info(
 		f"refund refused payment_request={attempt.payment_request} attempt={attempt.name} "
 		f"txn={txn.paymob_transaction_id}"
+	)
+
+
+def _hold_parent_refund(txn, attempt):
+	"""Paymob's cumulative total outruns the posted refunds and the unsigned resend cannot prove
+	the delta on its own; hold it for a human. The two amount fields carry the comparison that
+	triggered this, not `txn.amount_cents` — on a parent re-send that is the *original charge*,
+	which would read as a refund of the whole payment in the report.
+	"""
+	posted_cents = attempt.refunded_amount_cents or 0
+	reported_cents = txn.refunded_amount_cents or 0
+	attempt.needs_human_attention = 1
+	attempt.save(ignore_permissions=True)
+	audit.record(
+		txn,
+		attempt,
+		event="Refund Requires Review",
+		needs_action=1,
+		description=_(
+			"Paymob reports {0} {1} refunded in total but only {2} {3} has been posted here, and the "
+			"re-send carries no signed child transaction to prove the difference. No reversal was posted."
+		).format(txn.currency, reported_cents, attempt.currency, posted_cents),
+		actor=ACTOR,
+		expected_amount_cents=posted_cents,
+		expected_currency=attempt.currency,
+		received_amount_cents=reported_cents,
+		received_currency=txn.currency,
+	)
+	_mark_processed(txn)
+	frappe.logger("paymob").info(
+		f"refund held for review payment_request={attempt.payment_request} attempt={attempt.name} "
+		f"txn={txn.paymob_transaction_id} reported={reported_cents}{txn.currency} "
+		f"posted={posted_cents}{attempt.currency}"
 	)
 
 

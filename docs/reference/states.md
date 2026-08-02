@@ -191,6 +191,9 @@ success, a decline, a wallet payment still settling, a reversal, or an authoriza
   `event_kind` alone: Paymob sends **two** callbacks per refund — a child row (`has_parent_
   transaction = true`, its own `id`, `amount_cents` = the refund delta, HMAC-signed) that is the
   money-bearing message, and a parent re-send (`has_parent_transaction = false`, the *original*
-  charge's `id`, a growing unsigned `refunded_amount_cents`) that is bookkeeping only — stored,
-  marked processed, and never posted. See
+  charge's `id`, a growing unsigned `refunded_amount_cents`) that cannot prove a refund delta —
+  stored, marked processed, never posted. The re-send is only surfaced as `Refund Requires Review`
+  when its cumulative total outruns what the attempt has posted, which is the one case where it
+  says something the child transactions did not.
+  See
   [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).

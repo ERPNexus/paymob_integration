@@ -339,8 +339,11 @@ the original charge being re-announced with a growing total.
 **Technical:** `Check`, read-only, written by `paymob.transactions.store` from the signed
 `has_parent_transaction` payload field. `true` on the child refund row (own `id`, `amount_cents`
 = the delta) — the money-bearing message. `false` on the parent re-send (the *original* charge's
-`id`) — bookkeeping only; `processor.process_transaction` stores and marks it processed without
-posting. See [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).
+`id`) — never enough evidence to post. `processor.process_transaction` marks it processed and, when
+its cumulative `refunded_amount_cents` outruns the attempt's posted total, writes a
+`Refund Requires Review` audit entry; a matching total is consumed quietly, since the re-send
+arrives on every refund including the ones that posted correctly.
+See [ADR-0017](decisions.md#adr-0017--a-refund-delta-comes-only-from-a-signed-child-transaction).
 
 ### refunded_amount_cents (Paymob Transaction)
 
@@ -362,10 +365,10 @@ total gets its own row.
 can read without opening the code.
 
 **Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
-`Unattributed Payment`, `Duplicate Payment`, `Poller Recovery`, `Attempt Expired`,
+`Unattributed Payment`, `Refund Requires Review`, `Duplicate Payment`, `Poller Recovery`, `Attempt Expired`,
 `Refund Requested`, `Void Requested`, or `Nothing To Reverse` — set once by
 whichever caller of `paymob.audit.record` creates the entry: `paymob.processor` for the first
-three plus `Nothing To Reverse` (via `paymob.ledger.post_refund`), `paymob.ledger.post_payment`
+four plus `Nothing To Reverse` (via `paymob.ledger.post_refund`), `paymob.ledger.post_payment`
 for `Duplicate Payment`, `paymob.tasks` (the reconciliation poller) for `Poller Recovery` and
 `Attempt Expired`, and `paymob.api.request_refund`/`request_void` for `Refund Requested`/
 `Void Requested`. `Poller Recovery` (`needs_action = 0`) is written by `tasks._audit_recovery`
