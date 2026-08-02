@@ -423,7 +423,9 @@ earlier one — a correction is always a new row, never an edit (see
 [ADR-0009](decisions.md#adr-0009--audit-entries-are-submittable-and-immutable-a-resolution-is-an-append-via-supersedes)).
 `needs_action` drives the `Paymob Open Audit Entries` report, which excludes any entry named in
 another submitted entry's `supersedes` field — a list filter alone cannot express "has no
-superseding record."
+superseding record." The workspace's **Needs Attention** card opens the filtered Audit Entry list
+so its Description is immediately visible; its native count includes superseded entries, while
+the report is the canonical open-item count.
 
 ### Capture controls
 
