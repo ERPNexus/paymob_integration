@@ -540,6 +540,13 @@ alone ([ADR-0022](#adr-0022--callback-facts-determine-authorization-state)).
 
 ## ADR-0026 — A hold Paymob captures anyway is posted and audited
 
+**Status:** Superseded in part by
+[ADR-0028](#adr-0028--an-unprovable-capture-is-recorded-as-a-hold) for the case where the only
+signed evidence is a plain `Success` with no `is_capture` — that reading now retargets to
+`Authorized` and posts nothing, because nothing signed proves money moved. This ADR's reasoning is
+unchanged for a genuine `Capture` event (`is_capture` signed) on an authorize_only attempt: that
+still posts and is still audited as `Capture Not Requested`. Kept here for history.
+
 **Functional:** When a merchant asks for an authorization hold and Paymob charges the card anyway,
 the app records that the money moved — because it did — and raises the broken promise as work for
 a human, naming the setting that caused it. It never pretends the payment is still only a hold.
@@ -594,3 +601,71 @@ per-Payment-Request choice.
   do that, unchanged. Switching a country back to immediate charging means editing those
   Integration ID rows, not touching a Payment Request. A per-request override remains a roadmap
   item, not V1.
+
+## ADR-0028 — An unprovable capture is recorded as a hold
+
+**Functional:** When Paymob reports a plain success on a payment the merchant asked to hold, and
+nothing in the signed message says whether the card was actually charged, the app records the
+reading that posts no money: the payment stays a hold, flagged for a human to resolve with Capture
+or Void. It never guesses "charged."
+
+**Technical:**
+- **Context:** Paymob's processed callback carries exactly twenty HMAC-signed fields
+  (`paymob.hmac_verify.PROCESSED_CALLBACK_FIELDS`), including `is_auth`, `is_capture`, `is_refunded`,
+  `is_voided`, and `success` — but no signed field that means "this success was a hold, not a
+  charge." `paymob.events.classify_event` therefore reads a message with every reversal/capture/
+  auth flag false but `success: true` as a plain `Success`, exactly as it would for an ordinary
+  immediate charge. On an `authorize_only` attempt this is genuinely ambiguous: it is either a
+  charge Paymob made despite the merchant's hold request (an `ADR-0026` scenario, just missing its
+  signed `is_capture`), or a hold whose callback never sets `is_auth` for this integration. Neither
+  reading is provable from the signed fields, and this ADR does not resolve which Paymob actually
+  did — it only decides what an unresolved case should record.
+- **Decision:** `paymob.processor.process_transaction` retargets this one case, inside its `else`
+  branch and before `states.check` runs: when the computed target is `Paid`, the event is `Success`,
+  and `attempt.authorize_only` is set, the target becomes `Authorized` instead, and
+  `unconfirmed_authorization = True`. No Payment Entry is posted (`target == "Paid"` no longer
+  holds), `attempt.needs_human_attention` is set, and one `Authorization Unconfirmed`
+  `Paymob Audit Entry` is recorded (`needs_action = 1`). `states.LEGAL` is unchanged —
+  `Pending → Authorized` was already a legal exit; only the choice of target moves.
+- **Why `Authorized`, not a new state:** `Authorized` asserts only "nothing settled here," which is
+  true under both readings, and it is the one state that already renders Capture and Void
+  (`payment_request.js`) — the two operations that can settle the question against Paymob with a
+  verified fact. A successful capture returns its own `is_capture` callback and drives
+  `Authorized → Paid` through the unchanged normal path; a rejected one raises in
+  `void_refund.capture` and changes nothing. Staying `Pending` was rejected: the reconciliation
+  poller (`tasks.py`) only re-inquires `Pending` attempts, and a Transaction Inquiry answer carries
+  the same ambiguous flags, so the attempt would sit unresolved forever with no button to act on
+  it. A dedicated new lifecycle state was also rejected: its legal exits would be identical to
+  `Authorized`'s, at the cost of a `states.LEGAL` node, a `paymob_result.py` message, notification
+  conditions, translations, and list-view work — `states.md`'s own rule is "two axes, do not fuse
+  them": *a human must look* is the review flag, not a state.
+- **Reaching Capture/Void from a `Success` row:** `paymob.transactions.verified_authorization`
+  now checks `("Auth", "Success")` instead of `("Auth",)` — `Auth` first, so a genuine `Auth` row
+  always wins. This is safe only because both callers (`api.request_capture`, `api.request_void`)
+  require `attempt.state == "Authorized"`, which an auto-capture attempt's `Success` can never
+  reach (its target is `Paid` directly, never retargeted). So a `Success` row is only ever read as
+  an authorization on an attempt that arrived via this ADR's branch, and it carries the very
+  Paymob transaction id the capture/void endpoints take. `verified_charge` (`("Capture",
+  "Success")`) is unaffected: `api.request_refund` requires `Paid`/`Partially Refunded`, unreachable
+  from this branch, and the processor's own `Refund` branch only reads it once a refund callback
+  has already arrived, which itself implies money moved.
+- **Relationship to [ADR-0022](#adr-0022--callback-facts-determine-authorization-state):**
+  callback facts still, and only, determine state — this ADR governs what to record when those
+  facts are *silent* on the one question that matters (did the card get charged), and it picks the
+  reading that writes nothing to the ledger rather than the reading that writes a Payment Entry a
+  human cannot undo. It does not reintroduce merchant intent as a state driver: `unrequested_capture`
+  (`ADR-0026`) still fires, unchanged, whenever a genuine `is_capture`-signed `Capture` event lands
+  on an authorize_only attempt — that case has real evidence and still posts.
+- **`capture_requested_at` correction:** `ADR-0026`'s technical note describing this field is
+  restated precisely here: `Document.db_set` defaults to `commit=False`
+  (`frappe/model/document.py`), so `api.request_capture` writes it but does not commit before its
+  outbound call — a failed capture rolls back cleanly, and a merchant-driven capture can still
+  never trip `unrequested_capture`, which now keys off `txn.event_kind == "Capture"` rather than
+  the shared `target == "Paid"` check both flags used to share.
+- **Not repaired retroactively:** this ADR governs future callbacks only. A live row already
+  posted under the old `ADR-0026` reading is not unwound by this change — `states.LEGAL["Paid"]`
+  has no route back to `Authorized`, and a patch that cancels a submitted Payment Entry is what
+  `rules/payments.md` forbids. Remediation for an already-posted row uses only existing legal
+  paths: void it in Paymob's dashboard (the inbound `Void` callback drives `Paid → Voided` and
+  posts the reversal), or, if it was genuinely captured, resolve the existing `Capture Not
+  Requested` audit entry via `supersedes`.

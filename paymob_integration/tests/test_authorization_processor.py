@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import frappe
 
 from paymob_integration import api
-from paymob_integration.paymob import processor
+from paymob_integration.paymob import processor, transactions
 from paymob_integration.tests.helpers import (
 	NoCommitIntegrationTestCase,
 	cleanup_fixture,
@@ -120,6 +120,86 @@ class TestUnrequestedCapture(NoCommitIntegrationTestCase):
 		self.assertEqual(self._flags(), [])
 
 
+class TestUnconfirmedAuthorization(NoCommitIntegrationTestCase):
+	"""ADR-0028: a plain `Success` on an authorize_only attempt carries no signed `is_capture` —
+	nothing distinguishes a charge Paymob made anyway from a hold whose callback never set
+	`is_auth`. Post nothing, land on `Authorized` so Capture/Void remain reachable, and flag it.
+	"""
+
+	def setUp(self):
+		credentials = patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(payment_account=_clearing_account()),
+		)
+		credentials.start()
+		self.addCleanup(credentials.stop)
+		self.attempt, self.request, self.invoice = given_attempt(
+			credentials=_credentials(), authorize_only=True
+		)
+		self.addCleanup(cleanup_fixture, self.attempt.name, self.request.name, self.invoice.name)
+
+	def _flags(self):
+		return frappe.get_all(
+			"Paymob Audit Entry",
+			filters={"attempt": self.attempt.name, "event": "Authorization Unconfirmed"},
+			fields=["name", "needs_action"],
+		)
+
+	def test_ambiguous_success_posts_nothing(self):
+		before = payment_entry_count()
+
+		success = given_transaction(
+			"Success", f"ambiguous-{self.attempt.name}", self.attempt.name, self.request.name
+		)
+		processor.process_transaction(success.name)
+		self.attempt.reload()
+		self.request.reload()
+		self.invoice.reload()
+
+		self.assertEqual(self.attempt.state, "Authorized")
+		self.assertEqual(payment_entry_count(), before)
+		self.assertFalse(self.attempt.payment_entry)
+		self.assertNotEqual(self.request.status, "Paid")
+		self.assertNotEqual(self.invoice.outstanding_amount, 0)
+		self.assertEqual(self.attempt.needs_human_attention, 1)
+		flags = self._flags()
+		self.assertEqual(len(flags), 1)
+		self.assertEqual(flags[0].needs_action, 1)
+
+	def test_capture_is_reachable_from_the_retargeted_row(self):
+		success = given_transaction(
+			"Success", f"ambiguous-{self.attempt.name}", self.attempt.name, self.request.name
+		)
+		processor.process_transaction(success.name)
+		self.attempt.reload()
+
+		authorization = transactions.verified_authorization(self.attempt.name)
+		self.assertEqual(authorization.paymob_transaction_id, success.paymob_transaction_id)
+
+		with patch("paymob_integration.paymob.void_refund.capture", return_value={}) as capture:
+			api.request_capture(self.attempt.name)
+		capture.assert_called_once()
+		self.assertEqual(
+			capture.call_args.kwargs,
+			{"transaction_id": success.paymob_transaction_id, "amount_cents": success.amount_cents},
+		)
+
+	def test_void_is_reachable_from_the_retargeted_row(self):
+		# This is the assertion a state-only fix would fail: `verified_authorization` must find the
+		# `Success` row, not just an `Auth` row, or `request_void` throws "No verified Paymob
+		# authorization is available" on an attempt that never received an `Auth` callback.
+		success = given_transaction(
+			"Success", f"ambiguous-{self.attempt.name}", self.attempt.name, self.request.name
+		)
+		processor.process_transaction(success.name)
+		self.attempt.reload()
+
+		with patch("paymob_integration.paymob.void_refund.void", return_value={}) as void:
+			api.request_void(self.attempt.name)
+		void.assert_called_once()
+		self.assertEqual(void.call_args.kwargs, {"transaction_id": success.paymob_transaction_id})
+
+
 class TestConfiguredCaptureModeDrivesTheOutcome(NoCommitIntegrationTestCase):
 	"""Checkout resolves capture mode from Paymob Settings, not a per-request field — the path
 	`given_attempt`-based tests above skip by setting `authorize_only` on the fixture directly.
@@ -172,6 +252,9 @@ class TestConfiguredCaptureModeDrivesTheOutcome(NoCommitIntegrationTestCase):
 		self.assertNotEqual(frappe.get_doc("Payment Request", self.payment_request.name).status, "Paid")
 		self.invoice.reload()
 		self.assertNotEqual(self.invoice.outstanding_amount, 0)
+		self.assertEqual(
+			transactions.verified_authorization(attempt.name).paymob_transaction_id, "cm-auth-hold"
+		)
 		self.assertEqual(attempt.needs_human_attention, 0)
 
 	def test_a_verified_capture_then_pays_and_posts(self):

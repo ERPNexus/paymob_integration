@@ -366,7 +366,8 @@ can read without opening the code.
 
 **Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
 `Unattributed Payment`, `Refund Requires Review`, `Duplicate Payment`, `Poller Recovery`, `Attempt Expired`,
-`Refund Requested`, `Void Requested`, `Capture Not Requested`, or `Nothing To Reverse` — set once by
+`Refund Requested`, `Void Requested`, `Capture Not Requested`, `Nothing To Reverse`, or
+`Authorization Unconfirmed` — set once by
 whichever caller of `paymob.audit.record` creates the entry: `paymob.processor` for the first
 four plus `Nothing To Reverse` (via `paymob.ledger.post_refund`), `paymob.ledger.post_payment`
 for `Duplicate Payment`, `paymob.tasks` (the reconciliation poller) for `Poller Recovery` and
@@ -388,6 +389,12 @@ verified callback moves an `authorize_only` attempt to `Paid` while `capture_req
 empty — Paymob captured a hold nobody asked it to capture, so the Integration ID is not configured
 for authorization holds in Paymob's own dashboard. The Payment Entry is still posted; the money is
 real and verified ([ADR-0026](decisions.md#adr-0026--a-hold-paymob-captures-anyway-is-posted-and-audited)).
+`Authorization Unconfirmed` (`needs_action = 1`, and it sets `needs_human_attention`) is written by
+`paymob.processor` for the opposite, unprovable case: a plain `Success` callback on an
+`authorize_only` attempt with none of the reversal/capture/auth flags signed. Unlike
+`Capture Not Requested`, no Payment Entry is posted — the attempt is retargeted to `Authorized`
+instead of `Paid`, because nothing signed proves the card was actually charged
+([ADR-0028](decisions.md#adr-0028--an-unprovable-capture-is-recorded-as-a-hold)).
 `description` is always built with `_()` and named values (never string concatenation), per
 [`rules/translation.md`](../../rules/translation.md).
 

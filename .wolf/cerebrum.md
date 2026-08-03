@@ -204,6 +204,9 @@
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
+- [2026-08-03] Tests under `paymob_integration/tests/` use module paths such as
+  `paymob_integration.tests.test_events`; `paymob_integration.paymob_integration.tests.*` does not
+  exist. Verify a plan's copied `bench run-tests --module` paths against the package tree before use.
 - [2026-07-29] `apply_patch` cannot update a file created in the same patch; add it once with final content.
 - [2026-07-29] `Mock(name="x")` labels a mock; set `.name` explicitly when the code reads it.
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->

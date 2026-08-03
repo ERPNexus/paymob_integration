@@ -164,7 +164,9 @@ Desk offers **Void** only on an `Authorized` attempt and **Refund** only on a `P
 **Technical:** `paymob_integration.api.request_void(attempt)`, whitelisted `POST`. Same lock,
 permission gate, and in-progress marker as Request refund, plus the same capture-in-progress
 refusal. The state guard requires `Authorized`; anything else throws. The transaction reversed is
-always the verified authorization (`paymob.transactions.verified_authorization`), never the
+always the verified authorization (`paymob.transactions.verified_authorization` — an `Auth` row, or
+a `Success` row retargeted to `Authorized` under
+[ADR-0028](decisions.md#adr-0028--an-unprovable-capture-is-recorded-as-a-hold)), never the
 verified charge. Writes a `Void Requested` audit entry. Ledger authority: **no**, same as Request
 refund.
 
@@ -449,5 +451,8 @@ should have told us about it never arrived.
 **Functional:** A Refund Manager captures a verified authorization in full.
 
 **Technical:** `api.request_capture` locks the attempt, checks its existing `refund` permission, uses only
-the verified Auth transaction's ID and integer amount, sets `capture_requested_at`, writes `Capture Requested`,
-then calls `POST /api/acceptance/capture` once. A lost callback leaves the latch set; no retry is automatic.
+the verified authorization's ID and integer amount (`paymob.transactions.verified_authorization` — an
+`Auth` row, or a `Success` row retargeted to `Authorized` under
+[ADR-0028](decisions.md#adr-0028--an-unprovable-capture-is-recorded-as-a-hold)), sets `capture_requested_at`,
+writes `Capture Requested`, then calls `POST /api/acceptance/capture` once. A lost callback leaves the
+latch set; no retry is automatic.

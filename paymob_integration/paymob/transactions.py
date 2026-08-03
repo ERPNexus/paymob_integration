@@ -47,8 +47,16 @@ def verified_charge(attempt_name):
 
 
 def verified_authorization(attempt_name):
-	"""Return the verified hold used only to capture or void an authorization."""
-	return _verified(attempt_name, ("Auth",))
+	"""Return the verified hold used only to capture or void an authorization.
+
+	`Auth` is checked first so a genuine authorization callback always wins. `Success` is also
+	accepted: ADR-0028 retargets an authorize_only attempt's ambiguous `Success` to `Authorized`
+	instead of `Paid`, and that row carries the same Paymob transaction id its capture/void
+	endpoints need. This is safe only because both callers (`api.request_capture`,
+	`api.request_void`) require `attempt.state == "Authorized"` — an auto-capture attempt's
+	`Success` targets `Paid` directly and never reaches this function with a `Success` row to read.
+	"""
+	return _verified(attempt_name, ("Auth", "Success"))
 
 
 def _verified(attempt_name, kinds):

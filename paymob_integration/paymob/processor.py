@@ -42,6 +42,7 @@ def process_transaction(transaction):
 
 		# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
 		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
+		unconfirmed_authorization = False
 		if txn.event_kind == "Refund":
 			if not txn.has_parent_transaction:
 				# The parent re-send is routine bookkeeping on every refund, signed or not — it carries
@@ -69,6 +70,14 @@ def process_transaction(transaction):
 			delta_cents = None
 			total_cents = None
 			target = states.target_state(txn.event_kind)
+			# A plain `Success` on an attempt the merchant asked to hold says one of two
+			# contradictory things: Paymob charged the card anyway, or Paymob held it and this
+			# integration's callback never sets `is_auth`. Neither is provable from the twenty
+			# HMAC-signed fields, and only one of them moved money. Record the reading that posts
+			# nothing (ADR-0028).
+			if target == "Paid" and txn.event_kind == "Success" and attempt.authorize_only:
+				target = "Authorized"
+				unconfirmed_authorization = True
 		if txn.event_kind == "Refund" and (
 			txn.currency != attempt.currency or delta_cents <= 0 or not charged or total_cents > charged_cents
 		):
@@ -81,15 +90,19 @@ def process_transaction(transaction):
 		mismatch = target in ("Paid", "Authorized") and not amounts.amounts_match(
 			attempt.expected_amount_cents, attempt.currency, txn.amount_cents, txn.currency
 		)
-		# `api.request_capture` commits `capture_requested_at` before its outbound call, so a
-		# merchant-driven capture can never trip this — only Paymob capturing a hold on its own,
-		# which means the Integration ID is not auth-only in Paymob's dashboard (ADR-0026).
-		unrequested_capture = target == "Paid" and attempt.authorize_only and not attempt.capture_requested_at
+		# `api.request_capture` sets `capture_requested_at` via `db_set` (uncommitted, but written to
+		# the row) before its outbound call, so a merchant-driven capture can never trip this — only
+		# Paymob capturing a hold on its own, which means the Integration ID is not auth-only in
+		# Paymob's dashboard (ADR-0026). A plain `Success` on an authorize_only attempt is handled
+		# above by retargeting, not here.
+		unrequested_capture = (
+			txn.event_kind == "Capture" and attempt.authorize_only and not attempt.capture_requested_at
+		)
 
 		previous_state = attempt.state
 		if moved:
 			attempt.state = target
-		if mismatch or unrequested_capture:
+		if mismatch or unrequested_capture or unconfirmed_authorization:
 			attempt.needs_human_attention = 1
 		if txn.event_kind == "Capture":
 			attempt.capture_requested_at = None
@@ -136,6 +149,28 @@ def process_transaction(transaction):
 			frappe.logger("paymob").info(
 				f"capture not requested payment_request={attempt.payment_request} attempt={attempt.name} "
 				f"txn={txn.paymob_transaction_id} kind={txn.event_kind}"
+			)
+
+		if unconfirmed_authorization:
+			audit.record(
+				txn,
+				attempt,
+				event="Authorization Unconfirmed",
+				needs_action=1,
+				description=_(
+					"Paymob reported success for this authorization-only payment, but the signed callback "
+					"does not confirm a capture. This may be a hold, or a charge Paymob made without a "
+					"capture request. Review and capture or void it."
+				),
+				actor=ACTOR,
+				expected_amount_cents=attempt.expected_amount_cents,
+				expected_currency=attempt.currency,
+				received_amount_cents=txn.amount_cents,
+				received_currency=txn.currency,
+			)
+			frappe.logger("paymob").info(
+				f"authorization unconfirmed payment_request={attempt.payment_request} attempt={attempt.name} "
+				f"txn={txn.paymob_transaction_id}"
 			)
 
 		if target == "Paid" and not mismatch:

@@ -41,3 +41,17 @@ class TestClassifyEvent(UnitTestCase):
 			"success": False,
 		}
 		self.assertEqual(classify_event(obj), "Decline")
+
+	def test_incident_ACC_PRQ_2026_00004_success_with_no_capture_flag_is_ambiguous(self):
+		# Live incident: an authorize_only attempt received this exact flag set. None of the
+		# signed flags say `is_capture`, so this is why ADR-0028 exists — `classify_event` alone
+		# cannot tell a charge from a hold here; that distinction is `processor`'s job (ADR-0028).
+		obj = {
+			"success": True,
+			"pending": False,
+			"is_auth": False,
+			"is_capture": False,
+			"is_refunded": False,
+			"is_voided": False,
+		}
+		self.assertEqual(classify_event(obj), "Success")

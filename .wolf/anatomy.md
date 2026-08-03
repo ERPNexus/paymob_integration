@@ -1,11 +1,22 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-08-03T09:08:28.650Z
-> Files: 222 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-08-03T12:02:26.624Z
+> Files: 212 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../../../../mnt/c/Users/bedo7/.claude/
+
+- `statusline-command.sh` — Windows counterpart of the WSL statusline-command.sh (user@host + model + context% + session%/week%) (~382 tok)
+
+## ../../../.claude/
+
+- `AGENTS.md` — Imported ECC agent and workflow guidance (~1670 tok)
+- `CLAUDE.md` — Global Claude instructions, including weakness tracking and self-review (~97 tok)
+- `statusline-command.sh` — Converted from ~/.bashrc PS1 (color prompt): (~413 tok)
 
 ## ../../../.claude/plans/
 
 - `cosmic-hopping-acorn.md` — Phase 13 — Authorize & Capture (issue #5) (~5634 tok)
+- `did-you-used-planning-resilient-swing.md` — Authorization-only attempts must never post on an ambiguous `Success` (~3882 tok)
 - `eager-doodling-falcon.md` — Plan — Payer payment link + notification catalogue (~3882 tok)
 - `floating-inventing-swan.md` — Phases 06 + 07 — State Machine, Audit Trail & Amount Verification (~5554 tok)
 - `https-github-com-users-notabdelrahmanels-abstract-rainbow.md` — Fix #8 — Process button corrupts the session and logs the user out (~1874 tok)
@@ -154,11 +165,11 @@
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~9733 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~7352 tok)
-- `fields.md` — Fields (~7023 tok)
+- `decisions.md` — Decisions (ADRs) (~11304 tok)
+- `endpoints.md` — Endpoints, Settings & Errors (~7437 tok)
+- `fields.md` — Fields (~7163 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~2910 tok)
+- `states.md` — States & Transitions (~3179 tok)
 
 ## docs/user-guide/
 
@@ -225,12 +236,12 @@
 - `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
 - `intention.py` — Create a Paymob Intention once per payment attempt; never retry it automatically. (~315 tok)
 - `ledger.py` — The single Payment Entry write path (rules/payments.md rule 1). Every caller — the webhook (~2526 tok)
-- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~3426 tok)
+- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~3858 tok)
 - `session.py` — Run privileged work inside a request without corrupting the caller's session (issue #8; (~531 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~831 tok)
 - `states.py` — The executable form of docs/reference/states.md. Change both together. (~360 tok)
 - `test_settings.py` — TestCredentialLookup: test_includes_country, test_explicit_mode_overrides_site_mode, test_disabled_r (~1524 tok)
-- `transactions.py` — The one function that inserts a Paymob Transaction row — webhook and poller both. Grepping (~1245 tok)
+- `transactions.py` — The one function that inserts a Paymob Transaction row — webhook and poller both. Grepping (~1416 tok)
 - `void_refund.py` — One-shot Paymob refund and void HTTP calls; callbacks retain ledger authority. (~310 tok)
 
 ## paymob_integration/paymob_integration/
@@ -246,7 +257,7 @@
 
 - `__init__.py` (~0 tok)
 - `paymob_audit_entry.js` — For license information, please see license.txt (~106 tok)
-- `paymob_audit_entry.json` (~1010 tok)
+- `paymob_audit_entry.json` (~1017 tok)
 - `paymob_audit_entry.py` — For license information, please see license.txt (~56 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_credential_set/
@@ -318,10 +329,10 @@
 - `__init__.py` (~0 tok)
 - `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~1819 tok)
 - `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
-- `test_authorization_processor.py` — Verified authorization/capture callbacks drive the existing processor. (~2266 tok)
+- `test_authorization_processor.py` — Verified authorization/capture callbacks drive the existing processor. (~3217 tok)
 - `test_capture.py` — Capture requests use a verified authorization under the existing refund permission. (~1087 tok)
 - `test_checkout.py` — TestCreateIntention: setUp, call, test_returns_the_three_identifiers, test_authenticates_with_the_se (~4100 tok)
-- `test_events.py` — Tests: void_flag_wins, refund_flag_wins_over_success, capture_flag, auth_flag + 5 more (~421 tok)
+- `test_events.py` — TestClassifyEvent: test_void_flag_wins, test_refund_flag_wins_over_success, test_capture_flag, test_ (~580 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
 - `test_ledger.py` — Direct tests for paymob.ledger.post_payment — the single Payment Entry write path (~2146 tok)
 - `test_pay_link.py` — TestPayLink: test_build_uses_frappe_signed_params, test_payment_request_hook_only_sets_a_valid_paymo (~1436 tok)
@@ -338,7 +349,7 @@
 
 ## paymob_integration/translations/
 
-- `ar.csv` (~3024 tok)
+- `ar.csv` (~3133 tok)
 
 ## paymob_integration/workspace_sidebar/
 

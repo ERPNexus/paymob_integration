@@ -37,10 +37,16 @@ capture can create the normal Payment Entry.
 
 **Technical:**
 - Entered when: an authentic processed callback reports an authorization-only `Auth` event
-  (`is_auth`, no `is_capture`/`is_refunded`/`is_voided`).
-- Exits to: `paid` (a verified, matched `Capture` callback), `voided` (a genuine void event). Never
-  expires, fails, or refunds directly: an authorization is a real hold, while `expired` means no
-  transaction ever existed.
+  (`is_auth`, no `is_capture`/`is_refunded`/`is_voided`). Also entered on an `authorize_only`
+  attempt when the callback reports a plain `Success` with none of the reversal/capture/auth flags
+  set — the signed fields cannot prove whether Paymob charged the card anyway or held it without
+  ever setting `is_auth`, so this retargeted route posts no Payment Entry and raises
+  `needs_human_attention` with one `Authorization Unconfirmed` audit entry (`needs_action = 1`).
+  See [ADR-0028](decisions.md#adr-0028--an-unprovable-capture-is-recorded-as-a-hold).
+- Exits to: `paid` (a verified, matched `Capture` callback — including from the retargeted route
+  above, since a real capture still arrives with its own signed `is_capture`), `voided` (a genuine
+  void event). Never expires, fails, or refunds directly: an authorization is a real hold, while
+  `expired` means no transaction ever existed.
 - `capture_mode` (`Paymob Integration ID`, configured in Paymob Settings) selects which
   integrations a checkout offers — every enabled row for a country/currency/mode must agree (see
   [ADR-0027](decisions.md#adr-0027--capture-mode-is-a-paymob-settings-property)) — but it never
@@ -55,10 +61,13 @@ customer sees "Payment received. Thank you."
 
 **Technical:**
 - Entered when: an **authentic** (HMAC-verified) **processed callback** reports success **and**
-  the amount matches the immutable intention snapshot — either a direct `Success` or a verified,
-  amount-matched `Capture` of a prior `authorized` hold (`request_capture` sends the full
-  authorized amount; a `Capture` reporting a different amount follows the same mismatch path and
-  posts no Payment Entry — [ADR-0023](decisions.md#adr-0023--capture-is-full-amount-only)).
+  the amount matches the immutable intention snapshot — either a direct `Success` on an attempt
+  that is *not* `authorize_only`, or a verified, amount-matched `Capture` of a prior `authorized`
+  hold (`request_capture` sends the full authorized amount; a `Capture` reporting a different
+  amount follows the same mismatch path and posts no Payment Entry —
+  [ADR-0023](decisions.md#adr-0023--capture-is-full-amount-only)). A plain `Success` on an
+  `authorize_only` attempt does **not** enter `paid` — see `authorized` above and
+  [ADR-0028](decisions.md#adr-0028--an-unprovable-capture-is-recorded-as-a-hold).
 - Exits to: `refunded` (a genuine, separately-signed refund event). Does **not** exit to `failed`.
 - Terminal: effectively yes, except a real refund.
 
@@ -148,10 +157,12 @@ it as final. The customer still sees the normal "payment received" result.
 - **Does NOT change the lifecycle state.** The record stays `paid` (or whatever it was); this is
   a flag *alongside* it. Resolve by human decision → keep `paid`, or move to `refunded`, etc.
 - See decision [ADR-0003](decisions.md#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted).
-- Raised by two code paths in `paymob.processor.process_transaction`: an illegal state
+- Raised by three code paths in `paymob.processor.process_transaction`: an illegal state
   transition (`states.IllegalTransition`, e.g. a `Success` callback arriving for an attempt
-  already `Failed`) and an authentic amount/currency mismatch on a `Success` (Phase 07). Both
-  paths write a `Paymob Audit Entry` — see
+  already `Failed`), an authentic amount/currency mismatch on a `Success` (Phase 07), and a plain
+  `Success` on an `authorize_only` attempt that the signed callback cannot confirm as a capture
+  (`Authorization Unconfirmed`, [ADR-0028](decisions.md#adr-0028--an-unprovable-capture-is-recorded-as-a-hold)).
+  All three paths write a `Paymob Audit Entry` — see
   [ADR-0009](decisions.md#adr-0009--audit-entries-are-submittable-and-immutable-a-resolution-is-an-append-via-supersedes).
 
 ## Event kinds (Paymob Transaction)
