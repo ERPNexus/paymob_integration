@@ -158,3 +158,6 @@
 "This payment has been partially refunded.","تم رد جزء من هذه الدفعة.",""
 "This payment authorization has been voided.","تم إلغاء تفويض هذه الدفعة.",""
 "This payment was requested as an authorization hold, but Paymob captured it without a capture request. The Paymob Integration ID used is not configured for authorization holds in Paymob's dashboard.","طُلبت هذه الدفعة كحجز تفويض، لكن Paymob حصّلها دون طلب تحصيل. معرّف تكامل Paymob المستخدم غير مُهيّأ لحجوزات التفويض في لوحة تحكم Paymob.",""
+"No enabled Paymob Integration ID is configured for {0}, {1} in {2} mode.","لا يوجد معرّف تكامل Paymob مُفعّل لـ {0}، {1} في وضع {2}.",""
+"Paymob Integration IDs for {0}, {1} in {2} mode mix Auto Capture and Authorize Only. Every enabled integration for one country, currency and mode must use the same capture mode.","معرّفات تكامل Paymob لـ {0}، {1} في وضع {2} تجمع بين التحصيل التلقائي والتفويض فقط. يجب أن تستخدم كل التكاملات المُفعّلة لهذه الدولة والعملة والوضع نفس وضع التحصيل.",""
+"Mixed Capture Modes","أوضاع تحصيل متعارضة",""

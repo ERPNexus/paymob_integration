@@ -40,12 +40,31 @@ def enabled_credential_sets():
 	return [row for row in config.credential_sets if row.enabled]
 
 
-def get_integration_ids(country, currency, capture_mode=None):
-	"""Return enabled integration IDs for a country and currency in the site's current mode.
+def capture_mode_for(rows, country, currency, mode):
+	"""The one capture mode a group of Integration IDs agrees on, or a throw.
 
-	`capture_mode` defaults to `None`, returning every enabled row (today's behaviour, unchanged).
-	Pass `"Authorize Only"` to narrow the checkout to integrations configured for a hold in
-	Paymob's own dashboard; throws if none match rather than silently falling back to auto-capture.
+	Shared by `Paymob Settings.validate` (refuse the save) and `resolve_integrations`
+	(refuse the checkout).
+	"""
+	modes = {row.capture_mode or "Auto Capture" for row in rows}
+	if len(modes) > 1:
+		frappe.throw(
+			_(
+				"Paymob Integration IDs for {0}, {1} in {2} mode mix Auto Capture and "
+				"Authorize Only. Every enabled integration for one country, currency and mode "
+				"must use the same capture mode."
+			).format(country, currency, mode),
+			title=_("Mixed Capture Modes"),
+		)
+	return modes.pop()
+
+
+def resolve_integrations(country, currency):
+	"""Return (capture_mode, integration_ids) for a country and currency in the site's mode.
+
+	Paymob Settings decides whether a checkout charges or holds — never the browser and never a
+	field on the Payment Request. Every enabled row for the group is offered to the payer; they
+	all settle the same way (ADR-0027).
 	"""
 	config = get_settings()
 	rows = [
@@ -53,16 +72,13 @@ def get_integration_ids(country, currency, capture_mode=None):
 		for row in config.integration_ids
 		if row.enabled and row.country == country and row.currency == currency and row.mode == config.mode
 	]
-	if capture_mode:
-		rows = [row for row in rows if row.capture_mode == capture_mode]
-		if not rows:
-			frappe.throw(
-				_(
-					"No Authorize Only Paymob Integration ID is configured for {0}, {1}. "
-					"Configure one in Paymob Settings before requesting a hold."
-				).format(country, currency)
+	if not rows:
+		frappe.throw(
+			_("No enabled Paymob Integration ID is configured for {0}, {1} in {2} mode.").format(
+				country, currency, config.mode
 			)
-	return [row.integration_id for row in rows]
+		)
+	return capture_mode_for(rows, country, currency, config.mode), [row.integration_id for row in rows]
 
 
 def base_url(credentials):

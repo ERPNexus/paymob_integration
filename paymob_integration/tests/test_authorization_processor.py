@@ -4,11 +4,13 @@ from unittest.mock import Mock, patch
 
 import frappe
 
+from paymob_integration import api
 from paymob_integration.paymob import processor
 from paymob_integration.tests.helpers import (
 	NoCommitIntegrationTestCase,
 	cleanup_fixture,
 	given_attempt,
+	given_submitted_payment_request,
 	given_transaction,
 	payment_entry_count,
 )
@@ -116,3 +118,102 @@ class TestUnrequestedCapture(NoCommitIntegrationTestCase):
 		self.assertEqual(self.attempt.state, "Paid")
 		self.assertEqual(self.attempt.needs_human_attention, 0)
 		self.assertEqual(self._flags(), [])
+
+
+class TestConfiguredCaptureModeDrivesTheOutcome(NoCommitIntegrationTestCase):
+	"""Checkout resolves capture mode from Paymob Settings, not a per-request field — the path
+	`given_attempt`-based tests above skip by setting `authorize_only` on the fixture directly.
+	"""
+
+	def setUp(self):
+		credentials = patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(country="Egypt", mode="Test", payment_account=_clearing_account()),
+		)
+		credentials.start()
+		self.addCleanup(credentials.stop)
+		self.payment_request, self.invoice = given_submitted_payment_request()
+
+	def _checkout(self, capture_mode, integration_ids):
+		with (
+			patch(
+				"paymob_integration.paymob.settings.resolve_integrations",
+				return_value=(capture_mode, integration_ids),
+			),
+			patch(
+				"paymob_integration.paymob.settings.get_settings",
+				return_value=frappe._dict(intention_expiration_seconds=3600),
+			),
+			patch(
+				"paymob_integration.api.intention.create_intention",
+				return_value={
+					"intention_id": "pi_FAKE_1",
+					"order_id": "987654",
+					"client_secret": "egy_csk_FAKE_1",
+				},
+			),
+		):
+			result = api.start_checkout(self.payment_request.name)
+		attempt = frappe.get_doc("Paymob Payment Attempt", result["attempt"])
+		self.addCleanup(cleanup_fixture, attempt.name, self.payment_request.name, self.invoice.name)
+		return attempt
+
+	def test_configured_authorize_only_holds_without_posting(self):
+		attempt = self._checkout("Authorize Only", ["1002"])
+		before = payment_entry_count()
+
+		auth = given_transaction("Auth", "cm-auth-hold", attempt.name, self.payment_request.name)
+		processor.process_transaction(auth.name)
+		attempt.reload()
+
+		self.assertEqual(attempt.state, "Authorized")
+		self.assertEqual(payment_entry_count(), before)
+		self.assertFalse(attempt.payment_entry)
+		self.assertNotEqual(frappe.get_doc("Payment Request", self.payment_request.name).status, "Paid")
+		self.invoice.reload()
+		self.assertNotEqual(self.invoice.outstanding_amount, 0)
+		self.assertEqual(attempt.needs_human_attention, 0)
+
+	def test_a_verified_capture_then_pays_and_posts(self):
+		attempt = self._checkout("Authorize Only", ["1002"])
+		before = payment_entry_count()
+		auth = given_transaction("Auth", "cm-auth-then-capture", attempt.name, self.payment_request.name)
+		processor.process_transaction(auth.name)
+		attempt.reload()
+		attempt.db_set("capture_requested_at", frappe.utils.now_datetime())
+
+		capture = given_transaction(
+			"Capture", "cm-capture-after-auth", attempt.name, self.payment_request.name
+		)
+		processor.process_transaction(capture.name)
+		attempt.reload()
+
+		self.assertEqual(attempt.state, "Paid")
+		self.assertEqual(payment_entry_count(), before + 1)
+		payment_entry = frappe.get_doc("Payment Entry", attempt.payment_entry)
+		self.assertEqual(payment_entry.docstatus, 1)
+		reference = payment_entry.references[0]
+		self.assertEqual(reference.reference_name, self.invoice.name)
+		self.invoice.reload()
+		self.assertEqual(self.invoice.outstanding_amount, 0)
+		self.assertEqual(frappe.get_doc("Payment Request", self.payment_request.name).status, "Paid")
+		self.assertFalse(attempt.capture_requested_at)
+
+	def test_configured_auto_capture_pays_directly(self):
+		attempt = self._checkout("Auto Capture", ["1001"])
+		before = payment_entry_count()
+
+		success = given_transaction("Success", "cm-success-direct", attempt.name, self.payment_request.name)
+		processor.process_transaction(success.name)
+		attempt.reload()
+
+		self.assertEqual(attempt.state, "Paid")
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertFalse(attempt.authorize_only)
+		self.assertEqual(
+			frappe.get_all(
+				"Paymob Audit Entry",
+				filters={"attempt": attempt.name, "event": "Capture Not Requested"},
+			),
+			[],
+		)

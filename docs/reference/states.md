@@ -41,9 +41,10 @@ capture can create the normal Payment Entry.
 - Exits to: `paid` (a verified, matched `Capture` callback), `voided` (a genuine void event). Never
   expires, fails, or refunds directly: an authorization is a real hold, while `expired` means no
   transaction ever existed.
-- `capture_mode` (`Paymob Integration ID`) can narrow which integrations a checkout offers (see
-  [ADR-0025](decisions.md#adr-0025--authorize-only-is-a-per-request-choice)), but it never gates
-  *state* — only the callback's own flags do. See
+- `capture_mode` (`Paymob Integration ID`, configured in Paymob Settings) selects which
+  integrations a checkout offers — every enabled row for a country/currency/mode must agree (see
+  [ADR-0027](decisions.md#adr-0027--capture-mode-is-a-paymob-settings-property)) — but it never
+  gates *state*: only the callback's own flags do. See
   [ADR-0022](decisions.md#adr-0022--callback-facts-determine-authorization-state).
 - Terminal: no.
 

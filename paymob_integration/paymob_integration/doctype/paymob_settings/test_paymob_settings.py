@@ -29,3 +29,42 @@ class TestPaymobSettings(FrappeTestCase):
 			frappe.local.message_log[-1]["message"],
 			"Paymob rejected the request. Check the credentials and try again.",
 		)
+
+
+class TestCaptureModeValidation(FrappeTestCase):
+	def setUp(self):
+		self.settings = frappe.get_doc("Paymob Settings")
+
+	def _add_row(self, **overrides):
+		row = {
+			"enabled": 1,
+			"country": "Saudi Arabia",
+			"currency": "SAR",
+			"mode": "Test",
+			"payment_method": "Card",
+			"integration_id": "9001",
+			"capture_mode": "Auto Capture",
+		}
+		row.update(overrides)
+		self.settings.append("integration_ids", row)
+
+	def test_mixed_enabled_rows_cannot_be_saved(self):
+		self._add_row(capture_mode="Auto Capture", integration_id="9001")
+		self._add_row(capture_mode="Authorize Only", integration_id="9002")
+
+		with self.assertRaises(frappe.ValidationError):
+			self.settings.save()
+
+	def test_disabled_row_of_the_other_mode_saves(self):
+		self._add_row(capture_mode="Auto Capture", integration_id="9001", enabled=0)
+		self._add_row(capture_mode="Authorize Only", integration_id="9002")
+
+		self.settings.save()
+
+	def test_different_currencies_may_use_different_modes(self):
+		self._add_row(country="Egypt", currency="USD", capture_mode="Auto Capture", integration_id="9001")
+		self._add_row(
+			country="Saudi Arabia", currency="SAR", capture_mode="Authorize Only", integration_id="9002"
+		)
+
+		self.settings.save()

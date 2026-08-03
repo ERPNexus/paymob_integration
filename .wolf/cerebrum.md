@@ -7,6 +7,9 @@
 ## User Preferences
 
 <!-- How the user likes things done. Code style, tools, patterns, communication. -->
+- [2026-08-03] Do not add cleanup migrations for retired development-only fields while the app has no production sites.
+- [2026-08-03] Keep OpenWolf state compact: discard generated historical logs and stale temporary-path metadata; retain durable instructions and curated project learnings.
+- [2026-08-03] When the user requests a post-delivery grilling session, keep it short or medium-length according to the feature's challenging cases and edge-case risk. It is manual/on-demand, not an automatic delivery step.
 - [2026-07-29] Translate the payment state `Authorized` as `محجوز`, not `التفويض` or `مصرّح به`; it denotes a card-funds hold awaiting capture.
 - [2026-07-28] For the reported missing refunds, refunds were initiated in Paymob, not from Frappe; diagnose signed inbound refund callbacks and worker processing rather than the Frappe refund-request UI.
 - Commit and push requested repository work directly on `version-16`; do not create an `agent/*`
@@ -23,6 +26,21 @@
 
 ## Key Learnings
 
+- A Frappe Document Type Number Card always opens its filtered List view; it cannot express the
+  Open Audit Entries report's `supersedes` anti-join. Keep the report as the canonical open-item
+  count and expose `Paymob Audit Entry.description` in the list when the card is the triage path.
+- Frappe custom Permission Types are honored by both `frappe.client.has_permission` and
+  `Document.check_permission`; on `capital`, `Accounts Manager` has `refund = 0` while only
+  `Paymob Refund Manager` has it for `Paymob Payment Attempt` (issue #7).
+- A test that introduces a DocType Select value must run after `bench --site capital migrate`; the
+  test site's saved DocType schema validates against its prior options until synchronization.
+- Frappe's `compose(fn, *hooks)` runs a DocType's OWN controller method before any app's `hooks.py`
+  `doc_events` handler for the same event. ERPNext's `PaymentRequest.before_submit` sends its email
+  inside that method body, so anything an app wants that email to see must be set on `validate`, not
+  `before_submit` (issue #10, ADR-0024). Same trap applies to any core method that acts, not just sets fields.
+- A new Check field on a Single DocType is missing (not defaulted) on existing sites until something
+  writes it — the Desk form then shows it unchecked and the merchant's next save silently turns the
+  feature off. Ship an idempotent backfill patch with any new default-on Setting.
 - An auth-only payment is a verified hold, not a charge: only `Capture`/`Success` rows can cap refunds; Auth rows are used only to capture or void.
 - Native Frappe Notification templates can query the linked Payment Request's `company` through
   `frappe.db.get_value`; leave sender identity to the configured site Email Account rather than adding
@@ -169,6 +187,20 @@
   changes the lookup key to `source:context` and will not match ordinary `_()` calls without that
   context. Use quoted `"source","translation",""` rows for catalog-wide translations.
 
+- `bench --site capital run-tests --app paymob_integration` **without** `--lightmode` now fails
+  before any app test runs: ERPNext's `tests/utils.py` bootstraps master data at import and hits
+  `DuplicateEntryError: ('Price List', 'Standard Buying')`. With `--lightmode` the full 194-test
+  suite runs (see the older note above about the hrms bootstrap).
+- `tests.test_reconciliation` errors (10, `IndexError: pop from empty list` in `_FakeClient`) on
+  this site independent of any code change: `tasks.reconcile_pending_attempts()` sweeps **every**
+  stale Pending attempt, and 7 real ones are left on `ACC-PRQ-2026-00023` from manual testing on
+  2026-07-28/29, exhausting the fake's fixed response list. The test is not isolated from site
+  data. Stash before blaming a suspected regression on it.
+
+- `bench serve` is not normally running on this bench; `frappe-visual-reviewer` needs
+  `--base http://localhost:8002` plus a `bench serve --port 8002` started first (and killed after).
+  Its socket.io console errors are expected noise when only the web process is up.
+
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
@@ -221,10 +253,21 @@
   and hands off to `processor.process_transaction`, moving the attempt to `Paid`, which made a
   "stays Pending" assertion fail for the wrong reason. Queue a 404 for the retry when the test is
   only about proving the retry-once mechanic, not the hand-off.
+- [2026-08-03] Moving a call (here, `settings.resolve_integrations`) from inside a conditional
+  branch of `api._checkout` to unconditionally at the top of the function — needed so the
+  `reuse_pending` comparison could use the resolved mode — silently broke
+  `test_pay_link.py::test_checkout_reuses_a_ready_pending_attempt`, a test the implementation plan
+  never mentioned because it lived outside `test_checkout.py`. The plan's own verification step
+  (`run-tests --app paymob_integration`, "catches the ripple") is what surfaces this, not a grep or
+  a read of the plan's stated test list — always run the whole app suite after reordering code
+  above an early-return branch, not just the tests the plan named.
 
 ## Decision Log
 
 <!-- Significant technical decisions with rationale. Why X was chosen over Y. -->
+- [2026-08-03] Enabled Paymob Integration IDs sharing country, currency, and Test/Live mode must have one capture mode. Different countries, currencies, and modes may use different capture modes; mixed same-group configuration is rejected.
+- [2026-08-03] A Paymob Payment Attempt snapshots capture mode at checkout creation. Later Settings changes must not alter processing of its existing checkout; verified callback flags and the stored attempt determine the outcome.
+- [2026-08-03] A verified authorization on an attempt configured for Auto Capture is a configuration mismatch: preserve the `Authorized` state and raise a needs-attention audit entry.
 - [2026-07-26] Commit OpenWolf's shared protocol, configuration, identity, and hooks; ignore its
   generated session state and visual-review output to keep repository history useful and clean.
 - Frappe standard DocType and Report artifacts for the `Paymob Integration` module must live under
@@ -264,3 +307,11 @@
 - For Paymob gateway errors, never expose a raw response. The client may show only an allowlisted
   string `detail` or `message` with the HTTP status; this preserves useful diagnostics without
   exposing echoed credentials, customer data, or newly-added gateway fields.
+- [ADR-0026] `capture_mode` on a `Paymob Integration ID` is a merchant-declared label — Paymob only
+  honours a hold if that integration is auth-only in **Paymob's own dashboard**, and nothing checks
+  the two agree. When Paymob captures a hold anyway, post the Payment Entry (the money moved and is
+  verified) and raise it as `Capture Not Requested` audit + `needs_human_attention`. Never force
+  state back to `Authorized`: that writes state from intent, which ADR-0022 forbids.
+- Outbound void is an authorization-only action; a charge is refunded, never voided, and the two
+  buttons are never offered together. The **inbound** `Void` branch and `states.LEGAL["Paid"] →
+  "Voided"` stay untouched — a void taken in Paymob's dashboard must still post its reversal.

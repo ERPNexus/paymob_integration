@@ -145,7 +145,7 @@ for Egypt cannot be reused for Saudi Arabia.
   currency of a Payment Request must match a credential set and integration ID with the same
   `country` + `currency` + `mode` combination, or there is nothing to pay with.
 - The **combination** of `country` + `currency` + `mode` is the lookup key used by
-  `settings.get_credential_set()` and `settings.get_integration_ids()`; no single one of the three
+  `settings.get_credential_set()` and `settings.resolve_integrations()`; no single one of the three
   fields is unique on its own.
 
 ### base_url (Paymob Credential Set)
@@ -439,36 +439,30 @@ the report is the canonical open-item count.
 ### Capture controls
 
 **Functional:** Staff can see an authorization awaiting capture and cannot double-submit it.
+Whether a checkout charges immediately or holds is set once, in Paymob Settings — never on the
+Payment Request, and never by the payer.
 
 **Technical:** `Paymob Payment Attempt.capture_requested_at` is a nullable, read-only `Datetime`, set under
 the request lock and cleared only by a verified Capture callback. `Paymob Integration ID.capture_mode`
-mirrors how that Integration ID is configured in Paymob's own dashboard — it is not a control. When a
-Payment Request asks for a hold (`paymob_authorize_only`), `paymob.settings.get_integration_ids` filters
-to rows whose `capture_mode` is `Authorize Only`, narrowing which integrations the checkout offers
-([ADR-0025](decisions.md#adr-0025--authorize-only-is-a-per-request-choice)). It still never determines
-attempt state — verified callback flags do that alone
+must match how that Integration ID is configured in Paymob's own dashboard, and every *enabled* row
+sharing a `(country, currency, mode)` must agree on it — a mixed group is refused both at save
+(`Paymob Settings.validate`) and at checkout (`paymob.settings.resolve_integrations`), since Paymob's
+hosted checkout would otherwise let the payer pick the outcome by which button they click. `_checkout`
+calls `resolve_integrations(country, currency)` to get that one agreed mode plus every enabled ID in
+the group. See [ADR-0027](decisions.md#adr-0027--capture-mode-is-a-paymob-settings-property). It still
+never determines attempt state — verified callback flags do that alone
 ([ADR-0022](decisions.md#adr-0022--callback-facts-determine-authorization-state)).
-
-### paymob_authorize_only (Payment Request)
-
-**Functional:** A merchant ticks "Authorize Only (Paymob)" on one Payment Request to get a hold
-instead of an immediate charge, without changing how every other payment is captured.
-
-**Technical:** A `Custom Field` (`Check`), added by the idempotent
-`add_authorize_only_field` patch via `create_custom_field`, `depends_on:
-eval:doc.payment_request_type=="Inward"`. Read once in `api._checkout`; both entry points — the
-Desk "Pay with Paymob" button and the signed payer link — funnel through that one function, so no
-extra client-side wiring is needed. See
-[ADR-0025](decisions.md#adr-0025--authorize-only-is-a-per-request-choice).
 
 ### authorize_only (Paymob Payment Attempt)
 
-**Functional:** Records whether this specific checkout attempt asked for a hold, even after the
-Payment Request itself is later edited.
+**Functional:** Records whether this specific checkout attempt was configured for a hold, even if
+Paymob Settings is later reconfigured to auto-capture.
 
-**Technical:** A read-only `Check`, snapshotted from `Payment Request.paymob_authorize_only` at
-`_create_attempt` time — the same reason `mode` and `country` are snapshotted there. Bookkeeping
-only: it never gates a state transition ([ADR-0022](decisions.md#adr-0022--callback-facts-determine-authorization-state)).
-`api._checkout`'s pending-attempt reuse path only reuses an attempt whose stored `authorize_only`
-matches the request's current flag. See
-[ADR-0025](decisions.md#adr-0025--authorize-only-is-a-per-request-choice).
+**Technical:** A read-only `Check`, snapshotted from the capture mode `_checkout` resolved via
+`settings.resolve_integrations` at `_create_attempt` time — the same reason `mode` and `country`
+are snapshotted there. Bookkeeping only: it never gates a state transition
+([ADR-0022](decisions.md#adr-0022--callback-facts-determine-authorization-state)). `api._checkout`'s
+pending-attempt reuse path only reuses an attempt whose stored `authorize_only` matches the mode
+currently configured — a merchant who reconfigures Paymob Settings after minting a payer link gets a
+fresh attempt, not the stale one. See
+[ADR-0027](decisions.md#adr-0027--capture-mode-is-a-paymob-settings-property).

@@ -262,6 +262,31 @@ state machine now, instead of waiting for the background job or Phase 10's polle
 
 ## Named error paths
 
+### No enabled Integration ID configured
+
+**Functional:** A checkout is refused, before Paymob is ever contacted, when nothing is configured
+for the merchant's country, currency, and mode.
+
+**Technical:** `paymob.settings.resolve_integrations` throws when no *enabled* `Paymob Integration
+ID` row matches `(country, currency, config.mode)`, naming all three in the message. There is no
+fallback to another mode or currency. See
+[ADR-0027](decisions.md#adr-0027--capture-mode-is-a-paymob-settings-property).
+
+### Mixed Capture Modes
+
+**Functional:** A group of Integration IDs that disagree on whether to charge immediately or hold
+is refused — both when a System Manager tries to save that configuration, and again at checkout
+for rows that reached the database some other way (fixture, console). Left unrefused, Paymob's
+hosted checkout would render one button per integration ID and let the **payer** decide whether
+their card is charged or held.
+
+**Technical:** `paymob.settings.capture_mode_for` throws when the enabled rows sharing one
+`(country, currency, mode)` carry more than one distinct `capture_mode`, naming the trio and both
+conflicting modes. Called from `Paymob Settings.validate` (blocks the save) and
+`paymob.settings.resolve_integrations` (blocks the checkout) — the same function, so the rule
+cannot drift between the two gates. See
+[ADR-0027](decisions.md#adr-0027--capture-mode-is-a-paymob-settings-property).
+
 ### HMAC verification failure
 
 **Functional:** A callback that can't be proven to come from Paymob is refused.

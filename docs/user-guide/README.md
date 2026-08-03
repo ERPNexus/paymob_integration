@@ -64,6 +64,31 @@ no authority to record a payment. The HMAC secret you paste into **HMAC Secret**
 one for that same Paymob account, or every callback from it is silently refused (rejected, no
 payment from that account ever recorded) with no explanation sent back to Paymob.
 
+### Charging now vs holding funds
+
+Each **Integration ID** row has a **Capture Mode**: **Auto Capture** charges the customer's card
+immediately, and **Authorize Only** places a hold that a Refund Manager later captures or releases
+by hand. Set the actual mode on the integration in your **Paymob dashboard first**, then mirror
+that same choice on the row here — the field does not change anything in Paymob, it only tells
+ERPNext what to expect.
+
+Every enabled row for the same country, currency, and mode must use the same Capture Mode. Paymob's
+hosted checkout offers every enabled row in the group as a separate payment button, so if some were
+Auto Capture and others Authorize Only, the *customer* — not you — would decide whether their card
+is charged or held, just by which button they click. To prevent that, Paymob Settings refuses to
+save a group with mixed modes, and refuses a checkout for one too. To switch a country from holding
+to charging immediately (or back), edit every enabled row in that group to agree.
+
+There is currently no way to choose the mode per individual Payment Request — the configured mode
+applies to every payment in that country, currency, and mode.
+
+When a Payment Request is configured for **Authorize Only**, a completed checkout lands the
+attempt on **Authorized** instead of **Paid**: the customer's card is held, but no Payment Entry
+is posted yet. A user with the **Paymob Refund Manager** role's `refund` permission sees **Capture**
+and **Void** buttons on that attempt — **Capture** collects the held amount and posts the Payment
+Entry, **Void** releases the hold without collecting anything. Once an attempt is **Paid**, only
+**Refund** is offered; a charge is refunded, never voided.
+
 ### Testing your setup
 
 Click **Test Connection**, choose a currency, and wait for a green success message. This proves

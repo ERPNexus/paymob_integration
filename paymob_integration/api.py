@@ -148,11 +148,14 @@ def start_checkout(payment_request: str):
 def _checkout(request, reuse_pending=False):
 	"""Create, or safely reuse, the hosted checkout for a submitted request."""
 	_validate_payable(request)
-	authorize_only = bool(request.get("paymob_authorize_only"))
+	source = frappe.get_doc(request.reference_doctype, request.reference_name)
+	country = _merchant_country(request, source)
+	capture_mode, integration_ids = settings.resolve_integrations(country, request.currency)
+	authorize_only = capture_mode == "Authorize Only"
 	if reuse_pending:
 		attempt = _active_attempt(request.name)
-		# A merchant who ticks the box after an earlier click must not be handed back the old
-		# auto-capture checkout — and vice versa.
+		# Settings changed since the payer's link was minted: hand them a checkout that matches
+		# the configured mode, not the stale one.
 		if attempt and bool(attempt.authorize_only) == authorize_only:
 			credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
 			return {
@@ -160,11 +163,8 @@ def _checkout(request, reuse_pending=False):
 				"checkout_url": build_checkout_url(credentials, attempt.get_password("client_secret")),
 			}
 
-	source = frappe.get_doc(request.reference_doctype, request.reference_name)
-	country = _merchant_country(request, source)
 	credentials = settings.get_credential_set(country, request.currency)
 	attempt = _create_attempt(request, credentials, _contact_email(request, source), authorize_only)
-	capture_mode = "Authorize Only" if authorize_only else None
 	result = intention.create_intention(
 		credentials,
 		amount_cents=attempt.expected_amount_cents,
@@ -175,7 +175,7 @@ def _checkout(request, reuse_pending=False):
 		notification_url=get_url(WEBHOOK_PATH),
 		redirection_url=get_url(RESULT_PATH),
 		expiration=settings.get_settings().intention_expiration_seconds,
-		capture_mode=capture_mode,
+		integration_ids=integration_ids,
 	)
 	attempt.update(
 		{

@@ -10,6 +10,14 @@ from paymob_integration.paymob import auth, client, settings
 
 
 class PaymobSettings(Document):
+	def validate(self):
+		groups = {}
+		for row in self.integration_ids:
+			if row.enabled:
+				groups.setdefault((row.country, row.currency, row.mode), []).append(row)
+		for (country, currency, mode), rows in groups.items():
+			settings.capture_mode_for(rows, country, currency, mode)
+
 	def on_update(self):
 		notifications.sync_enabled(self.send_status_emails)
 

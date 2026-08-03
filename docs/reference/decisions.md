@@ -483,8 +483,10 @@ Payment Request, while Frappe's configured Email Account supplies the delivery i
 
 **Functional:** Merchant intent never overrides what Paymob verified happened to the money.
 
-**Technical:** `capture_mode` is inert documentation. Verified `Auth` and `Capture` callbacks map to
-`Authorized` and `Paid` respectively.
+**Technical:** `capture_mode` selects which integrations a checkout offers
+([ADR-0027](#adr-0027--capture-mode-is-a-paymob-settings-property)), but it is not a lifecycle
+control: verified `Auth` and `Capture` callbacks alone map to `Authorized` and `Paid` respectively,
+regardless of what was configured or requested.
 
 ## ADR-0023 — Capture is full amount only
 
@@ -512,6 +514,12 @@ The payer-facing lifecycle mail after that point belongs to the seeded Notificat
 `send_status_emails`.
 
 ## ADR-0025 — Authorize-only is a per-request choice
+
+**Status:** Superseded by [ADR-0027](#adr-0027--capture-mode-is-a-paymob-settings-property). A
+mixed Integration ID group let the *payer* choose the checkout's capture mode by picking which
+button to click — the per-request field never controlled that group, only which subset of
+integrations was offered. Kept here for history; `Payment Request.paymob_authorize_only` no
+longer exists.
 
 **Functional:** A merchant can ask for a hold instead of an immediate charge on one Payment
 Request, without changing how every other payment on the account is captured.
@@ -554,3 +562,35 @@ The second half is a narrowing of the outbound void only: `api.request_void` req
 `Authorized`, and `payment_request.js` offers Capture + Void on `Authorized` and Refund alone on
 `Paid`/`Partially Refunded`. The inbound `Void` branch and `states.LEGAL["Paid"] → "Voided"` are
 deliberately untouched — a void taken in Paymob's dashboard must still post its reversal here.
+
+## ADR-0027 — Capture mode is a Paymob Settings property
+
+**Functional:** Whether a country/currency charges immediately or places a hold is decided once,
+in Paymob Settings, by whoever configures the integration — never by the payer, and never by a
+per-Payment-Request choice.
+
+**Technical:**
+- **Context:** [ADR-0025](#adr-0025--authorize-only-is-a-per-request-choice) read a per-request
+  checkbox and used it only to *narrow* which `Paymob Integration ID` rows a checkout offered.
+  When a country/currency group held both an `Auto Capture` row and an `Authorize Only` row —
+  the ordinary case, since nothing stopped it — the unchecked default sent every row to Paymob's
+  hosted checkout, which renders one button per integration ID. The **payer**, not the merchant,
+  ended up deciding whether their card was charged or held, by which button they clicked. The
+  checkbox itself was also unusable in practice: added by patch, read nowhere in JS, and
+  unreachable once the Payment Request was submitted.
+- **Decision:** Every *enabled* `Paymob Integration ID` row sharing a `(country, currency, mode)`
+  must carry the same `capture_mode`. `paymob.settings.resolve_integrations(country, currency)`
+  returns that one agreed mode plus every enabled ID in the group — still every payment method
+  (card, wallet, kiosk) offered, just all settling the same way. A mixed group is refused twice:
+  at save (`Paymob Settings.validate`) and again at checkout
+  (`resolve_integrations`, for rows that arrived by fixture or console and were never saved
+  through the form). Both call the same `paymob.settings.capture_mode_for`, so the message and the
+  rule can never drift between the two gates. `Payment Request.paymob_authorize_only` is deleted;
+  there is no per-request override.
+- **Consequences / why:** a checkout can no longer offer two different settlement outcomes side
+  by side — the configured mode is the only mode. `capture_mode` moves from inert documentation
+  ([ADR-0022](#adr-0022--callback-facts-determine-authorization-state)) to an actual selection
+  control, while still never gating lifecycle *state* — verified `Auth`/`Capture` callbacks alone
+  do that, unchanged. Switching a country back to immediate charging means editing those
+  Integration ID rows, not touching a Payment Request. A per-request override remains a roadmap
+  item, not V1.
