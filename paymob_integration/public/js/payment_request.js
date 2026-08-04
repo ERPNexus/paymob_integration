@@ -22,7 +22,7 @@ function add_action_buttons(frm) {
 		.get_list("Paymob Payment Attempt", {
 			filters: {
 				payment_request: frm.doc.name,
-				state: ["in", ["Authorized", "Paid", "Partially Refunded"]],
+				state: ["in", ["Paid", "Partially Refunded"]],
 			},
 			fields: ["name", "state", "expected_amount_cents", "refunded_amount_cents"],
 			order_by: "creation desc",
@@ -80,25 +80,6 @@ function add_checkout_button(frm) {
 }
 
 function add_refund_buttons(frm, attempt) {
-	if (attempt.state === "Authorized") {
-		frm.add_custom_button(__("Capture"), () => {
-			frappe.call({
-				method: "paymob_integration.api.request_capture",
-				args: { attempt: attempt.name },
-				freeze: true,
-				freeze_message: __("Requesting Paymob capture..."),
-			});
-		});
-		frm.add_custom_button(__("Void"), () => {
-			frappe.call({
-				method: "paymob_integration.api.request_void",
-				args: { attempt: attempt.name },
-				freeze: true,
-				freeze_message: __("Requesting Paymob void..."),
-			});
-		});
-		return;
-	}
 	const remaining = attempt.expected_amount_cents - (attempt.refunded_amount_cents || 0);
 	frm.add_custom_button(__("Refund"), () => {
 		frappe.prompt(

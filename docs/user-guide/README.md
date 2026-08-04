@@ -17,7 +17,7 @@ to find the value in your Paymob dashboard.
 
 A word on "**Enabled**": you will see this same checkbox three times — once here, once on each
 credential row, and once on each payment-method row. They do not all mean the same thing. This one
-turns Paymob off *everywhere*, including checkout, capture, refund, void, callbacks, scheduled
+turns Paymob off *everywhere*, including checkout, refunds, callbacks, scheduled
 reconciliation, and their Payment Request buttons. Turning off one credential row below only turns
 off *that one country*. Turning off one payment-method row only turns off *that one payment method*.
 
@@ -65,30 +65,12 @@ no authority to record a payment. The HMAC secret you paste into **HMAC Secret**
 one for that same Paymob account, or every callback from it is silently refused (rejected, no
 payment from that account ever recorded) with no explanation sent back to Paymob.
 
-### Charging now vs holding funds
+### Immediate payments
 
-Each **Integration ID** row has a **Capture Mode**: **Auto Capture** charges the customer's card
-immediately, and **Authorize Only** places a hold that a Refund Manager later captures or releases
-by hand. Set the actual mode on the integration in your **Paymob dashboard first**, then mirror
-that same choice on the row here — the field does not change anything in Paymob, it only tells
-ERPNext what to expect.
-
-Every enabled row for the same country, currency, and mode must use the same Capture Mode. Paymob's
-hosted checkout offers every enabled row in the group as a separate payment button, so if some were
-Auto Capture and others Authorize Only, the *customer* — not you — would decide whether their card
-is charged or held, just by which button they click. To prevent that, Paymob Settings refuses to
-save a group with mixed modes, and refuses a checkout for one too. To switch a country from holding
-to charging immediately (or back), edit every enabled row in that group to agree.
-
-There is currently no way to choose the mode per individual Payment Request — the configured mode
-applies to every payment in that country, currency, and mode.
-
-When a Payment Request is configured for **Authorize Only**, a completed checkout lands the
-attempt on **Authorized** instead of **Paid**: the customer's card is held, but no Payment Entry
-is posted yet. A user with the **Paymob Refund Manager** role's `refund` permission sees **Capture**
-and **Void** buttons on that attempt — **Capture** collects the held amount and posts the Payment
-Entry, **Void** releases the hold without collecting anything. Once an attempt is **Paid**, only
-**Refund** is offered; a charge is refunded, never voided.
+Every enabled **Integration ID** must be configured in the Paymob dashboard for immediate or
+standalone payment. A verified standalone success moves the attempt to **Paid** and creates one
+allocated Payment Entry. Unsupported signed events are stored for review and do not change money
+or state.
 
 ### Testing your setup
 
@@ -114,7 +96,7 @@ Settings to disable this site-wide, or use the request's existing **Mute Email**
 
 Paymob payment alerts are editable native **Notifications**. Open **Notifications** in Desk to edit their
 recipients, content, or enabled state. They are on by default for payment received, failure, expiry,
-refunds, review-needed audit entries, and refund/void request activity. The linked Payment
+refunds, review-needed audit entries, and refund request activity. The linked Payment
 Request's Company appears in customer-facing email branding; your configured site **Email Account**
 controls the actual From address and display name.
 
@@ -148,7 +130,7 @@ Paymob cannot be reached, the payment is simply checked again at the next 15-min
 ## Refund a Paymob payment
 
 A user granted **Paymob Refund Manager** can open a paid Payment Request and choose **Refund**
-(full or partial) or **Void**. ERPNext sends one request to Paymob, then waits for Paymob's signed
+(full or partial). ERPNext sends one request to Paymob, then waits for Paymob's signed
 confirmation before posting the reversing entry. If a request remains in progress after a network
 error, do not send it again: Paymob may still have received it. Review the linked audit entry.
 

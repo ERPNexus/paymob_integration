@@ -15,8 +15,8 @@ class TestNotifications(UnitTestCase):
 		self.assertTrue(all(spec["recipients"] for spec in specs))
 		self.assertTrue(all(spec["channel"] == "Email" and spec["message_type"] == "HTML" for spec in specs))
 		self.assertNotIn("Paymob Webhook Missed - Poller Recovered", {spec["name"] for spec in specs})
-		activity = next(spec for spec in specs if spec["name"] == "Paymob Refund or Void Activity")
-		self.assertEqual(activity["condition"], "doc.event in ('Refund Requested', 'Void Requested')")
+		activity = next(spec for spec in specs if spec["name"] == "Paymob Refund Activity")
+		self.assertEqual(activity["condition"], "doc.event == 'Refund Requested'")
 
 	def test_design_rule_is_registered(self):
 		root = Path(__file__).parents[2]

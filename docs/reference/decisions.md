@@ -1,671 +1,84 @@
 # Decisions (ADRs)
 
-The *why* behind non-obvious choices. Newest entries appended with the next number. Format:
-context → decision → consequences. Governed by [../../rules/documentation.md](../../rules/documentation.md).
-
----
-
-### ADR-0001 — Ledger writes are triggered only by the server-to-server processed callback
-
-**Date:** 2026-07-21 · **Status:** Accepted
-
-**Functional:** The customer's browser never causes money to be recorded. Even if the customer
-closes the browser, the payment is still recorded correctly.
-
-**Technical:**
-- **Context:** After checkout, ERPNext receives payment info via **two independent channels** —
-  a server-to-server **processed callback** (POST from Paymob) and a **response callback**
-  (a GET the customer's browser makes). Both can carry a valid HMAC.
-- **Decision:** Only the **processed callback** may trigger a Payment Entry. The browser
-  response callback is **UX only** — it shows a result page and writes nothing to the ledger.
-- **Consequences / why:**
-  - *Reliability:* the server-to-server channel is guaranteed to arrive; the browser channel can
-    be closed or interrupted.
-  - *Security:* the browser channel runs on the user's device and can be **replayed** — a valid
-    HMAC proves "Paymob said this once," not that it is fresh or for this order. A captured
-    old success could be replayed against a new order if the browser callback were trusted.
-  - The result page must therefore be **generic** ("we're confirming…"), because the browser
-    can arrive before the processed callback finishes — the two channels can race.
-
----
-
-### ADR-0002 — Server-only credentials never reach the browser
-
-**Date:** 2026-07-21 · **Status:** Accepted
-
-**Functional:** Only two harmless identifiers are ever sent to the customer's browser; the
-credentials that could forge payments stay on the server.
-
-**Technical:**
-- **Context:** Paymob issues secret key, API key, HMAC secret, public key, and a per-checkout
-  client secret. The question at every step is *does this run on our server or in the browser?*
-- **Decision:**
-  - **Browser-safe:** `public key` (identifies the merchant only) + `client secret` (unlocks one
-    checkout session only).
-  - **Server-only, never exposed:** `secret key` (create intention), `API key` (→ auth token →
-    inquiry), `HMAC secret` (verify callbacks).
-- **Consequences / why:** exposing any server-only credential enables forged payments or forged
-  server requests. A leaked client secret risks a single session, not the account. Reviewers must
-  **reject** any generated code that sends a server-only credential to the browser.
-
----
-
-### ADR-0003 — Authentic amount mismatch is audited, never auto-posted
-
-**Date:** 2026-07-21 · **Status:** Accepted
-
-**Functional:** If Paymob authentically reports a different amount than we expected, we do not
-silently accept it — a human reviews it before it hits the books.
-
-**Technical:**
-- **Context:** A callback can be authentic (valid HMAC) yet report an amount ≠ the immutable
-  amount snapshotted at intention creation. Authenticity ≠ business correctness.
-- **Decision:** Preserve and audit the authentic mismatch, **block automatic Payment Entry
-  creation**, and raise the [`needs_human_attention`](states.md#needs_human_attention) flag. The
-  lifecycle state is not regressed.
-- **Consequences / why:** protects the ledger from posting the wrong amount while still keeping a
-  full, tamper-evident record for reconciliation.
-- **Implementation:** `paymob.processor.process_transaction` (Phase 07), gated to `target ==
-  "Paid"` only — a `Refund` carries a deliberately partial amount and is not compared here.
-  `amounts.amounts_match` takes both amounts *and* both currencies, since the right number in the
-  wrong currency is a mismatch too. A mismatch sets `attempt.needs_human_attention = 1` and writes
-  one `Amount Mismatch` audit entry with both cents and both currencies; the lifecycle state still
-  advances to `Paid` per [states.md](states.md#needs_human_attention) — the flag is orthogonal, not
-  a regression. No Payment Entry exists yet to block; that gate is
-  [ADR-0008](#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check),
-  reading this flag.
-
----
-
-### ADR-0008 — The in-memory `payment_account` assignment and a post-hoc amount check
-
-**Date:** 2026-07-27 · **Status:** Accepted
-
-**Functional:** The clearing account a Paymob payment lands in comes from the Paymob credential
-configuration, not from a value stored on the Payment Request itself — and the posted amount is
-checked against what Paymob actually confirmed, even though ERPNext computes it independently.
-
-**Technical:**
-- **Context:** `PaymentRequest.create_payment_entry(submit=True)` reads `self.payment_account` as
-  the `bank_account` argument to `get_payment_entry(...)`
-  (`erpnext/accounts/doctype/payment_request/payment_request.py:348`), then calls
-  `_allocate_payment_request_to_pe_references` (`:505`, which sets
-  `references[0].payment_request = self.name`) and submits. `Paymob Credential Set.payment_account`
-  is the only place this app stores a clearing account (ADR-0010); the Payment Request DocType has
-  no field for it.
-- **Decision:** `paymob.ledger.post_payment` fetches the Payment Request with `for_update=True`
-  before its duplicate-Payment-Entry lookup, then sets `payment_request.payment_account =
-  credentials.payment_account` on the **in-memory** document, immediately before calling
-  `create_payment_entry(submit=True)`, and never saves that assignment. It then compares the
-  posted amount (converted to minor units) against `transaction.amount_cents` and raises — rolling
-  back the whole write — on any mismatch. The posted amount is read from whichever Payment Entry
-  side is actually denominated in `transaction.currency` — `received_amount`
-  (`paid_to_account_currency`, the clearing-account side this decision just set) if that matches,
-  else `paid_amount` (`paid_from_account_currency`, the party/company side) — not `paid_amount`
-  unconditionally, because the two differ whenever the Payment Request's party account isn't in
-  the Payment Request's own currency.
-- **Consequences / why:** `create_payment_entry` posts `self.outstanding_amount`, read *at call
-  time*, not `attempt.expected_amount_cents` (a snapshot from intention creation, already checked
-  by [ADR-0003](#adr-0003--authentic-amount-mismatch-is-audited-never-auto-posted)). If the Payment
-  Request's outstanding amount moved between checkout and settlement — a partial cash payment, a
-  credit note — the two snapshots can legitimately disagree even on an authentic, amount-matched
-  callback. The post-hoc check is what actually guarantees "the ledger entry equals what Paymob
-  collected" in production, not just in a test where nothing else touches the Payment Request in
-  between. `PaymentEntry.update_payment_requests` (`payment_entry.py:320`) derives Payment Request
-  status from the submission itself — nothing in this app writes it directly.
-  The `for_update` lock on the Payment Request (not just the caller's lock on the attempt) is what
-  serialises two different attempts of the *same* Payment Request: a retry is a new attempt row
-  (rules/payments.md), so `frappe.get_doc(..., for_update=True)` on the attempt alone does not
-  block a second, concurrent verified success for a sibling attempt from reaching the duplicate
-  check before the first one's Payment Entry is visible.
-
----
-
-### ADR-0010 — The `payments` app is not a dependency
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** Installing this app does not require installing another payment app.
-
-**Technical:**
-- **Context:** ERPNext's Payment Request gateway machinery resolves controllers through the
-  `Payment Gateway` DocType in the separate `payments` app, which is not installed on this bench.
-- **Decision:** Drive Payment Requests directly. Paymob configuration lives in `Paymob Settings`,
-  and `Paymob Credential Set.payment_account` supplies the clearing account.
-- **Consequences / why:** this removes a dependency and indirection. Phase 02 supplies the
-  Pay with Paymob button; installing `payments` later does not conflict with this setup.
-
----
-
-### ADR-0004 — Lifecycle state lives on a Paymob Payment Attempt, not on the Payment Request
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** A declined checkout stays visible while the customer starts a separate retry.
-
-**Technical:** One `Paymob Payment Attempt`, named by its unique `special_reference`, stores the
-frozen amount, state, and Paymob identifiers for each checkout. Payment Request status remains
-derived from submitted Payment Entries. This preserves retry history and makes the unique reference
-the outbound correlation guarantee.
-
----
-
-### ADR-0011 — The result page resolves the credential set before verifying the redirect signature
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** The result page can find the right secret to check, for every country Paymob
-accounts are configured in, without guessing.
-
-**Technical:**
-- **Context:** `rules/implementation-gate.md` §2 requires verification before any database
-  access. But the HMAC secret is stored per country/currency on `Paymob Credential Set`, and the
-  only place that pairing is recorded for a given checkout is the `Paymob Payment Attempt` row
-  itself — there is no way to pick the right secret without a lookup first.
-- **Decision:** Load the attempt with a read-only `frappe.db.get_value` (four non-sensitive
-  columns, no `get_doc`, no `client_secret`), resolve its credential set, then verify. The
-  alternative — trial-verifying the signature against every enabled credential set until one
-  matches — still reads the database (every row instead of one) and adds branching for no
-  security benefit, since a wrong-secret trial and a genuine forgery look identical either way.
-- **Consequences / why:** the exception is bounded to this page, which has no ledger authority
-  (ADR-0001) and performs no write in any branch. It does not license "load then verify" on any
-  path that can move money — those paths still verify strictly first, per gate §2.
-
----
-
-### ADR-0005 — The dedup key is the row's own primary key, not a separate unique column
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** The same webhook delivered twice never creates two records — Frappe's own
-document-name uniqueness is the guarantee, not application code.
-
-**Technical:**
-- **Context:** `plans/05-transaction-record-and-dedup.md` called for a unique column holding
-  `"<transaction_id>:<event_kind>"`. In Frappe a unique **field** collision raises
-  `frappe.UniqueValidationError`; only a **primary-key** collision raises
-  `frappe.DuplicateEntryError`, the exception `webhooks._store` is written to catch. A unique
-  field would also add a second index for the same fact the primary key already indexes.
-- **Decision:** `PaymobTransaction.autoname()` sets `self.name = f"{paymob_transaction_id}:
-  {event_kind}"` directly — no `event_key` field exists on the DocType. `SHOW INDEX FROM
-  \`tabPaymob Transaction\`` shows one `PRIMARY` index and nothing else.
-- Also decided here: **`Pending` is a seventh event kind**, not folded into `Success`. Paymob's
-  wallet/kiosk flow can send `pending: true, success: true`, followed later by a real settlement
-  for the same transaction id. Classifying both as `Success` would give them the same computed
-  name and silently swallow the settlement as a "duplicate."
-- Also decided here: **`Refund`'s key includes `refunded_amount_cents`** —
-  `f"{paymob_transaction_id}:Refund:{refunded_amount_cents}"`. Paymob resends the *same* parent
-  transaction id for each cumulative partial refund with a growing `refunded_amount_cents`
-  (`plans/11-refund-and-void.md`); keying on `event_kind` alone would collapse the second partial
-  refund into the first's row instead of recording it. An exact resend (identical amount) still
-  dedups correctly.
-- **Consequences / why:** one index instead of two, the app's actual duplicate-guard exception
-  matches the one `rules/payments.md` §6 names, a genuine settlement arriving after a pending
-  notification is never lost, and cumulative partial refunds are never silently dropped.
-
----
-
-### ADR-0007 — Persist-then-acknowledge: the `200` means committed
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** When Paymob's servers get a `200` back from the processed callback, the payment
-event is already safely on disk — not just "read."
-
-**Technical:**
-- **Context:** Before this phase, `processed_callback` verified the HMAC and returned `"ok"`
-  without writing anything — the `200` meant "we read it," not "we kept it." Paymob's webhook
-  retry behaviour is undocumented and assumed to be zero (`plans/README.md`, decision 4), so a
-  lost event between verification and storage had no other safety net.
-- **Decision:** `webhooks._store` inserts the `Paymob Transaction` row and calls
-  `frappe.db.commit()` **before** `processed_callback` returns `"ok"`. A duplicate delivery
-  (`frappe.DuplicateEntryError`) also returns `"ok"` — the row already exists, so there is nothing
-  left to acknowledge differently. Any other exception during insert is left to propagate: Frappe
-  rolls back and the response is a 5xx, so Paymob (or the Phase 10 poller) retries.
-- **Consequences / why:** the only exception `_store` catches is `frappe.DuplicateEntryError` — a
-  broader `except` would silently swallow a real persistence failure while still telling Paymob
-  "got it," burying the one event that needed to be kept. Because Paymob's own retry behaviour
-  cannot be relied on, the Phase 10 poller is the real safety net for a delivery that gets a 5xx.
-
----
-
-### ADR-0006 — The processed callback is the app's only `allow_guest=True` method
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** Paymob's servers can tell us a payment succeeded without a customer being logged
-in to ERPNext — because the message never comes from a customer's browser.
-
-**Technical:**
-- **Context:** `rules/payments.md` rule 17 makes `allow_guest=True` on a money-moving method an
-  automatic reject, because a guest endpoint has no permission check to lean on. The processed
-  callback is money-moving (ADR-0001: it is the *only* channel with ledger authority) and must be
-  `allow_guest=True`, because Paymob's servers hold no Frappe session and can never obtain one.
-- **Decision:** This is the one deliberate, narrow exception. It is safe because the endpoint does
-  no work "as" any identity — it does not read, write, or return anything document-specific until
-  the HMAC-SHA512 signature is verified, and the signature *is* the authentication. Every other
-  money-moving `@frappe.whitelist()` method in the app checks permission on the document first, as
-  rule 17 requires.
-- Resolving the HMAC secret reads `Paymob Settings` (`settings.enabled_credential_sets()`)
-  *before* verification succeeds or fails. This looks like it violates gate §2 ("verify before any
-  database access"), but it does not: §2 forbids reading the **business document the payload
-  names** before verification — here, no attempt, Payment Request, or any payload-named document
-  is loaded. Reading **configuration to obtain the key needed to verify** is part of verifying, not
-  a bypass of it. This is narrower than [ADR-0011](#adr-0011--the-result-page-resolves-the-credential-set-before-verifying-the-redirect-signature),
-  which reads one payload-named attempt row before verifying on a page with no ledger authority at
-  all — the processed callback loads no attempt here, in this phase or any later one, until after
-  a matching secret is found.
-- **Consequences / why:** a forgery matches no configured secret and is refused with a `401` that
-  carries no explanation and touches no document. A genuine callback matches exactly one
-  credential set, at which point acting "as" the merchant account that set matches is exactly what
-  should happen. No other endpoint in this app may follow this pattern.
-
----
-
-### ADR-0009 — Audit entries are submittable and immutable; a resolution is an append via `supersedes`
-
-**Date:** 2026-07-26 · **Status:** Accepted
-
-**Functional:** A record of "something needed a human's attention" can never be quietly edited or
-deleted afterward — including by the person who resolves it. Resolving one writes a *new* record
-that points back at the original.
-
-**Technical:**
-- **Context:** [`rules/audit-trail.md`](../../rules/audit-trail.md) requires that audit records
-  are immutable and that "a correction is a new record that refers to the earlier one." A
-  permission table (no `write`/`delete` role) can always be loosened by a future change or an
-  administrator; it is discipline, not a guarantee.
-- **Decision:** `Paymob Audit Entry` is `is_submittable: 1` with **no `amended_from` field** in
-  its DocType JSON. Frappe's DocType-sync path (`frappe.modules.import_file.import_doc`) loads
-  fixture JSON with `flags.ignore_validate = True`, so the framework's usual "add `amended_from`
-  when `is_submittable`" step (`DocType.make_amendable`) never runs for a doctype whose schema is
-  shipped this way — the field stays absent, and with no `amended_from` there is no Amend action
-  to offer. Frappe itself refuses to write a submitted (`docstatus = 1`) document at the ORM
-  level (`UpdateAfterSubmitError`), which is a stronger guarantee than a permission row an
-  administrator could edit. No role is granted `write`, `delete`, `submit`, `cancel`, or `amend`
-  on the doctype at all — every entry is inserted and submitted by server code
-  (`paymob.audit.record`, see [ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module))
-  with `ignore_permissions=True`, and a resolution is recorded by inserting a **new** entry whose
-  `supersedes` field names the one it resolves.
-- **Decision:** The "needs action" view (`Paymob Open Audit Entries`) is a **Script Report**, not
-  a Query Report as the Phase 06 outline suggested. The reason a *report* is needed at all is
-  unchanged from the outline — a list filter cannot express "has no superseding record" — but the
-  anti-join (collect every `supersedes` target, then exclude those names from the
-  `needs_action = 1` rows) is four lines of `frappe.get_all` with no SQL string, which keeps
-  [`rules/frappe-discipline.md`](../../rules/frappe-discipline.md)'s "no raw SQL that writes" (and
-  the spirit of "no unexplained SQL" generally) clean and is directly unit-testable.
-- **Consequences / why:** grepping for "who creates a Paymob Audit Entry" returns one function
-  (`paymob.audit.record`), matching the single-write-path discipline used for Payment Entries. The
-  immutability guarantee holds even against a compromised or careless server-side caller, because
-  it is enforced by `docstatus`, not by remembering not to call `.save()` on a submitted doc.
-
----
-
-### ADR-0012 — The audit writer moved to its own module
-
-**Date:** 2026-07-27 · **Status:** Accepted
-
-**Functional:** Nothing changes for anyone reading an audit entry; this is about where the code
-that writes one lives.
-
-**Technical:**
-- **Context:** [ADR-0009](#adr-0009--audit-entries-are-submittable-and-immutable-a-resolution-is-an-append-via-supersedes)
-  declares `processor._audit` the one function that creates `Paymob Audit Entry` rows. Phase 09's
-  duplicate-payment guard needs to write one from `paymob.ledger` — which `processor.py` already
-  imports (to call `post_payment`), so `ledger.py` importing back would be circular.
-- **Decision:** Extract the function verbatim into `paymob.audit::record(txn, attempt, event,
-  needs_action, description, actor, **amounts_fields)`, imported by both `processor.py` and
-  `ledger.py`. `actor` becomes a required parameter instead of a hardcoded string — each of
-  `processor.py`'s three call sites passes
-  `"paymob_integration.paymob.processor.process_transaction"` explicitly (the same value it got
-  implicitly before), and `ledger.py`'s call site passes
-  `"paymob_integration.paymob.ledger.post_payment"`.
-- **Consequences / why:** "one function creates audit entries" (ADR-0009) stays literally true
-  across two call sites instead of becoming two functions with the same shape. Every future caller
-  of `post_payment` — the Phase 10 poller, the Phase 11 refund path — inherits the duplicate-audit
-  behaviour and the shared writer for free, instead of each having to remember to write one.
-  Proven behaviour-preserving: `test_processor.py` passed unchanged before any new duplicate-guard
-  code was added on top of the move.
-
-### ADR-0013 — `process_transaction` runs as Administrator, and gets a manual rescue button
-
-**Date:** 2026-07-27 · **Status:** Accepted
-
-**Functional:** A Paymob Transaction stuck at "Processed: No" can be manually re-driven from its
-Desk form with a **Process** button, visible to whoever can already read that doctype (System
-Manager, Accounts Manager).
-
-**Technical:**
-- **Context:** [ADR-0006](#adr-0006--the-processed-callback-is-the-apps-only-allow_guesttrue-method)
-  makes `webhooks.processed_callback` the app's only `allow_guest=True` method. `frappe.enqueue`
-  inherits the calling request's user, so the job it schedules for `processor.process_transaction`
-  starts as `Guest`. Live traffic confirmed the failure mode: ERPNext's `create_payment_entry` →
-  `get_payment_reference_details` calls `frappe.has_permission(reference_doctype, "read", ...,
-  throw=True)` on the Sales Invoice — a check no `ignore_permissions=True` on our own document
-  saves can reach, because it fires inside ERPNext core, not our code. Guest has no such
-  permission, the job raised `PermissionError`, and the transaction was left at `processed = 0`
-  with the attempt stuck `Pending` forever — silently, since RQ marks the job failed and nothing
-  polls for that failure yet (that's Phase 10).
-- **Decision:** `process_transaction` sets `frappe.session.user = "Administrator"` for its
-  duration (restored in a `finally`), regardless of who enqueued it. The data it acts on is
-  already HMAC-verified server-to-server fact (ADR-0006), not a user-supplied request, so a
-  privileged system actor is correct here the same way `ignore_permissions=True` already is on
-  every write in this module. Separately, `paymob_transaction.process(name)` is a whitelisted
-  rescue: it checks `frappe.get_doc("Paymob Transaction", name).check_permission("read")` — the
-  DocType's own `permissions` list is the source of truth for who may press the button, not a
-  hardcoded role list that could drift from `paymob_transaction.json` — then calls
-  `processor.process_transaction`. It is not a retry of a Paymob API call (rules/payments.md still
-  forbids auto-retrying capture/refund/void); it is a human re-running our own idempotent
-  consumption of a row already durably stored, safe because `process_transaction` no-ops on
-  `processed = 1`.
-- **Consequences / why:** Every future background job enqueued from the guest webhook — the
-  Phase 10 poller's write path, the Phase 11 refund/void consumer — needs the same privileged-actor
-  treatment; this is the first. The mechanism is `paymob.session.as_administrator()`
-  (issue #8), not a bare `set_user`/`finally` pair: a bare pair is safe in the RQ job this ADR was
-  written for, which has no live session to protect, but the same code also runs synchronously
-  inside the Desk button's HTTP request and inside `paymob_pay.py`'s web request, where
-  `frappe.set_user` stamps `session.sid` to the *username* and empties `session.data` on its way
-  out — corrupting the caller's real session and logging them out on their very next request.
-  `as_administrator()` saves and restores what `set_user` clobbers; every request-reachable
-  privilege switch in this app goes through it. The button is a stopgap for exactly the gap
-  Phase 10's poller is meant to close automatically; it does not replace that phase, it covers the
-  interval until it exists.
-
----
-
-### ADR-0014 — Only an answered inquiry may expire an attempt
-
-**Date:** 2026-07-28 · **Status:** Accepted
-
-**Functional:** A checkout is only ever declared abandoned when Paymob has actually confirmed
-there is nothing there — never because the network was slow or the connection failed.
-
-**Technical:**
-- **Context:** A 401 (expired auth token) and a genuinely expired checkout intention are two
-  different kinds of "expired" that must never share a code path
-  ([rules/implementation-gate.md](../../rules/implementation-gate.md) §11). Both can arrive at
-  `paymob.tasks._reconcile` for the same stale attempt, and confusing the two would let a
-  transient auth-token expiry or a timeout wrongly kill a payment that is still very much alive.
-- **Decision:** `tasks._expire_if_due` is reachable from exactly one place: the `None` return of
-  `tasks._inquire`, which only happens when Paymob answers with an HTTP 404 ("no transaction for
-  this reference"). Every other failure — a timeout (`client.PaymobNetworkError`), a 5xx, or a
-  second 401 — propagates as an exception out of `_inquire`, through `_reconcile`'s `finally`
-  (which only updates the bookkeeping `last_polled_at`), to the batch loop's
-  `except client.PaymobError`, which logs and leaves the attempt `Pending` for the next run.
-  `_expire_if_due` additionally requires `attempt.expires_at` to be set and in the past — a 404
-  before expiry just means "still checking," not "abandoned."
-- **Consequences / why:** An attempt can only ever move to `Expired` when Paymob has *positively
-  confirmed* no transaction exists for that reference, past its own deadline. A flaky network or
-  an expired auth token — Paymob-side housekeeping, not a customer decision — can never be
-  mistaken for a customer walking away. Proven by
-  `test_a_network_failure_never_expires_an_attempt`: an attempt with `expires_at` in the past,
-  facing a timeout, still ends the test `Pending`.
-
----
-
-### ADR-0015 — One writer for the Paymob Transaction log
-
-**Date:** 2026-07-28 · **Status:** Accepted
-
-**Functional:** Nothing changes for anyone reading a Paymob Transaction row; this is about where
-the code that writes one lives — the same discipline already applied to the ledger
-([ADR-0008](#adr-0008--the-in-memory-payment_account-assignment-and-a-post-hoc-amount-check)) and
-the audit trail ([ADR-0012](#adr-0012--the-audit-writer-moved-to-its-own-module)).
-
-**Technical:**
-- **Context:** Before Phase 10, `webhooks._store`/`webhooks._redact` were the only writer of a
-  Paymob Transaction row, private to the webhook module. Phase 10's poller needs to write the
-  identical row shape from a completely different trigger (Transaction Inquiry, not a webhook),
-  and duplicating the insert logic in `tasks.py` would leave two places that could drift on field
-  list, redaction, or the duplicate-delivery guard.
-- **Decision:** `_store`/`_redact`/`_RAW_PAYLOAD_FIELDS` moved verbatim into a new
-  `paymob.transactions` module as `store(obj, kind, reference, payment_request, *, source,
-  hmac_verified)` and `redact(obj)`. `source` and `hmac_verified` become required keyword
-  parameters instead of hardcoded `"Webhook"`/`1` — `webhooks.processed_callback` passes
-  `source="Webhook", hmac_verified=1` (the same values it used implicitly before), and
-  `tasks._hand_off` passes `source="Inquiry", hmac_verified=0` (an inquiry response carries no
-  signature — the authenticity guarantee is the authenticated Bearer channel plus the fact that
-  the poller asked about a reference it minted itself). The duplicate-delivery guard
-  (`frappe.DuplicateEntryError` → rollback to the savepoint → log → return `None`) is unchanged
-  and now shared by both callers.
-- **Consequences / why:** grepping for "who writes a Paymob Transaction row" returns one module.
-  A webhook redelivery and a poller re-discovering a transaction the webhook already stored both
-  hit the exact same primary-key guard, so `tasks._hand_off` gets "the webhook already stored it;
-  its own job owns the row" for free instead of needing its own duplicate check. Proven
-  behavior-preserving: `test_webhook.py` passed unchanged after the extraction, before any
-  Phase 10 code was added on top of the move.
-
-## ADR-0016 — Reversals are on-account Pay Payment Entries
-
-- **Decision:** A verified refund or void creates an unallocated `Pay` Payment Entry from the
-  Paymob clearing account to the original customer receivable. The original incoming entry stays
-  intact; money-out is written only by `ledger.post_refund`.
-
-## ADR-0017 — A refund delta comes only from a signed child transaction
-
-- **Decision:** `has_parent_transaction` and the child transaction's `amount_cents` determine the
-  posted refund. Paymob's cumulative `refunded_amount_cents` is unsigned, so parent resends never
-  post money. A resend whose cumulative total matches what has already been posted is routine
-  bookkeeping and is consumed quietly; one whose total *outruns* the posted refunds is the only
-  evidence that a refund happened outside this app, and is recorded as `Refund Requires Review`.
-
-## ADR-0018 — A lock needs an in-progress marker
-
-- **Decision:** The outbound request holds the attempt row lock and sets `refund_requested_at`
-  before calling Paymob. The callback alone clears it, because a failed HTTP response cannot prove
-  Paymob did not receive the request.
+## ADR-0001 — Verified inbound facts are the only ledger authority
+
+Payment Entries are created only by the shared ledger path after a verified processed callback or
+Transaction Inquiry result. Outbound HTTP responses are never evidence of money movement.
+
+## ADR-0003 — Authentic amount mismatches are audited, never auto-posted
+
+The callback amount and currency must match the immutable checkout snapshot. A mismatch creates
+review work and no Payment Entry.
+
+## ADR-0004 — Lifecycle state belongs to Payment Attempt
+
+Each checkout attempt has its own state, allowing a failed attempt and a later retry to coexist
+without writing Payment Request status directly.
+
+## ADR-0005 — Transaction event keys deduplicate delivery
+
+The append-only transaction's event key is unique. A duplicate is acknowledged successfully without
+a new event, state change, audit entry, or ledger write.
+
+## ADR-0006 — The processed callback is the only guest endpoint
+
+The callback verifies HMAC before document access. Other money-affecting interfaces require normal
+Frappe permission checks.
+
+## ADR-0007 — Persist before acknowledging
+
+The callback returns HTTP 200 only after its event is durable. Unexpected persistence failures remain
+non-2xx so Paymob may retry.
+
+## ADR-0008 — One Payment Entry writer
+
+`paymob.ledger.post_payment` is the sole receive-entry writer and delegates allocation to ERPNext.
+`paymob.ledger.post_refund` writes signed refund deltas as reversal entries.
+
+## ADR-0009 — Audit entries are immutable
+
+Audit records are submitted facts. Resolution is a new entry that references `supersedes` rather
+than an edit or deletion.
+
+## ADR-0014 — Only an answered inquiry may expire an attempt
+
+Network errors and unconfirmed reads leave a pending attempt unchanged. Expiry requires an answered
+inquiry with no transaction after the checkout expiry time.
+
+## ADR-0016 — Refund reversals are on-account Pay Payment Entries
+
+A verified refund delta creates a separate Pay Payment Entry. The original incoming Payment Entry
+is never edited or cancelled.
+
+## ADR-0017 — Refund deltas come from signed child transactions
+
+Only the signed child transaction amount can post a refund delta. Unsigned cumulative parent totals
+are stored for evidence but do not move the ledger.
+
+## ADR-0018 — A refund lock needs an in-progress marker
+
+The refund request holds the attempt lock and sets `refund_requested_at` before contacting Paymob.
+Only verified callback processing clears the marker.
 
 ## ADR-0019 — Refund capability is a DocType permission
 
-- **Decision:** The `Paymob Refund Manager` role grants the custom `refund` permission on a
-  Payment Attempt. Server and Desk both query that permission; neither hardcodes a role name.
+The custom `refund` permission governs the API and Desk surface; code does not hardcode a role.
 
 ## ADR-0020 — Payer links are signed app redirects
 
-**Functional:** A Payment Request email remains usable even after a Paymob checkout session expires.
-
-**Technical:** `payment_url` points to signed `GET /paymob-pay`, not a short-lived Paymob URL. The
-website route verifies the signature before any document lookup, then reuses only a ready, unexpired
-attempt or creates one as Administrator. It is a guest website route, not an `allow_guest` money API;
-the signed URL is the capability and no browser input supplies payment facts.
+Payment Request email links are signed routes that create or reuse an eligible checkout attempt.
+Browser input never supplies payment facts.
 
 ## ADR-0021 — Notifications are native seeded records
 
-**Functional:** Merchants can edit or disable each Paymob alert in Desk without changing settings or code.
+Merchants can manage notification recipients, content, and enablement in Desk without code changes.
 
-**Technical:** The app seeds non-standard `Notification` documents only if absent. A one-time corrective
-patch refreshes the seven shipped templates; later patches never overwrite a merchant's choice. This is the
-scoped exception to the Settings-only configuration rule: notification recipients, templates, and enabled
-flag already have a native per-record UI. Customer-facing branding reads the Company through the linked
-Payment Request, while Frappe's configured Email Account supplies the delivery identity.
+## ADR-0024 — Payment-link email is decided at validation
 
-## ADR-0022 — Callback facts determine authorization state
+The app sets its signed payment URL at `validate`, before ERPNext's own submit-time email behavior.
 
-**Functional:** Merchant intent never overrides what Paymob verified happened to the money.
+## ADR-0029 — Immediate payment only
 
-**Technical:** `capture_mode` selects which integrations a checkout offers
-([ADR-0027](#adr-0027--capture-mode-is-a-paymob-settings-property)), but it is not a lifecycle
-control: verified `Auth` and `Capture` callbacks alone map to `Authorized` and `Paid` respectively,
-regardless of what was configured or requested.
-
-## ADR-0023 — Capture is full amount only
-
-**Functional:** Staff capture the complete verified hold or a human reviews a mismatch.
-
-**Technical:** `request_capture` sends the Auth row's amount; a Capture callback with another amount follows
-the existing mismatch path and posts no Payment Entry.
-
-## ADR-0024 — The payment-link email is decided at `validate`
-
-**Functional:** A submitted Payment Request either emails the payer a working Paymob link or emails
-nothing at all. It never sends ERPNext's generic "Make Payment" mail with a dead link.
-
-**Technical:** ERPNext's `PaymentRequest.before_submit` calls `set_payment_request_url()` and
-`send_email()` inside its own method body, and `frappe.model.document.compose` runs a DocType's own
-controller method ahead of any app's `doc_events` handler for the same event. A `before_submit` hook
-therefore always loses the race. `payment_request.prepare_payment_email` is registered on `validate`
-instead: when Paymob owns the request (enabled, Inward, resolvable credentials) it either sets a
-signed `payment_url` plus the branded default `message`, or sets `mute_email = 1` when
-`send_payment_link_email` is off. ERPNext's `set_payment_request_url()` stays a no-op here because
-this app sets no `payment_gateway`/`payment_account` on the Payment Request
-([ADR-0010](#adr-0010--the-payments-app-is-not-a-dependency)), so it cannot overwrite the link.
-The payer-facing lifecycle mail after that point belongs to the seeded Notifications
-([ADR-0021](#adr-0021--notifications-are-native-seeded-records)), switchable via
-`send_status_emails`.
-
-## ADR-0025 — Authorize-only is a per-request choice
-
-**Status:** Superseded by [ADR-0027](#adr-0027--capture-mode-is-a-paymob-settings-property). A
-mixed Integration ID group let the *payer* choose the checkout's capture mode by picking which
-button to click — the per-request field never controlled that group, only which subset of
-integrations was offered. Kept here for history; `Payment Request.paymob_authorize_only` no
-longer exists.
-
-**Functional:** A merchant can ask for a hold instead of an immediate charge on one Payment
-Request, without changing how every other payment on the account is captured.
-
-**Technical:** `Payment Request.paymob_authorize_only` (Custom Field, `Check`) is read once in
-`api._checkout` and snapshotted onto the attempt as `Paymob Payment Attempt.authorize_only` — the
-Payment Request can be edited after checkout starts, so the attempt needs its own frozen copy, the
-same reason `mode` and `country` are snapshotted. When set, it is passed as `capture_mode` to
-`paymob.intention.create_intention`, which forwards it to `paymob.settings.get_integration_ids`;
-that function then filters to `Paymob Integration ID` rows whose own `capture_mode` is `Authorize
-Only` and throws before Paymob is ever called if none match, naming the country and currency —
-never falling back to auto-capture silently. A pending attempt is only reused
-(`api._checkout(reuse_pending=True)`, used by the signed payer link) when its stored
-`authorize_only` matches the request's current flag, so ticking the box after an earlier click
-gets a fresh attempt rather than the old auto-capture checkout. This is purely a selection
-mechanism: it never determines attempt state — verified `Auth`/`Capture` callbacks still do that
-alone ([ADR-0022](#adr-0022--callback-facts-determine-authorization-state)).
-
-## ADR-0026 — A hold Paymob captures anyway is posted and audited
-
-**Status:** Superseded in part by
-[ADR-0028](#adr-0028--an-unprovable-capture-is-recorded-as-a-hold) for the case where the only
-signed evidence is a plain `Success` with no `is_capture` — that reading now retargets to
-`Authorized` and posts nothing, because nothing signed proves money moved. This ADR's reasoning is
-unchanged for a genuine `Capture` event (`is_capture` signed) on an authorize_only attempt: that
-still posts and is still audited as `Capture Not Requested`. Kept here for history.
-
-**Functional:** When a merchant asks for an authorization hold and Paymob charges the card anyway,
-the app records that the money moved — because it did — and raises the broken promise as work for
-a human, naming the setting that caused it. It never pretends the payment is still only a hold.
-Separately, **Void** and **Refund** are never offered on the same payment: a hold is voided, a
-charge is refunded.
-
-**Technical:** `capture_mode` on a `Paymob Integration ID` row is a merchant-declared label; Paymob
-only honours a hold if that integration is configured auth-only in Paymob's own dashboard, and
-nothing verifies the two agree. So `processor.process_transaction` flags
-`unrequested_capture = target == "Paid" and attempt.authorize_only and not
-attempt.capture_requested_at`: it sets `needs_human_attention`, records a `Capture Not Requested`
-audit entry (`needs_action = 1`), and **still calls `ledger.post_payment`**. Forcing the state back
-to `Authorized` or withholding the Payment Entry would write state from intent rather than verified
-fact, which [ADR-0022](#adr-0022--callback-facts-determine-authorization-state) forbids.
-`api.request_capture` commits `capture_requested_at` before its outbound HTTP call, so a
-merchant-driven capture can never trip the check; the same expression also catches the
-no-`Auth`-at-all variant (`Pending → Paid` on an authorize-only attempt).
-
-The second half is a narrowing of the outbound void only: `api.request_void` requires
-`Authorized`, and `payment_request.js` offers Capture + Void on `Authorized` and Refund alone on
-`Paid`/`Partially Refunded`. The inbound `Void` branch and `states.LEGAL["Paid"] → "Voided"` are
-deliberately untouched — a void taken in Paymob's dashboard must still post its reversal here.
-
-## ADR-0027 — Capture mode is a Paymob Settings property
-
-**Functional:** Whether a country/currency charges immediately or places a hold is decided once,
-in Paymob Settings, by whoever configures the integration — never by the payer, and never by a
-per-Payment-Request choice.
-
-**Technical:**
-- **Context:** [ADR-0025](#adr-0025--authorize-only-is-a-per-request-choice) read a per-request
-  checkbox and used it only to *narrow* which `Paymob Integration ID` rows a checkout offered.
-  When a country/currency group held both an `Auto Capture` row and an `Authorize Only` row —
-  the ordinary case, since nothing stopped it — the unchecked default sent every row to Paymob's
-  hosted checkout, which renders one button per integration ID. The **payer**, not the merchant,
-  ended up deciding whether their card was charged or held, by which button they clicked. The
-  checkbox itself was also unusable in practice: added by patch, read nowhere in JS, and
-  unreachable once the Payment Request was submitted.
-- **Decision:** Every *enabled* `Paymob Integration ID` row sharing a `(country, currency, mode)`
-  must carry the same `capture_mode`. `paymob.settings.resolve_integrations(country, currency)`
-  returns that one agreed mode plus every enabled ID in the group — still every payment method
-  (card, wallet, kiosk) offered, just all settling the same way. A mixed group is refused twice:
-  at save (`Paymob Settings.validate`) and again at checkout
-  (`resolve_integrations`, for rows that arrived by fixture or console and were never saved
-  through the form). Both call the same `paymob.settings.capture_mode_for`, so the message and the
-  rule can never drift between the two gates. `Payment Request.paymob_authorize_only` is deleted;
-  there is no per-request override.
-- **Consequences / why:** a checkout can no longer offer two different settlement outcomes side
-  by side — the configured mode is the only mode. `capture_mode` moves from inert documentation
-  ([ADR-0022](#adr-0022--callback-facts-determine-authorization-state)) to an actual selection
-  control, while still never gating lifecycle *state* — verified `Auth`/`Capture` callbacks alone
-  do that, unchanged. Switching a country back to immediate charging means editing those
-  Integration ID rows, not touching a Payment Request. A per-request override remains a roadmap
-  item, not V1.
-
-## ADR-0028 — An unprovable capture is recorded as a hold
-
-**Functional:** When Paymob reports a plain success on a payment the merchant asked to hold, and
-nothing in the signed message says whether the card was actually charged, the app records the
-reading that posts no money: the payment stays a hold, flagged for a human to resolve with Capture
-or Void. It never guesses "charged."
-
-**Technical:**
-- **Context:** Paymob's processed callback carries exactly twenty HMAC-signed fields
-  (`paymob.hmac_verify.PROCESSED_CALLBACK_FIELDS`), including `is_auth`, `is_capture`, `is_refunded`,
-  `is_voided`, and `success` — but no signed field that means "this success was a hold, not a
-  charge." `paymob.events.classify_event` therefore reads a message with every reversal/capture/
-  auth flag false but `success: true` as a plain `Success`, exactly as it would for an ordinary
-  immediate charge. On an `authorize_only` attempt this is genuinely ambiguous: it is either a
-  charge Paymob made despite the merchant's hold request (an `ADR-0026` scenario, just missing its
-  signed `is_capture`), or a hold whose callback never sets `is_auth` for this integration. Neither
-  reading is provable from the signed fields, and this ADR does not resolve which Paymob actually
-  did — it only decides what an unresolved case should record.
-- **Decision:** `paymob.processor.process_transaction` retargets this one case, inside its `else`
-  branch and before `states.check` runs: when the computed target is `Paid`, the event is `Success`,
-  and `attempt.authorize_only` is set, the target becomes `Authorized` instead, and
-  `unconfirmed_authorization = True`. No Payment Entry is posted (`target == "Paid"` no longer
-  holds), `attempt.needs_human_attention` is set, and one `Authorization Unconfirmed`
-  `Paymob Audit Entry` is recorded (`needs_action = 1`). `states.LEGAL` is unchanged —
-  `Pending → Authorized` was already a legal exit; only the choice of target moves.
-- **Why `Authorized`, not a new state:** `Authorized` asserts only "nothing settled here," which is
-  true under both readings, and it is the one state that already renders Capture and Void
-  (`payment_request.js`) — the two operations that can settle the question against Paymob with a
-  verified fact. A successful capture returns its own `is_capture` callback and drives
-  `Authorized → Paid` through the unchanged normal path; a rejected one raises in
-  `void_refund.capture` and changes nothing. Staying `Pending` was rejected: the reconciliation
-  poller (`tasks.py`) only re-inquires `Pending` attempts, and a Transaction Inquiry answer carries
-  the same ambiguous flags, so the attempt would sit unresolved forever with no button to act on
-  it. A dedicated new lifecycle state was also rejected: its legal exits would be identical to
-  `Authorized`'s, at the cost of a `states.LEGAL` node, a `paymob_result.py` message, notification
-  conditions, translations, and list-view work — `states.md`'s own rule is "two axes, do not fuse
-  them": *a human must look* is the review flag, not a state.
-- **Reaching Capture/Void from a `Success` row:** `paymob.transactions.verified_authorization`
-  now checks `("Auth", "Success")` instead of `("Auth",)` — `Auth` first, so a genuine `Auth` row
-  always wins. This is safe only because both callers (`api.request_capture`, `api.request_void`)
-  require `attempt.state == "Authorized"`, which an auto-capture attempt's `Success` can never
-  reach (its target is `Paid` directly, never retargeted). So a `Success` row is only ever read as
-  an authorization on an attempt that arrived via this ADR's branch, and it carries the very
-  Paymob transaction id the capture/void endpoints take. `verified_charge` (`("Capture",
-  "Success")`) is unaffected: `api.request_refund` requires `Paid`/`Partially Refunded`, unreachable
-  from this branch, and the processor's own `Refund` branch only reads it once a refund callback
-  has already arrived, which itself implies money moved.
-- **Relationship to [ADR-0022](#adr-0022--callback-facts-determine-authorization-state):**
-  callback facts still, and only, determine state — this ADR governs what to record when those
-  facts are *silent* on the one question that matters (did the card get charged), and it picks the
-  reading that writes nothing to the ledger rather than the reading that writes a Payment Entry a
-  human cannot undo. It does not reintroduce merchant intent as a state driver: `unrequested_capture`
-  (`ADR-0026`) still fires, unchanged, whenever a genuine `is_capture`-signed `Capture` event lands
-  on an authorize_only attempt — that case has real evidence and still posts.
-- **`capture_requested_at` correction:** `ADR-0026`'s technical note describing this field is
-  restated precisely here: `Document.db_set` defaults to `commit=False`
-  (`frappe/model/document.py`), so `api.request_capture` writes it but does not commit before its
-  outbound call — a failed capture rolls back cleanly, and a merchant-driven capture can still
-  never trip `unrequested_capture`, which now keys off `txn.event_kind == "Capture"` rather than
-  the shared `target == "Paid"` check both flags used to share.
-- **Not repaired retroactively:** this ADR governs future callbacks only. A live row already
-  posted under the old `ADR-0026` reading is not unwound by this change — `states.LEGAL["Paid"]`
-  has no route back to `Authorized`, and a patch that cancels a submitted Payment Entry is what
-  `rules/payments.md` forbids. Remediation for an already-posted row uses only existing legal
-  paths: void it in Paymob's dashboard (the inbound `Void` callback drives `Paid → Voided` and
-  posts the reversal), or, if it was genuinely captured, resolve the existing `Capture Not
-  Requested` audit entry via `supersedes`.
+Every enabled Paymob Integration ID must be configured for immediate/standalone payment. A verified
+`Success` settles `Pending → Paid` once. Retired signed flags are stored as `Unsupported`, audited
+for review, and never mutate state or the ledger. Refund is the only outbound money movement.

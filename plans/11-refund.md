@@ -1,4 +1,4 @@
-# Phase 11 — Refund & Void (outline)
+# Phase 11 — Refund (outline)
 
 > Outline only. Expand into a full task-by-task plan before implementing.
 
@@ -9,10 +9,9 @@ verified callback — not from the API response.
 
 ## Scope
 
-- `api.py` — `request_refund(attempt, amount)` and `request_void(attempt)`, whitelisted,
+- `api.py` — `request_refund(attempt, amount)`, whitelisted,
   role-gated to a new **Paymob Refund Manager** role.
-- `POST /api/acceptance/void_refund/refund` `{transaction_id, amount_cents}` and
-  `/void_refund/void`.
+- `POST /api/acceptance/void_refund/refund` `{transaction_id, amount_cents}`.
 - The resulting callback is the *parent* transaction re-sent with `is_refunded: true` and a
   growing `refunded_amount_cents`; the refund itself is a child transaction with
   `parent_transaction` set.
@@ -21,7 +20,7 @@ verified callback — not from the API response.
 
 - [ ] A **server-side lock** on the attempt is taken *before* the API call. A disabled button is
       not a defense, and neither is trusting Paymob to reject the second request.
-- [ ] Refund, void and capture are **never** retried automatically. Paymob takes no idempotency
+- [ ] Refunds are **never** retried automatically. Paymob takes no idempotency
       key; a retry is new money movement.
 - [ ] No Payment Entry is created from the refund call's HTTP 200. The reversing entry comes
       from the verified callback, through the single write path.

@@ -10,7 +10,7 @@ The first is money that arrived but was not posted: an authentic callback whose 
 match, or a second genuine payment for one order. [`payments.md`](payments.md) forbids posting
 these automatically. If nothing durable records them, the money is simply lost.
 
-The second is an accounting question months later: who requested this capture, refund, or void,
+The second is an accounting question months later: who requested this refund,
 when, and on what evidence? Logs are rotated. An accountant's question is not.
 
 ## The requirement
@@ -20,8 +20,8 @@ when, and on what evidence? Logs are rotated. An accountant's question is not.
 An audit record is created for each of these, and it is a document in the database, not a log line:
 
 - Any anomaly requiring human attention, including an amount mismatch, illegal transition,
-  unattributed payment, unconfirmed authorization, or duplicate payment.
-- Refund, void, or capture requested — who requested it and with what parameters.
+  unattributed payment, unsupported event, or duplicate payment.
+- Refund requested — who requested it and with what parameters.
 
 Routine successful outcomes do not create audit records. Expiry, reconciliation recovery, and a
 verified reversal with no Payment Entry to reverse remain visible through Payment Attempts,
@@ -49,7 +49,7 @@ accountant can open, filtered to "needs action". A record nobody can see is not 
 ## Definition of Done
 
 - [ ] Every anomaly requiring human attention creates an audit record.
-- [ ] Every capture, refund, and void request records the requesting user.
+- [ ] Every refund request records the requesting user.
 - [ ] Records that need human action are visible in a list view and marked as pending.
 - [ ] No code path edits or deletes an existing audit record.
 - [ ] Every audit record names the payment, applicable amounts, the actor, and the time.

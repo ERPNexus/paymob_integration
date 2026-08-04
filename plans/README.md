@@ -28,9 +28,8 @@ own top-level folder.
 | [08](08-ledger-write-path.md) | The single ledger write path | A verified, amount-matched success creates one submitted Payment Entry allocated to the Sales Invoice |
 | [09](09-duplicate-payment-guard.md) | Duplicate payment guard | A second genuine payment for one Payment Request posts nothing and raises a refund flag |
 | [10](10-reconciliation-poller.md) | Reconciliation & expiry | A lost webhook is recovered by Transaction Inquiry; an abandoned checkout becomes `expired` |
-| [11](11-refund-and-void.md) | Refund & void | Staff refund from ERPNext under a server-side lock; the reversing entry is posted from the verified callback |
-| [12](12-pre-go-live-verification.md) | Pre-go-live verification | The five undocumented Paymob behaviours are measured, not assumed, before real money moves |
-| [13](13-authorize-and-capture.md) | Authorize & capture | A verified authorization is captured or voided safely by staff |
+| [11](11-refund.md) | Refund | Staff refund from ERPNext under a server-side lock; the reversing entry is posted from the verified callback |
+| [12](12-pre-go-live-verification.md) | Pre-go-live verification | Immediate-capture integration IDs and the verified payment lifecycle are measured before real money moves |
 
 ## Dependency order
 
@@ -38,13 +37,12 @@ own top-level folder.
 01 ─┬─ 02 ─┬─ 03
     │      └─ 04 ── 05 ── 06 ── 07 ── 08 ─┬─ 09
     │                                     ├─ 10
-    │                                     └─ 11 ── 13
+    │                                     └─ 11
     └────────────────────────────────────────────── 12 (last, needs everything)
 ```
 
 Phases 09, 10 and 11 are independent of one another and may be built in any order once 08 is
-merged. 13 depends on 11 alone and may be built as soon as 11 is merged, without waiting for 09,
-10, or 12.
+merged.
 
 ## Global constraints
 
@@ -65,8 +63,8 @@ Every task in every phase inherits these. They are the enforceable form of
   nothing posts.
 - Money is **integer cents**. No float arithmetic, no float equality.
 - Incoming duplicates are stopped by a **unique database constraint**, not an `if`.
-- Outgoing money calls (refund, void, capture) take a **server-side lock before** the request.
-- Reads may be retried automatically. Capture, refund and void may **never** be retried
+- Outgoing refund calls take a **server-side lock before** the request.
+- Reads may be retried automatically. Refunds may **never** be retried
   automatically — Paymob takes no idempotency key.
 - A 401, timeout or 5xx never changes payment state. Auth-token expiry ≠ intention expiry.
 - A decline updates status only: no ledger row, no change to the Sales Invoice, and a new

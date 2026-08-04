@@ -1,21 +1,17 @@
 from frappe.tests import UnitTestCase
 
 from paymob_integration.paymob.events import classify_event
+from paymob_integration.paymob.transactions import event_key
 
 
 class TestClassifyEvent(UnitTestCase):
-	def test_void_flag_wins(self):
-		self.assertEqual(classify_event({"is_voided": True}), "Void")
+	def test_retired_flags_are_unsupported(self):
+		for flag in ("is_voided", "is_capture", "is_auth"):
+			self.assertEqual(classify_event({flag: True}), "Unsupported")
 
 	def test_refund_flag_wins_over_success(self):
 		# A refund callback also carries success: true — the reversal flag must be read first.
 		self.assertEqual(classify_event({"is_refunded": True, "success": True}), "Refund")
-
-	def test_capture_flag(self):
-		self.assertEqual(classify_event({"is_capture": True}), "Capture")
-
-	def test_auth_flag(self):
-		self.assertEqual(classify_event({"is_auth": True}), "Auth")
 
 	def test_pending_wins_over_success(self):
 		# Wallet/kiosk: pending: true, success: true — a settlement follows later for the
@@ -42,10 +38,7 @@ class TestClassifyEvent(UnitTestCase):
 		}
 		self.assertEqual(classify_event(obj), "Decline")
 
-	def test_incident_ACC_PRQ_2026_00004_success_with_no_capture_flag_is_ambiguous(self):
-		# Live incident: an authorize_only attempt received this exact flag set. None of the
-		# signed flags say `is_capture`, so this is why ADR-0028 exists — `classify_event` alone
-		# cannot tell a charge from a hold here; that distinction is `processor`'s job (ADR-0028).
+	def test_standalone_success_is_a_charge(self):
 		obj = {
 			"success": True,
 			"pending": False,
@@ -55,3 +48,9 @@ class TestClassifyEvent(UnitTestCase):
 			"is_voided": False,
 		}
 		self.assertEqual(classify_event(obj), "Success")
+
+	def test_retired_subtypes_keep_distinct_dedup_keys(self):
+		self.assertNotEqual(
+			event_key("123", "Unsupported", unsupported_subtype="Auth"),
+			event_key("123", "Unsupported", unsupported_subtype="Capture"),
+		)

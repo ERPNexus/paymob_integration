@@ -26,14 +26,12 @@ def mock_credentials():
 	return row
 
 
-def given_attempt(state="Pending", credentials=None, authorize_only=False):
+def given_attempt(state="Pending", credentials=None):
 	"""A Paymob Payment Attempt against a fresh submitted Payment Request. Caller registers
 	`cleanup_fixture` via `addCleanup` — this function does not know about the test case.
 	"""
 	payment_request, invoice = given_submitted_payment_request()
-	attempt = api._create_attempt(
-		payment_request, credentials or mock_credentials(), authorize_only=authorize_only
-	)
+	attempt = api._create_attempt(payment_request, credentials or mock_credentials())
 	if state != "Pending":
 		attempt.state = state
 		attempt.save(ignore_permissions=True)
@@ -85,7 +83,7 @@ def given_transaction(
 			"success": event_kind == "Success",
 			"pending": event_kind == "Pending",
 			"is_refunded": event_kind == "Refund",
-			"is_voided": event_kind == "Void",
+			"is_voided": False,
 			"source": "Webhook",
 			"hmac_verified": 1,
 			"received_at": frappe.utils.now_datetime(),

@@ -5,16 +5,19 @@ callback also carries `success: true`, so the reversal and pending flags are rea
 
 
 def classify_event(obj):
-	if obj.get("is_voided"):
-		return "Void"
 	if obj.get("is_refunded"):
 		return "Refund"
-	if obj.get("is_capture"):
-		return "Capture"
-	if obj.get("is_auth"):
-		return "Auth"
+	if obj.get("is_voided") or obj.get("is_capture") or obj.get("is_auth"):
+		return "Unsupported"
 	if obj.get("pending"):
 		return "Pending"
 	if obj.get("success"):
 		return "Success"
 	return "Decline"
+
+
+def unsupported_subtype(obj):
+	for flag, subtype in (("is_voided", "Void"), ("is_capture", "Capture"), ("is_auth", "Auth")):
+		if obj.get(flag):
+			return subtype
+	return None

@@ -7,48 +7,10 @@ from frappe import _
 from frappe.contacts.doctype.address.address import get_default_address
 from frappe.utils import add_to_date, get_url, now_datetime, validate_email_address
 
-from paymob_integration.paymob import amounts, audit, intention, settings, transactions, void_refund
+from paymob_integration.paymob import amounts, audit, intention, refund, settings, transactions
 
 WEBHOOK_PATH = "/api/method/paymob_integration.webhooks.processed_callback"
 RESULT_PATH = "/paymob-result"
-
-
-@frappe.whitelist(methods=["POST"])
-def request_capture(attempt: str):
-	"""Capture one authorization under a row lock; its signed callback remains ledger authority."""
-	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
-	# ponytail: `refund` is this app's single manual Paymob-money right. Split it only for
-	# merchants that need separation of duties.
-	attempt_doc.check_permission("refund")
-	settings.is_enabled(throw=True)
-	if attempt_doc.capture_requested_at:
-		frappe.throw(_("A capture for this payment is already in progress."))
-	if attempt_doc.refund_requested_at:
-		frappe.throw(_("A refund for this payment is already in progress."))
-	if attempt_doc.state != "Authorized":
-		frappe.throw(_("Only authorized Paymob payments can be captured."))
-
-	authorization = _verified_authorization(attempt_doc)
-	attempt_doc.db_set("capture_requested_at", now_datetime())
-	audit.record(
-		None,
-		attempt_doc,
-		event="Capture Requested",
-		needs_action=0,
-		description=_("A capture of {0} {1} was requested.").format(
-			attempt_doc.currency, authorization.amount_cents
-		),
-		actor=frappe.session.user,
-		received_amount_cents=authorization.amount_cents,
-		received_currency=attempt_doc.currency,
-	)
-	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
-	void_refund.capture(
-		credentials,
-		transaction_id=authorization.paymob_transaction_id,
-		amount_cents=authorization.amount_cents,
-	)
-	return {"status": "requested"}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -59,8 +21,6 @@ def request_refund(attempt: str, amount_cents: int):
 	settings.is_enabled(throw=True)
 	if attempt_doc.refund_requested_at:
 		frappe.throw(_("A refund for this payment is already in progress."))
-	if attempt_doc.capture_requested_at:
-		frappe.throw(_("A capture for this payment is already in progress."))
 	if attempt_doc.state not in ("Paid", "Partially Refunded"):
 		frappe.throw(_("Only paid Paymob payments can be refunded."))
 
@@ -88,37 +48,7 @@ def request_refund(attempt: str, amount_cents: int):
 		received_currency=attempt_doc.currency,
 	)
 	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
-	void_refund.refund(credentials, transaction_id=charged.paymob_transaction_id, amount_cents=amount_cents)
-	return {"status": "requested"}
-
-
-@frappe.whitelist(methods=["POST"])
-def request_void(attempt: str):
-	"""Request one void under a row lock; its signed callback remains ledger authority."""
-	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
-	attempt_doc.check_permission("refund")
-	settings.is_enabled(throw=True)
-	if attempt_doc.refund_requested_at:
-		frappe.throw(_("A refund for this payment is already in progress."))
-	if attempt_doc.capture_requested_at:
-		frappe.throw(_("A capture for this payment is already in progress."))
-	# Money that already moved is refunded, not voided. An inbound `Void` callback still reverses a
-	# Paid attempt (a void taken in Paymob's own dashboard) — this narrows only what we send.
-	if attempt_doc.state != "Authorized":
-		frappe.throw(_("Only authorized Paymob payments can be voided."))
-
-	charged = _verified_authorization(attempt_doc)
-	attempt_doc.db_set("refund_requested_at", now_datetime())
-	audit.record(
-		None,
-		attempt_doc,
-		event="Void Requested",
-		needs_action=0,
-		description=_("A void was requested for this payment."),
-		actor=frappe.session.user,
-	)
-	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
-	void_refund.void(credentials, transaction_id=charged.paymob_transaction_id)
+	refund.request(credentials, transaction_id=charged.paymob_transaction_id, amount_cents=amount_cents)
 	return {"status": "requested"}
 
 
@@ -129,15 +59,6 @@ def _verified_charge(attempt):
 	if charged.currency != attempt.currency:
 		frappe.throw(_("The verified Paymob charge currency does not match this attempt."))
 	return charged
-
-
-def _verified_authorization(attempt):
-	authorization = transactions.verified_authorization(attempt.name)
-	if not authorization:
-		frappe.throw(_("No verified Paymob authorization is available to capture."))
-	if authorization.currency != attempt.currency:
-		frappe.throw(_("The verified Paymob authorization currency does not match this attempt."))
-	return authorization
 
 
 @frappe.whitelist(methods=["GET"])
@@ -158,13 +79,10 @@ def _checkout(request, reuse_pending=False):
 	_validate_payable(request)
 	source = frappe.get_doc(request.reference_doctype, request.reference_name)
 	country = _merchant_country(request, source)
-	capture_mode, integration_ids = settings.resolve_integrations(country, request.currency)
-	authorize_only = capture_mode == "Authorize Only"
+	integration_ids = settings.resolve_integrations(country, request.currency)
 	if reuse_pending:
 		attempt = _active_attempt(request.name)
-		# Settings changed since the payer's link was minted: hand them a checkout that matches
-		# the configured mode, not the stale one.
-		if attempt and bool(attempt.authorize_only) == authorize_only:
+		if attempt:
 			credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
 			return {
 				"attempt": attempt.name,
@@ -172,7 +90,7 @@ def _checkout(request, reuse_pending=False):
 			}
 
 	credentials = settings.get_credential_set(country, request.currency)
-	attempt = _create_attempt(request, credentials, _contact_email(request, source), authorize_only)
+	attempt = _create_attempt(request, credentials, _contact_email(request, source))
 	result = intention.create_intention(
 		credentials,
 		amount_cents=attempt.expected_amount_cents,
@@ -197,7 +115,6 @@ def _checkout(request, reuse_pending=False):
 	frappe.logger("paymob").info(
 		f"intention created payment_request={request.name} "
 		f"order_id={result['order_id']} expected_cents={attempt.expected_amount_cents} "
-		f"authorize_only={authorize_only}"
 	)
 	return {
 		"attempt": attempt.name,
@@ -259,7 +176,7 @@ def _merchant_country(request, source):
 	return country
 
 
-def _create_attempt(request, credentials, contact_email=None, authorize_only=False):
+def _create_attempt(request, credentials, contact_email=None):
 	"""Persist the reference before Paymob is called, so failures cannot reuse it."""
 	sequence = frappe.db.count("Paymob Payment Attempt", {"payment_request": request.name}) + 1
 	config = settings.get_settings()
@@ -274,7 +191,6 @@ def _create_attempt(request, credentials, contact_email=None, authorize_only=Fal
 			"country": credentials.country,
 			"mode": credentials.mode,
 			"contact_email": contact_email,
-			"authorize_only": authorize_only,
 			"expires_at": add_to_date(now_datetime(), seconds=config.intention_expiration_seconds),
 		}
 	)

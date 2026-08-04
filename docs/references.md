@@ -16,8 +16,6 @@ All sources accessed **2026-07-15**. Paymob's docs site (developers.paymob.com, 
 | HMAC Transaction Callback (exact 20-key list, POST-vs-GET name mapping, sample concatenated string, SHA-512, hex compare) | https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac/hmac/hmac-transaction-callback |
 | HMAC Card Token Callback (8-key list for TOKEN callbacks) | https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac/hmac/hmac-for-card-tokens |
 | Refund API (`POST /api/acceptance/void_refund/refund`, secret-key auth, partial-refund error, parent-transaction note) | https://developers.paymob.com/paymob-docs/developers/manage-payment-apis |
-| Void (concept: before settlement, card-only) | https://developers.paymob.com/paymob-docs/developers/manage-payment-apis/void.md |
-| Capture (concept: finalizes auth, full/partial, before auth expiry) | https://developers.paymob.com/paymob-docs/developers/manage-payment-apis/capture.md |
 | Transaction Inquiry — by transaction ID (`GET /api/acceptance/transactions/{id}`, Bearer auth-token) | https://developers.paymob.com/paymob-docs/developers/transaction-inquiry-apis |
 | Getting Integration Credentials (secret/public/API key retrieval; API key same across modes; callback URLs per integration ID) | https://developers.paymob.com/paymob-docs/getting-started-with-paymob/getting-integration-credentials |
 | Test Credentials (test cards, test wallet number/MPin/OTP) | https://developers.paymob.com/paymob-docs/need-help/faq/test-credentials.md |
@@ -27,13 +25,12 @@ All sources accessed **2026-07-15**. Paymob's docs site (developers.paymob.com, 
 
 | Topic | URL |
 |---|---|
-| Postman collections repo (verified: Refund/Void/Capture endpoints + `Token {{Secret_Key}}` header; Inquiry endpoints; `POST /api/auth/tokens {"api_key"}`) | https://github.com/PaymobAccept/API-Postman-Collections |
+| Postman collections repo (verified: Refund endpoint + `Token {{Secret_Key}}` header; Inquiry endpoints; `POST /api/auth/tokens {"api_key"}`) | https://github.com/PaymobAccept/API-Postman-Collections |
 | paymob-js (flash/embedded checkout handbook) | https://github.com/PaymobAccept/paymob-js |
 
 ## Dead/unreachable during research (noted so nobody re-chases them)
 
 - https://docs.paymob.pk — DNS does not resolve as of 2026-07-15 (Pakistan docs mirror). Pakistan base URL therefore NEEDS VERIFICATION.
-- https://docs.paymob.com/docs/void-transaction — 302-redirects to app.theneo.io legacy portal.
 - https://docs.paymob.sa/docs/hmac-calculation — JS-only shell, no content retrievable.
 
 ## ERPNext connector cross-check

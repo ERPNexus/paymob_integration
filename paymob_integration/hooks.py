@@ -65,7 +65,7 @@ fixtures = [
 			[
 				"name",
 				"in",
-				["Pending Attempts", "Awaiting Capture", "Needs Attention", "Unprocessed Transactions"],
+				["Pending Attempts", "Needs Attention", "Unprocessed Transactions"],
 			]
 		],
 	},

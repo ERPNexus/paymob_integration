@@ -19,16 +19,16 @@ Each feature is tagged with WHY it is required — the concrete failure that occ
 ## Correctness
 
 5. **Idempotent webhook processing (dedup on transaction ID + event kind).**
-   WHY: duplicate delivery must be assumed (undocumented retries, reconciliation poller racing the webhook, replays). Without dedup, one payment creates two submitted Payment Entries — the invoice shows overpayment, the ledger is wrong, and finance reconciles by hand. Paymob additionally re-sends the parent transaction callback after refund/void/capture actions, so "same transaction ID arriving again" is *normal*, not exceptional.
+   WHY: duplicate delivery must be assumed (undocumented retries, reconciliation poller racing the webhook, replays). Without dedup, one payment creates two submitted Payment Entries — the invoice shows overpayment, the ledger is wrong, and finance reconciles by hand.
 
 6. **Explicit transaction state machine with legal-transition enforcement.**
-   WHY: callbacks and poll results can arrive out of order or stale. Without `pending → paid | failed | expired`, `paid → refunded/voided` transition rules, a late duplicate can flip a `paid` record to `failed` (or worse, a `failed` one to `paid`), and nothing stops double-processing. The Paymob flags (`pending`, `success`, `is_refunded`, `is_voided`, `is_captured`) must be mapped to one authoritative local state field.
+   WHY: callbacks and poll results can arrive out of order or stale. Without `pending → paid | failed | expired` and refund transition rules, a late duplicate can flip a `paid` record to `failed` (or worse, a `failed` one to `paid`), and nothing stops double-processing.
 
 7. **Unique `special_reference` per payment attempt, persisted with intention ID + Paymob order ID before redirecting the customer.**
    WHY: this is the correlation and idempotency key on the *outbound* side. If the intention IDs aren't stored before redirect and the server restarts, an incoming callback can't be matched to its invoice — an orphaned payment. Uniqueness also prevents accidentally creating two live Paymob orders for the same Payment Request.
 
 8. **Server-side amount/currency verification on callback.**
-   WHY: trust but verify — the ledger write must use `amount_cents` and `currency` from the *verified callback* (and check they match the expectation stored at intention time), never values echoed from the browser redirect. A mismatch (partial capture, currency confusion, tampered redirect) must block auto-posting and flag for review.
+   WHY: trust but verify — the ledger write must use `amount_cents` and `currency` from the *verified callback* (and check they match the expectation stored at intention time), never values echoed from the browser redirect. A mismatch must block auto-posting and flag for review.
 
 ## Resilience
 
@@ -43,8 +43,8 @@ Each feature is tagged with WHY it is required — the concrete failure that occ
 
 ## Financial operations
 
-12. **Refund (full + partial) and void initiated from ERPNext, with ledger write-back.**
-    WHY: refunds *will* happen; if staff do them in the Paymob dashboard instead, ERPNext's books diverge from reality until someone notices. The integration must call `void_refund/refund` / `void_refund/void`, then post the reversing entry from the resulting verified callback — handling multiple partial refunds (cumulative `refunded_amount_cents`) and the child-transaction (`parent_transaction`) model correctly.
+12. **Refund (full + partial) initiated from ERPNext, with ledger write-back.**
+    WHY: refunds *will* happen; if staff do them in the Paymob dashboard instead, ERPNext's books diverge from reality until someone notices. The integration calls `void_refund/refund`, then posts the reversing entry from the resulting verified callback — handling multiple partial refunds and signed child-transaction deltas correctly.
 
 13. **Automatic Payment Entry creation + allocation against Sales Invoice / Sales Order / Payment Request.**
     WHY: this is the entire point of the integration — a verified payment that a human still has to key in manually is just an expensive notification. On verified success: Payment Entry (Receive), correct account, allocated against outstanding, submitted.
@@ -55,7 +55,7 @@ Each feature is tagged with WHY it is required — the concrete failure that occ
 ## Observability & configuration
 
 15. **Durable transaction history plus an exception-and-accountability ledger.**
-    WHY: Payment Attempts, Paymob Transactions, Payment Entries, and logs preserve routine processing evidence. Audit Entries stay focused on anomalies requiring human attention and on who requested capture, refund, or void, so the review queue remains actionable.
+    WHY: Payment Attempts, Paymob Transactions, Payment Entries, and logs preserve routine processing evidence. Audit Entries stay focused on anomalies requiring human attention and on who requested refunds, so the review queue remains actionable.
 
 16. **Settings doctype with per-country credential sets and test-mode switch.**
     WHY: Egypt/KSA/UAE/Oman are separate Paymob accounts with separate base URLs, keys, and integration IDs — hardcoding one set caps the integration at one country. A visible test/live mode flag prevents the classic incident of live keys in a staging site (or test keys silently in production, where every "payment" succeeds with card 5123...2346).
@@ -66,7 +66,6 @@ Each feature is tagged with WHY it is required — the concrete failure that occ
 ## Explicitly out of "must", worth noting
 
 - **Card tokenization / saved cards, subscriptions, BNPL method surfacing** — valuable (Ecosire advertises all three) but additive; they ride on the same intention + callback + HMAC machinery and can come after the core is solid.
-- **Auth/Capture two-phase flow** — only needed if the business model requires reserving funds before fulfillment; capture is card+auth-transactions only.
 
 ## Areas the docs do NOT settle — test empirically before trusting
 

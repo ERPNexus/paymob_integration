@@ -5,15 +5,21 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from paymob_integration.paymob import processor, transactions
+from paymob_integration.paymob import events, processor, transactions
 
 
 class PaymobTransaction(Document):
 	def autoname(self):
 		if not self.paymob_transaction_id or not self.event_kind:
 			frappe.throw(_("A Paymob Transaction needs a transaction ID and an event kind."))
+		unsupported_subtype = None
+		if self.event_kind == "Unsupported" and self.raw_payload:
+			unsupported_subtype = events.unsupported_subtype(frappe.parse_json(self.raw_payload))
 		self.name = transactions.event_key(
-			self.paymob_transaction_id, self.event_kind, self.refunded_amount_cents
+			self.paymob_transaction_id,
+			self.event_kind,
+			self.refunded_amount_cents,
+			unsupported_subtype,
 		)
 
 

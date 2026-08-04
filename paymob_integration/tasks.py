@@ -140,7 +140,9 @@ def _hand_off(attempt, obj):
 		# handled this is a no-op.
 		doc = frappe.get_doc(
 			"Paymob Transaction",
-			transactions.event_key(obj.get("id"), kind, obj.get("refunded_amount_cents")),
+			transactions.event_key(
+				obj.get("id"), kind, obj.get("refunded_amount_cents"), events.unsupported_subtype(obj)
+			),
 		)
 	previous_state = attempt.state
 	processor.process_transaction(doc.name)

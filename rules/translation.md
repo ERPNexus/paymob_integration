@@ -45,7 +45,6 @@ value, translate it and retain the exact English name in parentheses, such as `�
 | Pending | قيد الانتظار |
 | Reconciliation | المطابقة الآلية |
 | Refund | استرداد |
-| Void | إلغاء |
 | Reversal | عكس عملية الدفع |
 | Audit Entry | سجل تدقيق |
 | Credentials | بيانات الاعتماد |

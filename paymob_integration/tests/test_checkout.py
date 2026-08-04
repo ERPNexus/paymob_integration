@@ -171,7 +171,7 @@ class TestCheckoutURL(UnitTestCase):
 			patch("paymob_integration.api._merchant_country", return_value="Egypt"),
 			patch(
 				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Auto Capture", ["1234"]),
+				return_value=["1234"],
 			),
 			patch("paymob_integration.api.settings.get_credential_set", return_value=credentials),
 			patch("paymob_integration.api._create_attempt", return_value=attempt),
@@ -204,14 +204,14 @@ class TestCheckoutURL(UnitTestCase):
 		attempt.save.assert_called_once_with(ignore_permissions=True)
 		self.assertEqual(result, {"attempt": attempt.name, "checkout_url": "https://checkout.test"})
 
-	def test_pending_attempt_from_the_other_capture_mode_is_not_reused(self):
+	def test_pending_attempt_is_reused(self):
 		request = frappe._dict(
 			name="PR-0001",
 			reference_doctype="Sales Invoice",
 			reference_name="SINV-0001",
 			currency="EGP",
 		)
-		pending = Mock(country="Egypt", currency="EGP", mode="Test", authorize_only=0)
+		pending = Mock(country="Egypt", currency="EGP", mode="Test")
 		pending.name = "PR-0001-1"
 		new_attempt = Mock(expected_amount_cents=27555, currency="EGP", special_reference="PR-0001-2")
 		new_attempt.name = "PR-0001-2"
@@ -221,30 +221,18 @@ class TestCheckoutURL(UnitTestCase):
 			patch("paymob_integration.api._merchant_country", return_value="Egypt"),
 			patch(
 				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Authorize Only", ["1002"]),
+				return_value=["1002"],
 			),
 			patch("paymob_integration.api._active_attempt", return_value=pending),
 			patch(
 				"paymob_integration.api.settings.get_credential_set",
 				return_value=Mock(country="Egypt", mode="Test"),
 			),
-			patch("paymob_integration.api._create_attempt", return_value=new_attempt),
-			patch("paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT),
-			patch("paymob_integration.api._billing_data", return_value={}),
-			patch("paymob_integration.api._items", return_value=[]),
-			patch(
-				"paymob_integration.api.settings.get_settings",
-				return_value=Mock(intention_expiration_seconds=3600),
-			),
-			patch(
-				"paymob_integration.api.get_url",
-				side_effect=["https://site.test/webhook", "https://site.test/result"],
-			),
 			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),
 		):
 			result = api._checkout(request, reuse_pending=True)
 
-		self.assertEqual(result["attempt"], "PR-0001-2")
+		self.assertEqual(result["attempt"], "PR-0001-1")
 
 
 class TestStartCheckout(NoCommitIntegrationTestCase):
@@ -272,7 +260,7 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 			patch("paymob_integration.api.settings.get_settings", return_value=self.config),
 			patch(
 				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Auto Capture", ["1234"]),
+				return_value=["1234"],
 			),
 			patch(
 				"paymob_integration.api.intention.create_intention",
@@ -333,7 +321,7 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 		with (
 			patch(
 				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Authorize Only", ["1002", "1003"]),
+				return_value=["1002", "1003"],
 			) as resolve_integrations,
 			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
 			patch("paymob_integration.api.settings.get_settings", return_value=self.config),
@@ -345,51 +333,3 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 
 		resolve_integrations.assert_called_once_with("Egypt", "EGP")
 		self.assertEqual(create_intention.call_args.kwargs["integration_ids"], ["1002", "1003"])
-
-	def test_configured_authorize_only_marks_the_attempt(self):
-		with (
-			patch(
-				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Authorize Only", ["1002"]),
-			),
-			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
-			patch("paymob_integration.api.settings.get_settings", return_value=self.config),
-			patch(
-				"paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT
-			) as create_intention,
-		):
-			result = api.start_checkout(self.payment_request.name)
-
-		self.assertEqual(create_intention.call_args.kwargs["integration_ids"], ["1002"])
-		attempt = frappe.get_doc("Paymob Payment Attempt", result["attempt"])
-		self.assertTrue(attempt.authorize_only)
-
-	def test_configured_auto_capture_leaves_the_attempt_unmarked(self):
-		with (
-			patch(
-				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Auto Capture", ["1001"]),
-			),
-			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
-			patch("paymob_integration.api.settings.get_settings", return_value=self.config),
-			patch("paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT),
-		):
-			result = api.start_checkout(self.payment_request.name)
-
-		attempt = frappe.get_doc("Paymob Payment Attempt", result["attempt"])
-		self.assertFalse(attempt.authorize_only)
-
-	def test_a_misconfigured_group_throws_before_paymob_is_called(self):
-		with (
-			patch(
-				"paymob_integration.api.settings.resolve_integrations",
-				side_effect=frappe.ValidationError("Mixed Capture Modes"),
-			),
-			patch("paymob_integration.paymob.intention.client.request") as client_request,
-			patch("paymob_integration.api.intention.create_intention") as create_intention,
-		):
-			with self.assertRaises(frappe.ValidationError):
-				api.start_checkout(self.payment_request.name)
-
-		client_request.assert_not_called()
-		create_intention.assert_not_called()

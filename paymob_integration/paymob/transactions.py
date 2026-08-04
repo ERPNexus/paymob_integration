@@ -4,6 +4,8 @@ for "who writes a Paymob Transaction" should return this module alone.
 
 import frappe
 
+from paymob_integration.paymob import events
+
 # Reconciliation-relevant fields only — never `billing_data` or similar customer-identity blocks
 # Paymob's real payload carries. rules/stored-payment-data.md forbids a second copy of customer
 # personal data inside this app; an allowlist (not a denylist) is what stays safe if Paymob adds
@@ -28,12 +30,14 @@ _RAW_PAYLOAD_FIELDS = {
 }
 
 
-def event_key(paymob_transaction_id, event_kind, refunded_amount_cents=None):
+def event_key(paymob_transaction_id, event_kind, refunded_amount_cents=None, unsupported_subtype=None):
 	"""The dedup key, and the row's own `name` (ADR-0005) — the one place that computes it, so
 	`PaymobTransaction.autoname` and anything that needs to find an existing row by the same key
 	(e.g. the reconciliation poller recovering a duplicate) can never drift apart.
 	"""
 	key = f"{paymob_transaction_id}:{event_kind}"
+	if event_kind == "Unsupported" and unsupported_subtype:
+		key = f"{key}:{unsupported_subtype}"
 	if event_kind == "Refund":
 		# Paymob resends the same parent transaction id for each cumulative partial refund, with a
 		# growing refunded_amount_cents (plans/11-refund-and-void.md).
@@ -42,21 +46,8 @@ def event_key(paymob_transaction_id, event_kind, refunded_amount_cents=None):
 
 
 def verified_charge(attempt_name):
-	"""Return verified money movement, never an uncaptured authorization."""
-	return _verified(attempt_name, ("Capture", "Success"))
-
-
-def verified_authorization(attempt_name):
-	"""Return the verified hold used only to capture or void an authorization.
-
-	`Auth` is checked first so a genuine authorization callback always wins. `Success` is also
-	accepted: ADR-0028 retargets an authorize_only attempt's ambiguous `Success` to `Authorized`
-	instead of `Paid`, and that row carries the same Paymob transaction id its capture/void
-	endpoints need. This is safe only because both callers (`api.request_capture`,
-	`api.request_void`) require `attempt.state == "Authorized"` — an auto-capture attempt's
-	`Success` targets `Paid` directly and never reaches this function with a `Success` row to read.
-	"""
-	return _verified(attempt_name, ("Auth", "Success"))
+	"""Return the verified, processed Success transaction that charged this attempt."""
+	return _verified(attempt_name, ("Success",))
 
 
 def _verified(attempt_name, kinds):
@@ -91,7 +82,6 @@ def store(obj, kind, reference, payment_request, *, source, hmac_verified):
 			"success": obj.get("success"),
 			"pending": obj.get("pending"),
 			"is_refunded": obj.get("is_refunded"),
-			"is_voided": obj.get("is_voided"),
 			"has_parent_transaction": obj.get("has_parent_transaction"),
 			"refunded_amount_cents": obj.get("refunded_amount_cents"),
 			"source": source,

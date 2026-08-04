@@ -11,12 +11,12 @@ extra and still returns 200.
 
 - `Paymob Transaction` doctype — append-only event record. Key fields: `attempt`,
   `payment_request`, `paymob_transaction_id`, `event_kind`, `event_key` (**unique**),
-  `amount_cents`, `currency`, `success`, `pending`, `is_refunded`, `is_voided`,
+  `amount_cents`, `currency`, `success`, `pending`, `is_refunded`,
   `refunded_amount_cents`, `source` (`Webhook`/`Inquiry`), `hmac_verified`, `received_at`,
   `raw_payload`, `processed`.
 - `paymob/events.py` — `classify_event(obj) -> str` mapping the flags to one of
-  `Success`, `Decline`, `Refund`, `Void`, `Capture`, `Auth`. There is no event-type field in the
-  payload; the flags *are* the type.
+  `Success`, `Decline`, `Refund`, `Pending`, or `Unsupported`. Auth, Capture, and Void flags are
+  stored only as signed facts behind `Unsupported`. There is no event-type field in the payload.
 - `webhooks.py` — verify → classify → insert → commit → `frappe.enqueue` → return 200.
 
 ## Must be true

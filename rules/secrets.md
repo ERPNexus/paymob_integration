@@ -7,7 +7,7 @@
 This app holds four credentials that move money or prove identity: the **secret key**, the
 **API key**, the **HMAC secret**, and the **public key**. Three of the four are server-only.
 
-A leaked secret key lets someone capture and refund money on the merchant's account. A leaked
+A leaked secret key lets someone refund money on the merchant's account. A leaked
 HMAC secret lets someone forge a callback and mark unpaid orders as paid — which defeats the
 single most important check in [`payments.md`](payments.md).
 

@@ -128,27 +128,6 @@ class TestResultPage(NoCommitIntegrationTestCase):
 		self.assertIn("credential_lookup_failed", logged)
 		self.assertIn(self.payment_request.name, logged)
 
-	def test_authorized_attempt_renders_the_authorized_message(self):
-		attempt = frappe.get_doc(
-			{
-				"doctype": "Paymob Payment Attempt",
-				"special_reference": f"{self.payment_request.name}-3",
-				"payment_request": self.payment_request.name,
-				"state": "Authorized",
-				"expected_amount_cents": 27555,
-				"currency": "EGP",
-				"country": "Egypt",
-				"mode": "Test",
-				"paymob_order_id": "authorized-order",
-			}
-		).insert(ignore_permissions=True)
-		try:
-			context = self.render(_signed_query(attempt.name, attempt.paymob_order_id))
-			self.assertEqual(context.state, "Authorized")
-			self.assertEqual(context.message, "Your payment has been authorized and is awaiting capture.")
-		finally:
-			frappe.delete_doc("Paymob Payment Attempt", attempt.name, force=True)
-
 	def test_rendering_writes_nothing(self):
 		before_modified = frappe.db.get_value("Paymob Payment Attempt", self.attempt.name, "modified")
 		before_entries = frappe.db.count("Payment Entry")

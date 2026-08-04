@@ -23,13 +23,11 @@
   "paymob_references_column_break",
   "mode",
   "country",
-  "authorize_only",
   "timestamps_section",
   "expires_at",
   "last_polled_at",
   "timestamps_column_break",
   "refund_requested_at",
-  "capture_requested_at",
   "outcome_section",
   "payment_entry",
   "outcome_column_break",
@@ -65,7 +63,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "State",
-   "options": "Pending\nAuthorized\nPaid\nFailed\nExpired\nPartially Refunded\nRefunded\nVoided",
+   "options": "Pending\nPaid\nFailed\nExpired\nPartially Refunded\nRefunded",
    "read_only": 1
   },
   {
@@ -148,12 +146,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "authorize_only",
-   "fieldtype": "Check",
-   "label": "Authorize Only",
-   "read_only": 1
-  },
-  {
    "fieldname": "timestamps_section",
    "fieldtype": "Section Break",
    "label": "Timestamps"
@@ -178,12 +170,6 @@
    "fieldname": "refund_requested_at",
    "fieldtype": "Datetime",
    "label": "Refund Requested At",
-   "read_only": 1
-  },
-  {
-   "fieldname": "capture_requested_at",
-   "fieldtype": "Datetime",
-   "label": "Capture Requested At",
    "read_only": 1
   },
   {

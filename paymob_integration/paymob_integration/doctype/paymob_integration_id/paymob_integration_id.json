@@ -11,7 +11,6 @@
   "country",
   "currency",
   "mode",
-  "capture_mode",
   "payment_method",
   "integration_id"
  ],
@@ -44,16 +43,6 @@
    "fieldtype": "Select",
    "label": "Mode",
    "options": "Test\nLive",
-   "reqd": 1
-  },
-  {
-   "default": "Auto Capture",
-   "description": "Must match how this Integration ID is configured in Paymob's own dashboard. Every enabled row sharing a country, currency and mode must use the same capture mode — a checkout sends every one of them, so a mixed group would let the payer decide whether the money settles.",
-   "fieldname": "capture_mode",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Capture Mode",
-   "options": "Auto Capture\nAuthorize Only",
    "reqd": 1
   },
   {

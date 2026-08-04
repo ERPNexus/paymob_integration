@@ -150,24 +150,6 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertFalse(attempt.needs_human_attention)
 		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
 
-	def test_void_of_an_authorized_attempt_posts_nothing(self):
-		"""The void delta is keyed on `attempt.payment_entry` (processor.py), not on
-		`state == "Authorized"` — an authorization never had money posted, so voiding it must
-		not fabricate a refunded amount.
-		"""
-		attempt, request, invoice = given_attempt(state="Authorized", credentials=_credentials())
-		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
-		before = payment_entry_count()
-		void = given_transaction("Void", "void-authorized", attempt.name, request.name)
-
-		processor.process_transaction(void.name)
-
-		attempt.reload()
-		self.assertEqual(payment_entry_count(), before)
-		self.assertEqual(attempt.state, "Voided")
-		self.assertEqual(attempt.refunded_amount_cents, 0)
-		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": void.name}))
-
 	def test_refund_with_no_payment_entry_posts_nothing(self):
 		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
@@ -188,22 +170,3 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(payment_entry_count(), before)
 		self.assertEqual(attempt.state, "Refunded")
 		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": refund.name}))
-
-	def test_void_of_a_paid_attempt_with_no_payment_entry_posts_nothing(self):
-		"""A `Paid` attempt whose Payment Entry was blocked (e.g. an unresolved amount mismatch,
-		ADR-0003) has no money to reverse. Keying the void delta on `attempt.payment_entry` —
-		not the `Paid` state alone — is what stops this from fabricating a refunded amount.
-		"""
-		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())
-		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
-		self.assertFalse(attempt.payment_entry)
-		before = payment_entry_count()
-		void = given_transaction("Void", "void-unposted-paid", attempt.name, request.name)
-
-		processor.process_transaction(void.name)
-
-		attempt.reload()
-		self.assertEqual(payment_entry_count(), before)
-		self.assertEqual(attempt.state, "Voided")
-		self.assertEqual(attempt.refunded_amount_cents, 0)
-		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": void.name}))

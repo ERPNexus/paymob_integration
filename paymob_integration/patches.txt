@@ -6,4 +6,6 @@
 paymob_integration.patches.v1_0.seed_notifications
 paymob_integration.patches.v1_0.refresh_notification_defaults
 paymob_integration.patches.v1_0.default_send_status_emails
+paymob_integration.patches.v1_0.migrate_retired_authorization_records
+paymob_integration.patches.v1_0.migrate_retired_seeded_records
 # Patches added in this section will be executed after doctypes are migrated

@@ -84,10 +84,14 @@ Note the field-name mapping differs by callback type: `obj.id`/`obj.order.id` in
 
 ## 9–10. Idempotency, then the state machine
 
-Even with no documented retry policy, duplicates must be assumed: Paymob also sends processed callbacks for *later actions* on the same payment (refund, void, capture), the reconciliation poller can race the webhook, and any network layer can replay. So before acting:
+Even with no documented retry policy, duplicates must be assumed: the reconciliation poller can
+race the webhook and any network layer can replay. So before acting:
 
 1. **Dedup**: has (transaction id `obj.id` + event kind derived from the flags) been processed? If yes, acknowledge and stop.
-2. **State machine**: is the transition legal? `pending → paid` (success=true, pending=false), `pending → failed` (success=false), `paid → partially_refunded/refunded` (`is_refunded`, `refunded_amount_cents`), `paid → voided` (`is_voided`). A `failed` record must never move to `paid` off a stale duplicate, and a second success callback must not create a second Payment Entry.
+2. **State machine**: is the transition legal? `pending → paid` (verified standalone success),
+   `pending → failed` (decline), and `paid → partially_refunded/refunded` (signed refund delta).
+   A `failed` record must never move to `paid` off a stale duplicate, and a second success callback
+   must not create a second Payment Entry.
 
 The flags in the payload are how you classify the event — there is no separate "event type" field beyond `type: "TRANSACTION"`; a refund notification is the *parent* transaction re-sent with `is_refunded: true`, and the refund itself is a child transaction with `is_refund: true` and `parent_transaction` set.
 
@@ -102,6 +106,9 @@ On a verified, deduplicated success:
   transaction, attempt, Payment Entry, and application log.
 
 Refund flow mirrors this in reverse: a refund initiated from ERPNext calls `POST /api/acceptance/void_refund/refund {transaction_id, amount_cents}`, and the resulting callback (parent with `is_refunded: true`) drives creation of the reversing Payment Entry — again idempotently, because partial refunds mean several such callbacks with growing `refunded_amount_cents`.
+
+Signed Auth, Capture, and Void flags are retained only for HMAC verification and redacted callback
+storage. They are classified as `Unsupported`, audited for review, and never mutate the ledger.
 
 ## 13. Reconciliation polling — the safety net
 

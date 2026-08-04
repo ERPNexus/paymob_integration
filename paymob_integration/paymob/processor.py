@@ -42,7 +42,6 @@ def process_transaction(transaction):
 
 		# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
 		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
-		unconfirmed_authorization = False
 		if txn.event_kind == "Refund":
 			if not txn.has_parent_transaction:
 				# The parent re-send is routine bookkeeping on every refund, signed or not — it carries
@@ -61,23 +60,10 @@ def process_transaction(transaction):
 			charged = transactions.verified_charge(attempt.name)
 			charged_cents = charged.amount_cents if charged else 0
 			target = states.refund_target(total_cents, charged_cents)
-		elif txn.event_kind == "Void":
-			posted_cents = attempt.expected_amount_cents if attempt.payment_entry else 0
-			delta_cents = posted_cents - (attempt.refunded_amount_cents or 0)
-			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
-			target = "Voided"
 		else:
 			delta_cents = None
 			total_cents = None
 			target = states.target_state(txn.event_kind)
-			# A plain `Success` on an attempt the merchant asked to hold says one of two
-			# contradictory things: Paymob charged the card anyway, or Paymob held it and this
-			# integration's callback never sets `is_auth`. Neither is provable from the twenty
-			# HMAC-signed fields, and only one of them moved money. Record the reading that posts
-			# nothing (ADR-0028).
-			if target == "Paid" and txn.event_kind == "Success" and attempt.authorize_only:
-				target = "Authorized"
-				unconfirmed_authorization = True
 		if txn.event_kind == "Refund" and (
 			txn.currency != attempt.currency or delta_cents <= 0 or not charged or total_cents > charged_cents
 		):
@@ -87,25 +73,15 @@ def process_transaction(transaction):
 		except states.IllegalTransition:
 			return _refuse(txn, attempt, target)
 
-		mismatch = target in ("Paid", "Authorized") and not amounts.amounts_match(
+		mismatch = target == "Paid" and not amounts.amounts_match(
 			attempt.expected_amount_cents, attempt.currency, txn.amount_cents, txn.currency
-		)
-		# `api.request_capture` sets `capture_requested_at` via `db_set` (uncommitted, but written to
-		# the row) before its outbound call, so a merchant-driven capture can never trip this — only
-		# Paymob capturing a hold on its own, which means the Integration ID is not auth-only in
-		# Paymob's dashboard (ADR-0026). A plain `Success` on an authorize_only attempt is handled
-		# above by retargeting, not here.
-		unrequested_capture = (
-			txn.event_kind == "Capture" and attempt.authorize_only and not attempt.capture_requested_at
 		)
 
 		previous_state = attempt.state
 		if moved:
 			attempt.state = target
-		if mismatch or unrequested_capture or unconfirmed_authorization:
+		if mismatch:
 			attempt.needs_human_attention = 1
-		if txn.event_kind == "Capture":
-			attempt.capture_requested_at = None
 		attempt.save(ignore_permissions=True)
 
 		if mismatch:
@@ -129,53 +105,9 @@ def process_transaction(transaction):
 				f"received={txn.amount_cents}{txn.currency}"
 			)
 
-		if unrequested_capture:
-			audit.record(
-				txn,
-				attempt,
-				event="Capture Not Requested",
-				needs_action=1,
-				description=_(
-					"This payment was requested as an authorization hold, but Paymob captured it without "
-					"a capture request. The Paymob Integration ID used is not configured for authorization "
-					"holds in Paymob's dashboard."
-				),
-				actor=ACTOR,
-				expected_amount_cents=attempt.expected_amount_cents,
-				expected_currency=attempt.currency,
-				received_amount_cents=txn.amount_cents,
-				received_currency=txn.currency,
-			)
-			frappe.logger("paymob").info(
-				f"capture not requested payment_request={attempt.payment_request} attempt={attempt.name} "
-				f"txn={txn.paymob_transaction_id} kind={txn.event_kind}"
-			)
-
-		if unconfirmed_authorization:
-			audit.record(
-				txn,
-				attempt,
-				event="Authorization Unconfirmed",
-				needs_action=1,
-				description=_(
-					"Paymob reported success for this authorization-only payment, but the signed callback "
-					"does not confirm a capture. This may be a hold, or a charge Paymob made without a "
-					"capture request. Review and capture or void it."
-				),
-				actor=ACTOR,
-				expected_amount_cents=attempt.expected_amount_cents,
-				expected_currency=attempt.currency,
-				received_amount_cents=txn.amount_cents,
-				received_currency=txn.currency,
-			)
-			frappe.logger("paymob").info(
-				f"authorization unconfirmed payment_request={attempt.payment_request} attempt={attempt.name} "
-				f"txn={txn.paymob_transaction_id}"
-			)
-
 		if target == "Paid" and not mismatch:
 			ledger.post_payment(attempt, txn)
-		elif txn.event_kind in ("Refund", "Void"):
+		elif txn.event_kind == "Refund":
 			ledger.post_refund(attempt, txn, delta_cents)
 			attempt.refunded_amount_cents = total_cents
 			attempt.refund_requested_at = None
@@ -189,7 +121,27 @@ def process_transaction(transaction):
 
 
 def _consume_unmapped(txn):
-	"""`Pending` is consumed — there is nothing left to do with a wallet/kiosk in-flight notification."""
+	"""Consume routine pending events and hold retired authorization-flow events for review."""
+	if txn.event_kind == "Unsupported":
+		attempt = txn.attempt and frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
+		if attempt:
+			attempt.needs_human_attention = 1
+			attempt.save(ignore_permissions=True)
+		audit.record(
+			txn,
+			attempt,
+			event="Unsupported Paymob Event",
+			needs_action=1,
+			description=_(
+				"Paymob reported an authorization, capture, or void event. This immediate-capture-only "
+				"integration did not change the payment or ledger automatically."
+			),
+			actor=ACTOR,
+			received_amount_cents=txn.amount_cents,
+			received_currency=txn.currency,
+		)
+		_mark_processed(txn)
+		return
 	if txn.event_kind != "Pending":
 		frappe.logger("paymob").info(
 			f"unmapped event kind left unprocessed payment_request={txn.payment_request or 'unknown'} "
@@ -215,15 +167,9 @@ def _unattributed(txn, target):
 			f"unattributed decline logged txn={txn.paymob_transaction_id} kind={txn.event_kind}"
 		)
 		return
-	if target == "Authorized":
-		description = _(
-			"Paymob reported an authorization hold of {0} {1} that could not be matched to any "
-			"attempt. No money has moved."
-		).format(txn.currency, txn.amount_cents)
-	else:
-		description = _("Paymob reported a {0} of {1} {2} that could not be matched to any attempt.").format(
-			_(txn.event_kind), txn.currency, txn.amount_cents
-		)
+	description = _("Paymob reported a {0} of {1} {2} that could not be matched to any attempt.").format(
+		_(txn.event_kind), txn.currency, txn.amount_cents
+	)
 	audit.record(
 		txn,
 		None,

@@ -10,22 +10,17 @@ class IllegalTransition(frappe.ValidationError):
 
 # docs/reference/states.md — anything not listed here raises.
 LEGAL = {
-	"Pending": {"Authorized", "Paid", "Failed", "Expired"},
-	"Authorized": {"Paid", "Voided"},
-	"Paid": {"Partially Refunded", "Refunded", "Voided"},
+	"Pending": {"Paid", "Failed", "Expired"},
+	"Paid": {"Partially Refunded", "Refunded"},
 	"Partially Refunded": {"Refunded"},
 	"Failed": set(),
 	"Expired": set(),
 	"Refunded": set(),
-	"Voided": set(),
 }
 
 EVENT_TARGET = {
-	"Auth": "Authorized",
-	"Capture": "Paid",
 	"Success": "Paid",
 	"Decline": "Failed",
-	"Void": "Voided",
 }
 
 

@@ -67,7 +67,7 @@ business facts are acceptable.
 
 ## 8. Outgoing duplicates — lock, do not deduplicate
 
-- Refund, capture, and void requests must take a server-side lock **before** the API call
+- Refund requests must take a server-side lock **before** the API call
   (row lock on the Payment Request, or an in-progress record).
 - The refund has no ID until the call happens, so deduplication cannot work here.
 - Disabling a button in the browser is not a defense. Neither is trusting Paymob to reject it.
@@ -82,9 +82,9 @@ business facts are acceptable.
 ## 10. Retry reads, never retry writes
 
 - Transaction Inquiry is safe to retry — it changes nothing.
-- Capture, refund, and void must never retry automatically. Paymob's endpoints take no
+- Refunds must never retry automatically. Paymob's endpoint takes no
   idempotency key, so a retry is a genuinely new money movement.
-- Re-issuing a capture or refund is a human decision.
+- Re-issuing a refund is a human decision.
 
 ## 11. Errors never change payment state
 
@@ -113,7 +113,7 @@ business facts are acceptable.
 
 - Do not `db_set` the Payment Request status. ERPNext derives it from submitted Payment Entries
   and their allocations.
-- A hand-written "Paid" on a partial capture makes the document lie about the ledger below it.
+- A hand-written "Paid" makes the document lie about the ledger below it.
 
 ## 15. Every Payment Entry is allocated
 

@@ -7,7 +7,9 @@ Every term below is defined from a verified source (see `references.md` for full
 ## Paymob credentials (four different secrets — do not confuse them)
 
 ### Secret Key (`sk_test_...` / `sk_live_...`)
-Server-side API credential. Sent as `Authorization: Token sk_...` on the Create Intention, Refund, Void, and Capture APIs. There are **separate test and live secret keys**; the key's mode must match the mode of the integration IDs you use. Never exposed to the browser.
+Server-side API credential. Sent as `Authorization: Token sk_...` on the Create Intention and
+Refund APIs. There are **separate test and live secret keys**; the key's mode must match the mode
+of the integration IDs you use. Never exposed to the browser.
 *Source: [Create Intention](https://developers.paymob.com/paymob-docs/developers/intention-apis/create-intention), [Getting Integration Credentials](https://developers.paymob.com/paymob-docs/getting-started-with-paymob/getting-integration-credentials).*
 
 ### Public Key (`pk_...`)
@@ -69,7 +71,10 @@ The older embed model where a Paymob iframe (identified by iframe ID + payment k
 ## Callbacks
 
 ### Transaction Processed Callback (the webhook)
-Server-to-server `POST` of a JSON body `{"type": "TRANSACTION", "obj": {...}}` to your backend endpoint, sent **only when a transaction succeeds or is declined** (also after later actions on the payment such as refund/void/capture). The HMAC arrives as a **query parameter** (`?hmac=...`) on your callback URL. This is the callback you trust (after HMAC verification) to update ledgers. Key fields: `obj.id` (transaction ID), `obj.success`, `obj.pending`, `obj.order.id`, `obj.is_refunded`, `obj.refunded_amount_cents`, `obj.is_voided`, `obj.is_captured`, `obj.captured_amount`, `obj.order.merchant_order_id`.
+Server-to-server `POST` of a JSON body `{"type": "TRANSACTION", "obj": {...}}` to your backend
+endpoint. The HMAC arrives as a **query parameter** (`?hmac=...`) on your callback URL. This is the
+callback trusted to update ledgers after HMAC verification. Auth, Capture, and Void flags are
+recognized only as unsupported signed evidence in this immediate-capture-only app.
 *Source: [Transaction callbacks](https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac/transaction-callbacks), [Webhook overview](https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac).*
 
 ### Transaction Response Callback (the redirect)
@@ -107,14 +112,6 @@ Booleans are concatenated as lowercase `true`/`false` (per the official sample s
 ### Refund
 `POST {base}/api/acceptance/void_refund/refund` with `Authorization: Token <secret_key>` and body `{"transaction_id": ..., "amount_cents": ...}`. Partial refunds are allowed (multiple partials possible); requesting more than the refundable amount returns `400`. A refund is a **new child transaction** (`is_refund: true`, `parent_transaction: <id>`); the parent's subsequent callbacks show `is_refunded: true` and `refunded_amount_cents`.
 *Source: [Refund API](https://developers.paymob.com/paymob-docs/developers/manage-payment-apis) + [official Postman collection](https://github.com/PaymobAccept/API-Postman-Collections).*
-
-### Void
-`POST {base}/api/acceptance/void_refund/void` with `Authorization: Token <secret_key>` and body `{"transaction_id": ...}`. Cancels a successful payment **before settlement** (typically same business day); card payments only; the customer is never charged, so no separate refund occurs.
-*Source: [Void](https://developers.paymob.com/paymob-docs/developers/manage-payment-apis/void.md) + [official Postman collection](https://github.com/PaymobAccept/API-Postman-Collections).*
-
-### Auth / Capture
-Two-phase card flow: an **authorization** (`is_auth: true`) reserves funds; **capture** (`POST {base}/api/acceptance/capture`, body `{"transaction_id", "amount_cents"}`) transfers them. Full or partial capture allowed, must happen before the authorization expires; card + auth-type transactions only.
-*Source: [Capture](https://developers.paymob.com/paymob-docs/developers/manage-payment-apis/capture.md) + Postman collection.*
 
 ### Transaction Inquiry
 Pull-based status check — the backbone of reconciliation polling:
@@ -161,8 +158,9 @@ A scheduled job that finds locally-`pending` payments older than some threshold 
 *Source: [Webhook overview — "Paymob sends the transaction callback only if the transaction succeeds or is declined"](https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac).* 
 
 ### Transaction state machine
-Explicit set of states a payment record moves through with allowed transitions only, e.g. `draft → pending → (paid | failed | expired)`, `paid → partially_refunded → refunded`, and for auth/capture: `authorized → (captured | voided | expired)`. Prevents illegal transitions like `failed → paid` when a late/duplicate callback arrives out of order.
-*Source: general payment-engineering practice; Paymob's own flags (`pending`, `success`, `is_auth`, `is_captured`, `is_voided`, `is_refunded`) map onto these states — see [Transaction callbacks](https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac/transaction-callbacks).* 
+Explicit set of states a payment record moves through with allowed transitions only, e.g. `draft →
+pending → (paid | failed | expired)` and `paid → partially_refunded → refunded`. Prevents illegal
+transitions like `failed → paid` when a late callback arrives out of order.
 
 ### PCI-DSS scope avoidance
 Never letting raw card data (PAN, CVV) touch your servers. Hosted checkout achieves this: card entry happens on Paymob's domain; you receive only masked data (`source_data.pan` is the **last 4 digits only**) and tokens. Paymob's own docs: "You don't need to handle sensitive card data yourself."
@@ -175,7 +173,7 @@ The webhook endpoint is a public, unauthenticated URL — anyone who discovers i
 ### Audit log
 This app separates two durable records: **Paymob Transaction** stores gateway events, while
 **Paymob Audit Entry** is an immutable exception-and-accountability ledger for problems needing
-human attention and capture/refund/void requests. Routine success, expiry, and poller recovery do
+human attention and refund requests. Routine success, expiry, and poller recovery do
 not create Audit Entries.
 *Source: [Ecosire — Paymob Gateway for ERPNext](https://ecosire.com/apps/erpnext/erpnext-paymob-gateway).* 
 

@@ -80,7 +80,7 @@ class TestPayLink(UnitTestCase):
 			reference_name="SINV-0001",
 			currency="EGP",
 		)
-		attempt = Mock(country="Egypt", currency="EGP", mode="Test", authorize_only=0)
+		attempt = Mock(country="Egypt", currency="EGP", mode="Test")
 		attempt.name = "PR-0001-1"
 		attempt.get_password.return_value = "client-secret"
 		credentials = Mock()
@@ -90,7 +90,7 @@ class TestPayLink(UnitTestCase):
 			patch("paymob_integration.api._merchant_country", return_value="Egypt"),
 			patch(
 				"paymob_integration.api.settings.resolve_integrations",
-				return_value=("Auto Capture", ["1001"]),
+				return_value=["1001"],
 			),
 			patch("paymob_integration.api._active_attempt", return_value=attempt),
 			patch("paymob_integration.api.settings.get_credential_set", return_value=credentials),
