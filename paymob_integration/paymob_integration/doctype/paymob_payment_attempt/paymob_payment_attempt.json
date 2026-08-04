@@ -48,6 +48,7 @@
    "fieldname": "payment_request",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Payment Request",
    "options": "Payment Request",
    "read_only": 1,
@@ -62,6 +63,7 @@
    "fieldname": "state",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "State",
    "options": "Pending\nAuthorized\nPaid\nFailed\nExpired\nPartially Refunded\nRefunded\nVoided",
    "read_only": 1
@@ -70,6 +72,7 @@
    "fieldname": "needs_human_attention",
    "fieldtype": "Check",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Needs Human Attention",
    "read_only": 1
   },

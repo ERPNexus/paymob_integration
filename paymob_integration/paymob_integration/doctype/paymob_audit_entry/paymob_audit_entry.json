@@ -29,6 +29,7 @@
    "fieldname": "payment_request",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Payment Request",
    "options": "Payment Request",
    "read_only": 1
@@ -70,6 +71,7 @@
    "fieldname": "event",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Event",
    "options": "Illegal Transition\nAmount Mismatch\nUnattributed Payment\nRefund Requires Review\nDuplicate Payment\nPoller Recovery\nAttempt Expired\nRefund Requested\nVoid Requested\nCapture Requested\nCapture Not Requested\nNothing To Reverse\nAuthorization Unconfirmed",
    "read_only": 1,
@@ -86,6 +88,7 @@
    "fieldname": "needs_action",
    "fieldtype": "Check",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Needs Action",
    "read_only": 1
   },

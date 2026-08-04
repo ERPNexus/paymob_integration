@@ -40,6 +40,7 @@
    "fieldname": "event_kind",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Event Kind",
    "options": "Success\nDecline\nPending\nRefund\nVoid\nCapture\nAuth",
    "read_only": 1,
@@ -56,6 +57,7 @@
    "fieldname": "payment_request",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Payment Request",
    "options": "Payment Request",
    "read_only": 1
@@ -99,12 +101,14 @@
   {
    "fieldname": "success",
    "fieldtype": "Check",
+   "in_standard_filter": 1,
    "label": "Success",
    "read_only": 1
   },
   {
    "fieldname": "pending",
    "fieldtype": "Check",
+   "in_standard_filter": 1,
    "label": "Pending",
    "read_only": 1
   },
