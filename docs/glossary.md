@@ -173,7 +173,10 @@ The webhook endpoint is a public, unauthenticated URL — anyone who discovers i
 *Source: [HMAC overview](https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac/hmac); [Transaction callbacks — Caution note](https://developers.paymob.com/paymob-docs/developers/webhook-callbacks-and-hmac/transaction-callbacks).* 
 
 ### Audit log
-Append-only record of every gateway interaction (request, callback, verification result, resulting ledger action). In Frappe, the conventional vehicles are the **Integration Request** doctype or a custom log doctype (the Ecosire connector uses a `Paymob Transaction` doctype "logging every auth, capture, wallet charge, BNPL settlement, and refund for audit").
+This app separates two durable records: **Paymob Transaction** stores gateway events, while
+**Paymob Audit Entry** is an immutable exception-and-accountability ledger for problems needing
+human attention and capture/refund/void requests. Routine success, expiry, and poller recovery do
+not create Audit Entries.
 *Source: [Ecosire — Paymob Gateway for ERPNext](https://ecosire.com/apps/erpnext/erpnext-paymob-gateway).* 
 
 ---

@@ -8,12 +8,15 @@ from paymob_integration import notifications, payment_request
 
 
 class TestNotifications(UnitTestCase):
-	def test_catalogue_contains_the_seven_editable_alerts(self):
+	def test_catalogue_contains_the_six_editable_alerts(self):
 		specs = notifications._spec()
-		self.assertEqual(len(specs), 7)
+		self.assertEqual(len(specs), 6)
 		self.assertTrue(all(spec["event"] in ("Submit", "Value Change") for spec in specs))
 		self.assertTrue(all(spec["recipients"] for spec in specs))
 		self.assertTrue(all(spec["channel"] == "Email" and spec["message_type"] == "HTML" for spec in specs))
+		self.assertNotIn("Paymob Webhook Missed - Poller Recovered", {spec["name"] for spec in specs})
+		activity = next(spec for spec in specs if spec["name"] == "Paymob Refund or Void Activity")
+		self.assertEqual(activity["condition"], "doc.event in ('Refund Requested', 'Void Requested')")
 
 	def test_design_rule_is_registered(self):
 		root = Path(__file__).parents[2]

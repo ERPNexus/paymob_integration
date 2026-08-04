@@ -96,8 +96,8 @@ The customer sees "This payment link has expired."
   `tasks._inquire` as exceptions and leave the attempt `Pending` for the next scheduled run. Auth-
   token expiry and intention expiry share no code path — see
   [ADR-0014](decisions.md#adr-0014--only-an-answered-inquiry-may-expire-an-attempt).
-- Audit history is preserved; the record is not deleted. Expiring writes one `Attempt Expired`
-  `Paymob Audit Entry` (`needs_action = 0` — nothing for a human to act on, just a record of why).
+- Existing audit history is preserved. Expiry creates no Audit Entry; the attempt state and
+  application log record the routine outcome.
 - Terminal: yes.
 
 ### partially refunded
@@ -139,8 +139,8 @@ in full. The customer sees "This payment has been voided."
 - If no Payment Entry was ever posted for the attempt — always true for an `authorized` void
   (never had money posted), and also true for a `paid` attempt whose Payment Entry was blocked by
   an unresolved amount mismatch — the state still moves to `voided` and `paymob.ledger.post_refund`
-  posts nothing, recorded as a `Nothing To Reverse` audit entry (`needs_action = 0`). The delta is
-  keyed on whether `attempt.payment_entry` is actually set, never on the state alone.
+  posts nothing. This routine outcome creates no Audit Entry. The delta is keyed on whether
+  `attempt.payment_entry` is actually set, never on the state alone.
 - Terminal: yes.
 
 ## Review flags (orthogonal to lifecycle state)

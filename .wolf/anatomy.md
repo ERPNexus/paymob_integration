@@ -1,6 +1,6 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-08-03T12:02:26.624Z
+> Auto-maintained by OpenWolf. Last updated: 2026-08-04
 > Files: 212 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../mnt/c/Users/bedo7/.claude/
@@ -153,9 +153,9 @@
 
 ## docs/
 
-- `architecture.md` — Architecture — How a Paymob ↔ ERPNext Payment Actually Flows (~2423 tok)
-- `glossary.md` — Glossary — Paymob & Payment-Integration Terms (~5010 tok)
-- `must_have_features.md` — Must-Have Features — Non-Negotiables for the Paymob ↔ ERPNext Integration (~2228 tok)
+- `architecture.md` — End-to-end Paymob/ERPNext flow, trust boundaries, ledger writes, and exception auditing (~2423 tok)
+- `glossary.md` — Paymob and payment-integration terms, including transaction versus audit records (~5010 tok)
+- `must_have_features.md` — Non-negotiable payment, observability, and configuration requirements (~2228 tok)
 - `README.md` — Project documentation (~383 tok)
 - `references.md` — References (~1487 tok)
 
@@ -166,14 +166,14 @@
 ## docs/reference/
 
 - `decisions.md` — Decisions (ADRs) (~11304 tok)
-- `endpoints.md` — Endpoints, Settings & Errors (~7437 tok)
-- `fields.md` — Fields (~7163 tok)
+- `endpoints.md` — Endpoint, setting, error, reconciliation, and outbound-request contracts (~7437 tok)
+- `fields.md` — Functional and technical field reference, including active and legacy audit events (~7163 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — States & Transitions (~3179 tok)
+- `states.md` — Payment-attempt states, transitions, review flags, and routine no-audit outcomes (~3179 tok)
 
 ## docs/user-guide/
 
-- `README.md` — Project documentation (~2981 tok)
+- `README.md` — Merchant guide for setup, checkout, notifications, reconciliation, and refunds (~2981 tok)
 
 ## learning/paymob-integration/
 
@@ -193,11 +193,11 @@
 - `email.py` — Shared inline, mobile-safe email card renderer for Paymob messages. (~700 tok)
 - `hooks.py` — Declares views (~2005 tok)
 - `modules.txt` (~5 tok)
-- `notifications.py` — Seed editable, opt-out-able Paymob notifications once per site. (~1656 tok)
+- `notifications.py` — Seeds six editable Paymob notifications, including actionable audit alerts (~1500 tok)
 - `patches.txt` (~116 tok)
 - `pay_link.py` — Builds Frappe-signed payer payment links. (~60 tok)
 - `payment_request.py` — Payment Request lifecycle hooks. (~437 tok)
-- `tasks.py` — Recovers a lost webhook and expires an abandoned checkout. Paymob's webhook retry behaviour (~2010 tok)
+- `tasks.py` — Reconciles pending attempts, expires abandoned checkout, and logs routine recovery (~1900 tok)
 - `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~962 tok)
 
 ## paymob_integration/config/
@@ -235,7 +235,7 @@
 - `events.py` — There is no event-type field in the processed callback payload — the flags *are* the type. (~167 tok)
 - `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
 - `intention.py` — Create a Paymob Intention once per payment attempt; never retry it automatically. (~315 tok)
-- `ledger.py` — The single Payment Entry write path (rules/payments.md rule 1). Every caller — the webhook (~2526 tok)
+- `ledger.py` — Single Payment Entry write path for verified payments and reversals (~2500 tok)
 - `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~3858 tok)
 - `session.py` — Run privileged work inside a request without corrupting the caller's session (issue #8; (~531 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~831 tok)
@@ -330,16 +330,17 @@
 - `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~1819 tok)
 - `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
 - `test_authorization_processor.py` — Verified authorization/capture callbacks drive the existing processor. (~3217 tok)
-- `test_capture.py` — Capture requests use a verified authorization under the existing refund permission. (~1087 tok)
+- `test_capture.py` — Capture permission, locking, verified amount, and requesting-user audit checks (~1150 tok)
 - `test_checkout.py` — TestCreateIntention: setUp, call, test_returns_the_three_identifiers, test_authenticates_with_the_se (~4100 tok)
 - `test_events.py` — TestClassifyEvent: test_void_flag_wins, test_refund_flag_wins_over_success, test_capture_flag, test_ (~580 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
 - `test_ledger.py` — Direct tests for paymob.ledger.post_payment — the single Payment Entry write path (~2146 tok)
+- `test_notifications.py` — Notification catalogue, templates, seeding, refresh, and enable/disable checks (~850 tok)
 - `test_pay_link.py` — TestPayLink: test_build_uses_frappe_signed_params, test_payment_request_hook_only_sets_a_valid_paymo (~1436 tok)
 - `test_processor.py` — Integration paths for paymob.processor.process_transaction. A `Success` on a `Pending` (~4881 tok)
-- `test_reconciliation.py` — Tests for paymob.tasks.reconcile_pending_attempts (Phase 10). `client.request` is the only (~3828 tok)
-- `test_refund_ledger.py` — Verified reversal callbacks create on-account Payment Entries exactly once. (~1880 tok)
-- `test_refund.py` — Outbound refund/void requests: the lock, the marker, the permission gate, and the amount (~2266 tok)
+- `test_reconciliation.py` — Poller retry, expiry, recovery, ledger, and routine no-audit checks (~3828 tok)
+- `test_refund_ledger.py` — Verified reversal posting and no-Payment-Entry no-op checks (~2000 tok)
+- `test_refund.py` — Refund/void locks, permissions, amounts, and requesting-user audit checks (~2300 tok)
 - `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 9 mor (~1754 tok)
 - `test_session.py` — Direct unit test of `as_administrator()` (fix for issue #8): everything `frappe.set_user` (~652 tok)
 - `test_states.py` — TestCheck: test_all_pairs, test_failed_to_paid_is_illegal, test_paid_to_failed_is_illegal, test_succ (~480 tok)
@@ -382,7 +383,7 @@
 
 ## rules/
 
-- `audit-trail.md` — Rule: Audit Trail (~630 tok)
+- `audit-trail.md` — Exception-and-accountability Audit Entry rule and review gate (~700 tok)
 - `commits.md` — Rule: Commit Messages (~284 tok)
 - `configuration.md` — Rule: Configuration (~626 tok)
 - `currency.md` — Rule: Currency (~503 tok)

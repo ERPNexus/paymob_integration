@@ -361,29 +361,17 @@ total gets its own row.
 
 ### event / description (Paymob Audit Entry)
 
-**Functional:** What kind of thing went wrong, and a plain-language account of it a non-developer
-can read without opening the code.
+**Functional:** What requires human attention, or which user requested a capture, refund, or void,
+with a plain-language account a non-developer can read without opening the code.
 
-**Technical:** `event` is a required `Select` — `Illegal Transition`, `Amount Mismatch`,
-`Unattributed Payment`, `Refund Requires Review`, `Duplicate Payment`, `Poller Recovery`, `Attempt Expired`,
-`Refund Requested`, `Void Requested`, `Capture Not Requested`, `Nothing To Reverse`, or
-`Authorization Unconfirmed` — set once by
-whichever caller of `paymob.audit.record` creates the entry: `paymob.processor` for the first
-four plus `Nothing To Reverse` (via `paymob.ledger.post_refund`), `paymob.ledger.post_payment`
-for `Duplicate Payment`, `paymob.tasks` (the reconciliation poller) for `Poller Recovery` and
-`Attempt Expired`, and `paymob.api.request_refund`/`request_void` for `Refund Requested`/
-`Void Requested`. `Poller Recovery` (`needs_action = 0`) is written by `tasks._audit_recovery`
-only when reconciliation actually moved an attempt's state — a `Pending` inquiry result that
-changes nothing gets no audit row, since `process_transaction` already audits any mismatch, illegal
-transition, or duplicate payment on its own; this entry records only *that reconciliation, not a
-callback, drove the change*. `Attempt Expired` (`needs_action = 0`) is written by
-`tasks._expire_if_due` and carries no `paymob_transaction`/`paymob_transaction_id` — `audit.record`
-accepts `txn=None` for exactly this case, an event with no Paymob transaction behind it.
-`Refund Requested`/`Void Requested` (`needs_action = 0`) are written synchronously inside the
-outbound whitelisted call, before Paymob is contacted, and carry `txn=None` too — there is no
-transaction row yet at request time. `Nothing To Reverse` (`needs_action = 0`) is written when a
-verified void/refund callback lands for an attempt with no `payment_entry` (an uncaptured
-authorization was voided; nothing was ever posted). `Capture Not Requested` (`needs_action = 1`,
+**Technical:** `event` is a required `Select`. Active exception events are `Illegal Transition`,
+`Amount Mismatch`, `Unattributed Payment`, `Refund Requires Review`, `Duplicate Payment`,
+`Capture Not Requested`, and `Authorization Unconfirmed`; each has `needs_action = 1`. Active
+accountability events are `Capture Requested`, `Refund Requested`, and `Void Requested`; they are
+written synchronously inside the outbound whitelisted call before Paymob is contacted and carry
+`txn=None` because no transaction row exists yet. `Poller Recovery`, `Attempt Expired`, and
+`Nothing To Reverse` remain valid Select options only so historical records stay readable; new
+rows are no longer created for those routine outcomes. `Capture Not Requested` (`needs_action = 1`,
 and it sets `Paymob Payment Attempt.needs_human_attention`) is written by `paymob.processor` when a
 verified callback moves an `authorize_only` attempt to `Paid` while `capture_requested_at` is
 empty — Paymob captured a hold nobody asked it to capture, so the Integration ID is not configured
@@ -417,13 +405,11 @@ callback). `Long Int`, never `Currency` — these are minor units, not a display
 fully-qualified path of the caller that invoked `paymob.audit.record`, passed explicitly as a
 required parameter ([ADR-0012](decisions.md#adr-0012--the-audit-writer-moved-to-its-own-module)):
 `paymob_integration.paymob.processor.process_transaction` for `Illegal Transition`,
-`Amount Mismatch`, `Unattributed Payment`, and `Capture Not Requested`;
-`paymob_integration.paymob.ledger.post_payment`
-for both `Duplicate Payment` **and** `Nothing To Reverse` — `ledger.py` has one module-level
-`ACTOR` constant shared by `post_payment` and `post_refund`, so the string names the module, not
-the specific function that wrote the entry. For the two human-triggered refund/void events,
-`api.request_refund`/`request_void` pass `frappe.session.user` instead — the person who clicked
-the button, not a module path.
+`Amount Mismatch`, `Unattributed Payment`, `Refund Requires Review`, `Capture Not Requested`, and
+`Authorization Unconfirmed`;
+`paymob_integration.paymob.ledger.post_payment` for `Duplicate Payment`. For the three
+human-triggered capture/refund/void events, `api.request_capture`/`request_refund`/`request_void`
+pass `frappe.session.user` instead — the person who clicked the button, not a module path.
 `occurred_at` is `transaction.received_at` when the entry is tied to a stored transaction, falling
 back to `frappe.utils.now_datetime()` otherwise — deliberately **system-timezone**, matching
 `Paymob Transaction.received_at`, not literal UTC; two datetime conventions in one app would be a

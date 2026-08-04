@@ -113,7 +113,7 @@ Settings to disable this site-wide, or use the request's existing **Mute Email**
 
 Paymob payment alerts are editable native **Notifications**. Open **Notifications** in Desk to edit their
 recipients, content, or enabled state. They are on by default for payment received, failure, expiry,
-refunds, review-needed audit entries, refund/void activity, and poller recovery. The linked Payment
+refunds, review-needed audit entries, and refund/void request activity. The linked Payment
 Request's Company appears in customer-facing email branding; your configured site **Email Account**
 controls the actual From address and display name.
 

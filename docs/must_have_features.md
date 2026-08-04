@@ -54,8 +54,8 @@ Each feature is tagged with WHY it is required — the concrete failure that occ
 
 ## Observability & configuration
 
-15. **Append-only audit log of every gateway interaction.**
-    WHY: when a customer says "I paid" and the invoice says otherwise, the log of raw payloads, HMAC results, dedup decisions, and resulting documents is the only evidence. Log rejected/forged callbacks too — they are security telemetry. (Frappe: Integration Request doctype or a custom `Paymob Transaction` doctype, as Ecosire does.)
+15. **Durable transaction history plus an exception-and-accountability ledger.**
+    WHY: Payment Attempts, Paymob Transactions, Payment Entries, and logs preserve routine processing evidence. Audit Entries stay focused on anomalies requiring human attention and on who requested capture, refund, or void, so the review queue remains actionable.
 
 16. **Settings doctype with per-country credential sets and test-mode switch.**
     WHY: Egypt/KSA/UAE/Oman are separate Paymob accounts with separate base URLs, keys, and integration IDs — hardcoding one set caps the integration at one country. A visible test/live mode flag prevents the classic incident of live keys in a staging site (or test keys silently in production, where every "payment" succeeds with card 5123...2346).

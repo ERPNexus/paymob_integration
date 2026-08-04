@@ -433,18 +433,18 @@ should have told us about it never arrived.
     hmac_verified=0)` and handed to `paymob.processor.process_transaction`, exactly as a webhook
     delivery would be. If the same transaction was already stored by a webhook that simply hasn't
     finished processing yet, the store's own duplicate-key guard returns `None` and the poller
-    does nothing further — "the webhook already stored it; its own job owns the row." If
-    reconciliation is what actually moved the attempt's state, one `Poller Recovery`
-    `Paymob Audit Entry` records that fact.
-  - **No transaction, past `expires_at`** — the attempt moves to `Expired`, with one
-    `Attempt Expired` audit entry. See [states.md](states.md#expired) and
+    does nothing further — "the webhook already stored it; its own job owns the row." A successful
+    recovery is recorded by the transaction, resulting state/Payment Entry, and application log;
+    it creates no routine Audit Entry.
+  - **No transaction, past `expires_at`** — the attempt moves to `Expired` without an Audit Entry.
+    See [states.md](states.md#expired) and
     [ADR-0014](decisions.md#adr-0014--only-an-answered-inquiry-may-expire-an-attempt).
   - **No transaction, before `expires_at`** — nothing changes; the attempt is still within its
     window and stays `Pending` for the next run.
 - A timeout, a `5xx`, or a repeated `401` leaves the attempt `Pending` — the poller never guesses
   from a failure to reach Paymob. `last_polled_at` is updated regardless of outcome, so one
   permanently-failing attempt cannot starve newer ones out of every bounded batch.
-- Audit history is preserved in every case; no record is ever deleted.
+- Existing audit history is preserved in every case; no record is ever deleted.
 
 ### Request capture
 

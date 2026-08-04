@@ -49,6 +49,12 @@ class TestRequestCapture(NoCommitIntegrationTestCase):
 		self.assertEqual(
 			capture.call_args.kwargs, {"transaction_id": f"auth-{attempt.name}", "amount_cents": 27555}
 		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Paymob Audit Entry", {"attempt": attempt.name, "event": "Capture Requested"}, "actor"
+			),
+			self.refund_manager,
+		)
 
 	def test_permission_and_state_are_enforced_before_the_call(self):
 		attempt = self._authorized_attempt()

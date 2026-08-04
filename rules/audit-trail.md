@@ -10,27 +10,28 @@ The first is money that arrived but was not posted: an authentic callback whose 
 match, or a second genuine payment for one order. [`payments.md`](payments.md) forbids posting
 these automatically. If nothing durable records them, the money is simply lost.
 
-The second is an accounting question months later: who refunded this, when, and on what
-evidence? Logs are rotated. An accountant's question is not.
+The second is an accounting question months later: who requested this capture, refund, or void,
+when, and on what evidence? Logs are rotated. An accountant's question is not.
 
 ## The requirement
 
-### Record every money-affecting event
+### Record exceptions and accountable requests
 
-An audit record is created for each of these, and it is a document in the database, not a log
-line:
+An audit record is created for each of these, and it is a document in the database, not a log line:
 
-- Authentic callback with an amount mismatch (nothing posted, human review needed).
-- A second genuine payment for a Payment Request already paid (refund needed).
+- Any anomaly requiring human attention, including an amount mismatch, illegal transition,
+  unattributed payment, unconfirmed authorization, or duplicate payment.
 - Refund, void, or capture requested — who requested it and with what parameters.
-- A payment state changed by the poller rather than by a callback.
-- A verification failure that was not an obvious scan (repeated failures on a real reference).
+
+Routine successful outcomes do not create audit records. Expiry, reconciliation recovery, and a
+verified reversal with no Payment Entry to reverse remain visible through Payment Attempts,
+Paymob Transactions, Payment Entries, and application logs.
 
 ### What each record holds
 
 - The Payment Request, and the Paymob transaction ID where one exists.
 - What happened, in a form a non-developer can read.
-- The amounts involved: expected and received, in cents.
+- The amounts involved, where applicable: expected and received, in cents.
 - Who caused it — the user, or the system job that ran.
 - When, in UTC.
 - Whether a human still needs to act, and a place to record that they did.
@@ -47,10 +48,11 @@ accountant can open, filtered to "needs action". A record nobody can see is not 
 
 ## Definition of Done
 
-- [ ] Every new money-affecting event creates an audit record.
+- [ ] Every anomaly requiring human attention creates an audit record.
+- [ ] Every capture, refund, and void request records the requesting user.
 - [ ] Records that need human action are visible in a list view and marked as pending.
 - [ ] No code path edits or deletes an existing audit record.
-- [ ] Every audit record names the payment, the amounts, the actor, and the time.
+- [ ] Every audit record names the payment, applicable amounts, the actor, and the time.
 
 ## What this rule is NOT
 

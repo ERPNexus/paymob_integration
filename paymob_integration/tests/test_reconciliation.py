@@ -200,8 +200,7 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 
 		attempt.reload()
 		self.assertEqual(attempt.state, "Expired")
-		entries = frappe.get_all("Paymob Audit Entry", filters={"attempt": attempt.name}, fields=["event"])
-		self.assertEqual([e.event for e in entries], ["Attempt Expired"])
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
 		self.assertEqual(payment_entry_count(), before_pe)
 
 	def test_not_yet_expired_stays_pending(self):
@@ -275,8 +274,7 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 		self.assertEqual(attempt.state, "Paid")
 		self.assertIsNotNone(attempt.last_polled_at)
 
-		entries = frappe.get_all("Paymob Audit Entry", filters={"attempt": attempt.name}, fields=["event"])
-		self.assertEqual([e.event for e in entries], ["Poller Recovery"])
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
 
 	def test_a_stored_but_unprocessed_duplicate_is_still_recovered(self):
 		# The webhook durably stored the row (ADR-0007) but its enqueue/worker crashed before
@@ -299,8 +297,7 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 		txn = frappe.get_doc("Paymob Transaction", "990102:Success")
 		self.assertEqual(txn.processed, 1)
 		self.assertEqual(txn.source, "Webhook")  # the existing row is reused, not overwritten
-		entries = frappe.get_all("Paymob Audit Entry", filters={"attempt": attempt.name}, fields=["event"])
-		self.assertEqual([e.event for e in entries], ["Poller Recovery"])
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
 
 	def test_an_already_processed_duplicate_is_a_no_op(self):
 		attempt, payment_request, _invoice = self._given_attempt()

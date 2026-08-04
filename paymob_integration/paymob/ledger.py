@@ -146,14 +146,6 @@ def post_refund(attempt, transaction, delta_cents):
 	original incoming entry remains allocated to the Payment Request as historical evidence.
 	"""
 	if not attempt.payment_entry:
-		audit.record(
-			transaction,
-			attempt,
-			event="Nothing To Reverse",
-			needs_action=0,
-			description=_("Paymob confirmed a reversal, but no original Payment Entry exists to reverse."),
-			actor=ACTOR,
-		)
 		return None
 
 	original = frappe.get_doc("Payment Entry", attempt.payment_entry)

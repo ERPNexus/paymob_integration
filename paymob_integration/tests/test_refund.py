@@ -76,6 +76,12 @@ class TestRequestRefund(_RefundTestCase):
 		with patch("paymob_integration.paymob.void_refund.refund", return_value={}) as refund:
 			api.request_refund(attempt.name, 10000)
 		refund.assert_called_once()
+		self.assertEqual(
+			frappe.db.get_value(
+				"Paymob Audit Entry", {"attempt": attempt.name, "event": "Refund Requested"}, "actor"
+			),
+			self.refund_manager,
+		)
 
 	def test_a_double_submitted_refund_makes_one_outbound_call(self):
 		attempt = self._charged_attempt()
@@ -189,3 +195,9 @@ class TestRequestVoid(_RefundTestCase):
 		with patch("paymob_integration.paymob.void_refund.void", return_value={}) as void:
 			api.request_void(attempt.name)
 		self.assertEqual(void.call_args.kwargs["transaction_id"], f"auth-{attempt.name}")
+		self.assertEqual(
+			frappe.db.get_value(
+				"Paymob Audit Entry", {"attempt": attempt.name, "event": "Void Requested"}, "actor"
+			),
+			self.refund_manager,
+		)

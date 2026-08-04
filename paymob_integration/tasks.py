@@ -6,12 +6,10 @@ Payment Entry write path (rules/payments.md rule 1).
 """
 
 import frappe
-from frappe import _
 from frappe.utils import add_to_date, now_datetime
 
-from paymob_integration.paymob import audit, auth, client, events, processor, settings, states, transactions
+from paymob_integration.paymob import auth, client, events, processor, settings, states, transactions
 
-ACTOR = "paymob_integration.tasks.reconcile_pending_attempts"
 INQUIRY_PATH = "/api/ecommerce/orders/transaction_inquiry"
 RECONCILE_BATCH_SIZE = 50
 
@@ -121,14 +119,6 @@ def _expire_if_due(attempt):
 	states.check(attempt.state, "Expired")
 	attempt.state = "Expired"
 	attempt.save(ignore_permissions=True)
-	audit.record(
-		None,
-		attempt,
-		event="Attempt Expired",
-		needs_action=0,
-		description=_("The customer never completed checkout and Paymob confirmed no transaction exists."),
-		actor=ACTOR,
-	)
 	frappe.logger("paymob").info(
 		f"attempt expired payment_request={attempt.payment_request} attempt={attempt.name}"
 	)
@@ -154,25 +144,13 @@ def _hand_off(attempt, obj):
 		)
 	previous_state = attempt.state
 	processor.process_transaction(doc.name)
-	_audit_recovery(attempt, doc, previous_state)
+	_log_recovery(attempt, doc, previous_state)
 
 
-def _audit_recovery(attempt, txn, previous_state):
-	"""Records only *that reconciliation, not a callback, drove the change* — a `Pending` event
-	from Paymob changes nothing and deserves no audit row. `process_transaction` already handles
-	mismatch, illegal transition and duplicate-payment auditing on its own.
-	"""
+def _log_recovery(attempt, txn, previous_state):
 	current_state = frappe.db.get_value("Paymob Payment Attempt", attempt.name, "state")
 	if current_state == previous_state:
 		return
-	audit.record(
-		txn,
-		attempt,
-		event="Poller Recovery",
-		needs_action=0,
-		description=_("Reconciliation recovered a payment that Paymob's webhook never delivered."),
-		actor=ACTOR,
-	)
 	frappe.logger("paymob").info(
 		f"poller recovery payment_request={attempt.payment_request} attempt={attempt.name} "
 		f"from={previous_state} to={current_state}"

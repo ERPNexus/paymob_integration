@@ -30,7 +30,7 @@ ERPNext backend                Paymob                        Customer browser
     pending → paid | failed
 11. create + submit Payment Entry
     against the Sales Invoice
-12. audit log row for everything
+12. audit only exceptions requiring attention and human money-movement requests
 
 13. (scheduler, every N minutes) reconciliation poll:
     for each stale 'pending' record →
@@ -97,7 +97,9 @@ On a verified, deduplicated success:
 
 - Locate the source document via `merchant_order_id` (= `special_reference` = e.g. the Payment Request name); fall back to the stored Paymob order ID.
 - Create and submit a **Payment Entry** (Receive) for `amount_cents / 100`, allocated against the Sales Invoice's outstanding, using the gateway's clearing/receivable account. Payment Request has built-in machinery for exactly this (`on_payment_authorized` in the payments-app pattern).
-- Write an **audit row** (Integration Request or a custom `Paymob Transaction` doctype): raw payload, HMAC result, matched document, Payment Entry created. Every callback — accepted, duplicate, or rejected — gets a row; that's what makes disputes and debugging survivable.
+- Keep the gateway event in **Paymob Transaction**. Create a **Paymob Audit Entry** only for an
+  anomaly requiring human attention; routine successful processing is already visible through the
+  transaction, attempt, Payment Entry, and application log.
 
 Refund flow mirrors this in reverse: a refund initiated from ERPNext calls `POST /api/acceptance/void_refund/refund {transaction_id, amount_cents}`, and the resulting callback (parent with `is_refunded: true`) drives creation of the reversing Payment Entry — again idempotently, because partial refunds mean several such callbacks with growing `refunded_amount_cents`.
 
