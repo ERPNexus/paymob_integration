@@ -8,6 +8,13 @@ def get_settings():
 	return frappe.get_cached_doc("Paymob Settings")
 
 
+def is_enabled(config=None, *, throw=False):
+	enabled = bool((config or get_settings()).enabled)
+	if throw and not enabled:
+		frappe.throw(_("Paymob is not enabled. Ask an administrator to configure Paymob Settings."))
+	return enabled
+
+
 def get_credential_set(country, currency, mode=None):
 	"""Return the enabled credential set for a country and currency in `mode`.
 
@@ -15,8 +22,7 @@ def get_credential_set(country, currency, mode=None):
 	re-verifying an existing attempt — the settings mode may have changed since checkout started.
 	"""
 	config = get_settings()
-	if not config.enabled:
-		frappe.throw(_("Paymob is not enabled. Ask an administrator to configure Paymob Settings."))
+	is_enabled(config, throw=True)
 
 	mode = mode or config.mode
 	for row in config.credential_sets:
@@ -35,7 +41,7 @@ def enabled_credential_sets():
 	a message to.
 	"""
 	config = get_settings()
-	if not config.enabled:
+	if not is_enabled(config):
 		return []
 	return [row for row in config.credential_sets if row.enabled]
 
@@ -67,6 +73,7 @@ def resolve_integrations(country, currency):
 	all settle the same way (ADR-0027).
 	"""
 	config = get_settings()
+	is_enabled(config, throw=True)
 	rows = [
 		row
 		for row in config.integration_ids

@@ -5,6 +5,16 @@ Governed by [../../rules/documentation.md](../../rules/documentation.md).
 
 ## Endpoints
 
+### Paymob enabled status
+
+**Functional:** Payment Request checks the site-wide Paymob switch before showing any Paymob
+checkout, capture, void, or refund button.
+
+**Technical:** `GET paymob_integration.api.get_enabled_status` is read-only and available only to
+logged-in users. It returns `{"enabled": true|false}` and exposes no credentials. Server-side
+checkout, capture, refund, void, webhook credential selection, and reconciliation independently
+use the same `paymob.settings.is_enabled` guard, so hiding buttons is only a convenience.
+
 ### Start checkout
 
 **Functional:** A Desk user starts a hosted Paymob checkout from a submitted Payment Request.
@@ -205,7 +215,8 @@ still processes and still posts its reversal — a merchant can void from Paymob
 country they sell in, and switches the whole site between test and live.
 
 **Technical:**
-- `enabled` gates credential resolution. `mode` (`Test`/`Live`) selects credential rows; there
+- `enabled` gates every Paymob feature through `paymob.settings.is_enabled`. `mode`
+  (`Test`/`Live`) selects credential rows; there
   is **no fallback** from Live to Test.
 - `credential_sets` stores country, currency, mode, base URL, browser-safe `public_key`, encrypted
   `secret_key`/`api_key`/`hmac_secret`, and the clearing `payment_account`.

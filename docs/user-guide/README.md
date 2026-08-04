@@ -17,8 +17,9 @@ to find the value in your Paymob dashboard.
 
 A word on "**Enabled**": you will see this same checkbox three times — once here, once on each
 credential row, and once on each payment-method row. They do not all mean the same thing. This one
-turns Paymob off *everywhere*. Turning off one credential row below only turns off *that one
-country*. Turning off one payment-method row only turns off *that one payment method*.
+turns Paymob off *everywhere*, including checkout, capture, refund, void, callbacks, scheduled
+reconciliation, and their Payment Request buttons. Turning off one credential row below only turns
+off *that one country*. Turning off one payment-method row only turns off *that one payment method*.
 
 ### Credential Sets (the first table)
 

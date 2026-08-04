@@ -3,10 +3,18 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from paymob_integration import api
 from paymob_integration.paymob import settings
 
 
 class TestCredentialLookup(FrappeTestCase):
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_disabled_guard_throws(self, get_settings):
+		get_settings.return_value = frappe._dict(enabled=0)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Paymob is not enabled"):
+			settings.is_enabled(throw=True)
+
 	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_includes_country(self, get_settings):
 		egypt = frappe._dict(country="Egypt", currency="USD", mode="Test", enabled=1)
@@ -34,6 +42,20 @@ class TestEnabledCredentialSets(FrappeTestCase):
 		self.assertEqual(settings.enabled_credential_sets(), [])
 
 
+class TestEnabledStatus(FrappeTestCase):
+	@patch("paymob_integration.api.settings.is_enabled", return_value=False)
+	def test_returns_only_the_enabled_flag(self, is_enabled):
+		self.assertEqual(api.get_enabled_status(), {"enabled": False})
+		is_enabled.assert_called_once_with()
+
+	def test_guest_cannot_call_the_status_endpoint(self):
+		frappe.set_user("Guest")
+		self.addCleanup(frappe.set_user, "Administrator")
+
+		with self.assertRaises(frappe.PermissionError):
+			frappe.is_whitelisted(api.get_enabled_status)
+
+
 def _row(
 	country="Egypt",
 	currency="EGP",
@@ -54,10 +76,17 @@ def _row(
 
 class TestResolveIntegrations(FrappeTestCase):
 	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_site_switch_disables_integration_resolution(self, get_settings):
+		get_settings.return_value = frappe._dict(enabled=0)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Paymob is not enabled"):
+			settings.resolve_integrations("Egypt", "EGP")
+
+	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_uniform_auto_capture_group_returns_every_id(self, get_settings):
 		card = _row(capture_mode="Auto Capture", integration_id="1001")
 		wallet = _row(capture_mode="Auto Capture", integration_id="1004")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[card, wallet])
+		get_settings.return_value = frappe._dict(enabled=1, mode="Test", integration_ids=[card, wallet])
 
 		self.assertEqual(settings.resolve_integrations("Egypt", "EGP"), ("Auto Capture", ["1001", "1004"]))
 
@@ -65,7 +94,7 @@ class TestResolveIntegrations(FrappeTestCase):
 	def test_uniform_authorize_only_group_returns_every_id(self, get_settings):
 		card = _row(capture_mode="Authorize Only", integration_id="1002")
 		wallet = _row(capture_mode="Authorize Only", integration_id="1003")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[card, wallet])
+		get_settings.return_value = frappe._dict(enabled=1, mode="Test", integration_ids=[card, wallet])
 
 		self.assertEqual(settings.resolve_integrations("Egypt", "EGP"), ("Authorize Only", ["1002", "1003"]))
 
@@ -73,7 +102,9 @@ class TestResolveIntegrations(FrappeTestCase):
 	def test_mixed_group_throws(self, get_settings):
 		auto_capture = _row(capture_mode="Auto Capture", integration_id="1001")
 		authorize_only = _row(capture_mode="Authorize Only", integration_id="1002")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[auto_capture, authorize_only])
+		get_settings.return_value = frappe._dict(
+			enabled=1, mode="Test", integration_ids=[auto_capture, authorize_only]
+		)
 
 		with self.assertRaisesRegex(frappe.ValidationError, "Authorize Only"):
 			settings.resolve_integrations("Egypt", "EGP")
@@ -82,7 +113,9 @@ class TestResolveIntegrations(FrappeTestCase):
 	def test_disabled_row_of_the_other_mode_is_ignored(self, get_settings):
 		disabled_auto = _row(capture_mode="Auto Capture", integration_id="1001", enabled=0)
 		authorize_only = _row(capture_mode="Authorize Only", integration_id="1002")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[disabled_auto, authorize_only])
+		get_settings.return_value = frappe._dict(
+			enabled=1, mode="Test", integration_ids=[disabled_auto, authorize_only]
+		)
 
 		self.assertEqual(settings.resolve_integrations("Egypt", "EGP"), ("Authorize Only", ["1002"]))
 
@@ -90,7 +123,7 @@ class TestResolveIntegrations(FrappeTestCase):
 	def test_other_currency_may_use_the_other_mode(self, get_settings):
 		egp_auth = _row(currency="EGP", capture_mode="Authorize Only", integration_id="1002")
 		usd_auto = _row(currency="USD", capture_mode="Auto Capture", integration_id="2001")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[egp_auth, usd_auto])
+		get_settings.return_value = frappe._dict(enabled=1, mode="Test", integration_ids=[egp_auth, usd_auto])
 
 		self.assertEqual(settings.resolve_integrations("Egypt", "EGP"), ("Authorize Only", ["1002"]))
 		self.assertEqual(settings.resolve_integrations("Egypt", "USD"), ("Auto Capture", ["2001"]))
@@ -98,14 +131,14 @@ class TestResolveIntegrations(FrappeTestCase):
 	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_wrong_site_mode_row_is_excluded(self, get_settings):
 		live_row = _row(mode="Live", integration_id="9001")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[live_row])
+		get_settings.return_value = frappe._dict(enabled=1, mode="Test", integration_ids=[live_row])
 
 		with self.assertRaises(frappe.ValidationError):
 			settings.resolve_integrations("Egypt", "EGP")
 
 	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_no_enabled_row_throws(self, get_settings):
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[])
+		get_settings.return_value = frappe._dict(enabled=1, mode="Test", integration_ids=[])
 
 		with self.assertRaisesRegex(frappe.ValidationError, "Egypt, EGP.*Test"):
 			settings.resolve_integrations("Egypt", "EGP")
@@ -113,6 +146,6 @@ class TestResolveIntegrations(FrappeTestCase):
 	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_blank_capture_mode_is_auto_capture(self, get_settings):
 		blank = _row(capture_mode=None, integration_id="1001")
-		get_settings.return_value = frappe._dict(mode="Test", integration_ids=[blank])
+		get_settings.return_value = frappe._dict(enabled=1, mode="Test", integration_ids=[blank])
 
 		self.assertEqual(settings.resolve_integrations("Egypt", "EGP"), ("Auto Capture", ["1001"]))

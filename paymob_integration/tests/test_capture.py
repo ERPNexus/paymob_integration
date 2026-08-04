@@ -59,9 +59,29 @@ class TestRequestCapture(NoCommitIntegrationTestCase):
 	def test_permission_and_state_are_enforced_before_the_call(self):
 		attempt = self._authorized_attempt()
 		frappe.set_user(self.accounts_manager)
-		with patch("paymob_integration.paymob.void_refund.capture") as capture:
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.paymob.void_refund.capture") as capture,
+		):
 			with self.assertRaises(frappe.PermissionError):
 				api.request_capture(attempt.name)
+		capture.assert_not_called()
+
+	def test_disabled_paymob_changes_nothing(self):
+		attempt = self._authorized_attempt()
+		frappe.set_user(self.refund_manager)
+		before_entries = payment_entry_count()
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.paymob.void_refund.capture") as capture,
+			self.assertRaisesRegex(frappe.ValidationError, "Paymob is not enabled"),
+		):
+			api.request_capture(attempt.name)
+
+		attempt.reload()
+		self.assertIsNone(attempt.capture_requested_at)
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
+		self.assertEqual(payment_entry_count(), before_entries)
 		capture.assert_not_called()
 
 	def test_network_error_keeps_the_latch_and_never_posts(self):

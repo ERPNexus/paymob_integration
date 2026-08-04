@@ -62,10 +62,30 @@ class _RefundTestCase(NoCommitIntegrationTestCase):
 
 
 class TestRequestRefund(_RefundTestCase):
+	def test_disabled_paymob_changes_nothing(self):
+		attempt = self._charged_attempt()
+		frappe.set_user(self.refund_manager)
+		before_entries = payment_entry_count()
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.paymob.void_refund.refund") as refund,
+			self.assertRaisesRegex(frappe.ValidationError, "Paymob is not enabled"),
+		):
+			api.request_refund(attempt.name, 10000)
+
+		attempt.reload()
+		self.assertIsNone(attempt.refund_requested_at)
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
+		self.assertEqual(payment_entry_count(), before_entries)
+		refund.assert_not_called()
+
 	def test_a_user_without_the_role_is_refused(self):
 		attempt = self._charged_attempt()
 		frappe.set_user(self.accounts_manager)
-		with patch("paymob_integration.paymob.void_refund.refund") as refund:
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.paymob.void_refund.refund") as refund,
+		):
 			with self.assertRaises(frappe.PermissionError):
 				api.request_refund(attempt.name, 10000)
 		refund.assert_not_called()
@@ -151,10 +171,30 @@ class TestRequestRefund(_RefundTestCase):
 
 
 class TestRequestVoid(_RefundTestCase):
+	def test_disabled_paymob_changes_nothing(self):
+		attempt = self._authorized_attempt()
+		frappe.set_user(self.refund_manager)
+		before_entries = payment_entry_count()
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.paymob.void_refund.void") as void,
+			self.assertRaisesRegex(frappe.ValidationError, "Paymob is not enabled"),
+		):
+			api.request_void(attempt.name)
+
+		attempt.reload()
+		self.assertIsNone(attempt.refund_requested_at)
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
+		self.assertEqual(payment_entry_count(), before_entries)
+		void.assert_not_called()
+
 	def test_a_user_without_the_role_is_refused(self):
 		attempt = self._authorized_attempt()
 		frappe.set_user(self.accounts_manager)
-		with patch("paymob_integration.paymob.void_refund.void") as void:
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.paymob.void_refund.void") as void,
+		):
 			with self.assertRaises(frappe.PermissionError):
 				api.request_void(attempt.name)
 		void.assert_not_called()

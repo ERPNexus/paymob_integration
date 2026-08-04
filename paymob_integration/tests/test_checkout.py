@@ -316,6 +316,19 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			api.start_checkout(self.payment_request.name)
 
+	def test_disabled_paymob_creates_no_attempt_or_intention(self):
+		with (
+			patch("paymob_integration.paymob.settings.get_settings", return_value=frappe._dict(enabled=0)),
+			patch("paymob_integration.api.intention.create_intention") as create_intention,
+			self.assertRaisesRegex(frappe.ValidationError, "Paymob is not enabled"),
+		):
+			api.start_checkout(self.payment_request.name)
+
+		self.assertEqual(
+			frappe.db.count("Paymob Payment Attempt", {"payment_request": self.payment_request.name}), 0
+		)
+		create_intention.assert_not_called()
+
 	def test_sends_every_configured_integration_id(self):
 		with (
 			patch(

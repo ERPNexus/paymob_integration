@@ -114,6 +114,20 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 		self.addCleanup(patcher.stop)
 		return fake
 
+	def test_disabled_paymob_changes_nothing(self):
+		attempt, _payment_request, _invoice = self._given_attempt()
+		before_entries = payment_entry_count()
+		self.settings.enabled = 0
+		with patch("paymob_integration.tasks.client.request") as request:
+			tasks.reconcile_pending_attempts()
+
+		attempt.reload()
+		self.assertIsNone(attempt.last_polled_at)
+		self.assertEqual(frappe.db.count("Paymob Transaction", {"attempt": attempt.name}), 0)
+		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"attempt": attempt.name}), 0)
+		self.assertEqual(payment_entry_count(), before_entries)
+		request.assert_not_called()
+
 	# -- 401 handling ------------------------------------------------------------------------
 
 	def test_401_refreshes_the_token_and_retries_once(self):

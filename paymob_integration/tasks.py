@@ -19,7 +19,7 @@ def reconcile_pending_attempts():
 	try/except in the loop below, so a single permanently-failing attempt cannot block the rest.
 	"""
 	config = settings.get_settings()
-	if not config.enabled:
+	if not settings.is_enabled(config):
 		return
 
 	cutoff = add_to_date(now_datetime(), minutes=-(config.stale_pending_minutes or 0))

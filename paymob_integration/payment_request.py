@@ -26,12 +26,9 @@ def prepare_payment_email(doc, method=None):
 	`before_submit` hook lands after the mail has already gone out (ADR-0024).
 	"""
 	config = settings.get_settings()
-	if not (
-		config.enabled
-		and doc.payment_request_type == "Inward"
-		and doc.reference_doctype
-		and doc.reference_name
-	):
+	if not settings.is_enabled(config):
+		return
+	if not (doc.payment_request_type == "Inward" and doc.reference_doctype and doc.reference_name):
 		return
 
 	try:

@@ -7,38 +7,46 @@ frappe.ui.form.on("Payment Request", {
 		)
 			return;
 
-		if (frm.doc.status !== "Paid") add_checkout_button(frm);
-
-		frappe.db
-			.get_list("Paymob Payment Attempt", {
-				filters: {
-					payment_request: frm.doc.name,
-					state: ["in", ["Authorized", "Paid", "Partially Refunded"]],
-				},
-				fields: ["name", "state", "expected_amount_cents", "refunded_amount_cents"],
-				order_by: "creation desc",
-				limit: 1,
-			})
-			.then((attempts) => {
-				const attempt = attempts[0];
-				if (!attempt) return;
-				// "refund" is a custom Permission Type; frappe.perm.has_perm only knows the
-				// built-in rights, so the check has to go through the server.
-				frappe
-					.call({
-						method: "frappe.client.has_permission",
-						args: {
-							doctype: "Paymob Payment Attempt",
-							docname: attempt.name,
-							perm_type: "refund",
-						},
-					})
-					.then(({ message }) => {
-						if (message?.has_permission) add_refund_buttons(frm, attempt);
-					});
+		frappe
+			.call({ method: "paymob_integration.api.get_enabled_status", type: "GET" })
+			.then(({ message }) => {
+				if (!message?.enabled) return;
+				if (frm.doc.status !== "Paid") add_checkout_button(frm);
+				add_action_buttons(frm);
 			});
 	},
 });
+
+function add_action_buttons(frm) {
+	frappe.db
+		.get_list("Paymob Payment Attempt", {
+			filters: {
+				payment_request: frm.doc.name,
+				state: ["in", ["Authorized", "Paid", "Partially Refunded"]],
+			},
+			fields: ["name", "state", "expected_amount_cents", "refunded_amount_cents"],
+			order_by: "creation desc",
+			limit: 1,
+		})
+		.then((attempts) => {
+			const attempt = attempts[0];
+			if (!attempt) return;
+			// "refund" is a custom Permission Type; frappe.perm.has_perm only knows the
+			// built-in rights, so the check has to go through the server.
+			frappe
+				.call({
+					method: "frappe.client.has_permission",
+					args: {
+						doctype: "Paymob Payment Attempt",
+						docname: attempt.name,
+						perm_type: "refund",
+					},
+				})
+				.then(({ message }) => {
+					if (message?.has_permission) add_refund_buttons(frm, attempt);
+				});
+		});
+}
 
 function add_checkout_button(frm) {
 	frm.add_custom_button(__("Pay with Paymob"), () => {
