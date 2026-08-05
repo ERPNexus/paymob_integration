@@ -93,9 +93,9 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          findings=$(git grep -nI -E 'sk_(test|live)_[A-Za-z0-9_-]{12,}|pk_(test|live)_[A-Za-z0-9_-]{12,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|mysql://[^ ]+:[^ ]+@|redis://[^ ]+:[^ ]+@|ngrok|trycloudflare' -- . ':(exclude).github/workflows/ci.yml' || true)
+          findings=$(git grep -nI -E 'sk_(test|live)_[A-Za-z0-9_-]{12,}|pk_(test|live)_[A-Za-z0-9_-]{12,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|mysql://[^ ]+:[^ ]+@|redis://[^ ]+:[^ ]+@|ngrok|trycloudflare' -- . ':(exclude).github/workflows/ci.yml' ':(exclude).wolf/cerebrum.md' ':(exclude)docs/references.md' || true)
           printf '%s\n' "$findings"
-          dangerous=$(printf '%s\n' "$findings" | grep -Ev '_FAKE_|example\\.(com|test)|127\\.0\\.0\\.1|localhost|redis://127\\.0\\.0\\.1|docs/references\\.md|\\.wolf/cerebrum\\.md' || true)
+          dangerous=$(printf '%s\n' "$findings" | grep -Ev '_FAKE_|example\\.(com|test)|127\\.0\\.0\\.1|localhost|redis://127\\.0\\.0\\.1' || true)
           if [ -n "$dangerous" ]; then
             printf '%s\n' "$dangerous" >&2
             exit 1
