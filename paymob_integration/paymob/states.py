@@ -13,7 +13,7 @@ LEGAL = {
 	"Pending": {"Paid", "Failed", "Expired"},
 	"Paid": {"Partially Refunded", "Refunded"},
 	"Partially Refunded": {"Refunded"},
-	"Failed": set(),
+	"Failed": {"Paid"},
 	"Expired": set(),
 	"Refunded": set(),
 }

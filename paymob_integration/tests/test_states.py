@@ -28,6 +28,7 @@ class TestStates(UnitTestCase):
 		for current, target in (
 			("Pending", "Paid"),
 			("Pending", "Failed"),
+			("Failed", "Paid"),
 			("Paid", "Partially Refunded"),
 			("Paid", "Refunded"),
 			("Partially Refunded", "Refunded"),

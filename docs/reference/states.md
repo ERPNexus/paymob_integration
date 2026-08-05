@@ -11,12 +11,15 @@ of these transitions.
 | `Paid` | Verified, exact-amount `Success`; one Payment Entry is posted | `Partially Refunded`, `Refunded` |
 | `Partially Refunded` | Verified signed refund delta below the original charge | `Refunded` |
 | `Refunded` | Verified signed refunds reach the original charge | None |
-| `Failed` | Verified decline | None |
+| `Failed` | Verified decline | `Paid` from a later verified, exact-amount `Success` for the same still-valid Paymob checkout |
 | `Expired` | Answered inquiry finds no transaction after expiry | None |
 
-A state never moves backwards. `needs_human_attention` is separate from lifecycle state: an amount
-mismatch, duplicate payment, illegal transition, or unsupported Paymob event is audited for review
-without creating a Payment Entry.
+A decline records the latest failed try, but a still-valid Paymob intention may later produce a
+verified, exact-amount `Success`; only then may `Failed` move to `Paid`. Immutable Paymob Transaction
+rows retain both events. All other state changes remain forward-only.
+
+`needs_human_attention` is separate from lifecycle state: an amount mismatch, duplicate payment,
+illegal transition, or unsupported Paymob event is audited for review without creating a Payment Entry.
 
 ## Event kinds
 

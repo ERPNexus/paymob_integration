@@ -27,6 +27,7 @@
 
 ## Key Learnings
 
+- [2026-08-05] A verified decline is not terminal for a still-valid hosted checkout: retain its immutable transaction evidence, then allow only a later verified, exact-match `Success` to move the same attempt from `Failed` to `Paid` through the normal processor and ledger path.
 - [2026-08-05] Release hardening currently targets `0.1.0-alpha`; v1 requires a passing clean CI run and a completed Paymob sandbox smoke-test record, not just the presence of CI/checklist files.
 - [2026-08-04] Treat `Paymob Settings.enabled` as a server-side feature boundary: every entry
   point uses one settings predicate, while Desk visibility only mirrors that guard for usability.
@@ -208,6 +209,7 @@
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
+- [2026-08-05] Run `pre-commit` from `apps/paymob_integration`, not the Bench root; its Git configuration is repository-local.
 - [2026-08-04] The imported GitHub issue extension is at
   `/home/frappe/.claude/skills/github-issues/SKILL.md`; do not resolve the anatomy entry as the
   repository-local `.claude/skills/github-issues/SKILL.md`, which does not exist.
