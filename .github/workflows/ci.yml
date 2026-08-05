@@ -65,6 +65,7 @@ jobs:
           cd ci-bench
           bench get-app --branch version-16 https://github.com/frappe/erpnext
           ln -s "$GITHUB_WORKSPACE" apps/paymob_integration
+          printf '%s\n' paymob_integration >> sites/apps.txt
           ./env/bin/pip install -e apps/paymob_integration
           bench set-config -g db_host 127.0.0.1
           bench set-config -g redis_cache redis://127.0.0.1:6379
