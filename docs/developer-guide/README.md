@@ -9,7 +9,10 @@ See the [architecture](../architecture.md) for the end-to-end flow and
 
 `Payment Request.before_submit` sets `payment_url` only for an enabled, configured Paymob inward
 request. `/paymob-pay` verifies Frappe's signed query before loading that request and uses
-`api._checkout(..., reuse_pending=True)` to prevent a refresh from creating another intention.
+`api._checkout(..., reuse_pending=True)`. A Payment-Request-scoped site lock makes simultaneous
+opens recheck and reuse the same ready, unexpired checkout rather than create competing intentions.
+Webhook attribution additionally requires both `merchant_order_id` and signed `order.id` to match
+the frozen attempt identifiers.
 `notifications.seed()` is called after install and by the post-model-sync patch; it creates missing
 non-standard Notification records and never updates an existing one. A one-time corrective patch refreshes
 the seven shipped templates, then later Desk edits in **Notifications** are preserved. Templates brand

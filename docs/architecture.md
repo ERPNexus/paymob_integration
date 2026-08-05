@@ -56,7 +56,7 @@ Authorization: Token sk_test_...      ← secret key, matching mode
 }
 ```
 
-The response gives three identifiers to persist immediately, *before* the customer sees anything: the intention `id` (`pi_...`), `intention_order_id` (Paymob's order ID — the primary correlation key in callbacks), and `client_secret`. The local payment record enters state **pending**.
+The response gives three identifiers to persist immediately, *before* the customer sees anything: the intention `id` (`pi_...`), `intention_order_id` (Paymob's order ID — the primary correlation key in callbacks), and `client_secret`. The local payment record enters state **pending**. Signed payer-link opens take a site-scoped lock keyed by the Payment Request across the ready-attempt lookup, intention call, and identifier save, so simultaneous tabs reuse one unexpired checkout and client secret.
 
 Why `special_reference` matters twice: (a) it lets a callback be matched back to the exact ERPNext document without a lookup table, and (b) since Paymob requires it to be unique, re-submitting the same reference cannot silently create a second live order for the same invoice.
 
@@ -89,9 +89,9 @@ race the webhook and any network layer can replay. So before acting:
 
 1. **Dedup**: has (transaction id `obj.id` + event kind derived from the flags) been processed? If yes, acknowledge and stop.
 2. **State machine**: is the transition legal? `pending → paid` (verified standalone success),
-   `pending → failed` (decline), and `paid → partially_refunded/refunded` (signed refund delta).
-   A `failed` record must never move to `paid` off a stale duplicate, and a second success callback
-   must not create a second Payment Entry.
+   `pending → failed` (decline), `failed → paid` only for a later verified, exact-amount success
+   from the same still-valid checkout, and `paid → partially_refunded/refunded` (signed refund delta).
+   A second success callback must not create a second Payment Entry.
 
 The flags in the payload are how you classify the event — there is no separate "event type" field beyond `type: "TRANSACTION"`; a refund notification is the *parent* transaction re-sent with `is_refunded: true`, and the refund itself is a child transaction with `is_refund: true` and `parent_transaction` set.
 
@@ -99,7 +99,8 @@ The flags in the payload are how you classify the event — there is no separate
 
 On a verified, deduplicated success:
 
-- Locate the source document via `merchant_order_id` (= `special_reference` = e.g. the Payment Request name); fall back to the stored Paymob order ID.
+- Link a callback only when its `merchant_order_id` names the attempt **and** its signed `order.id`
+  equals that attempt's frozen Paymob order ID. A mismatch remains unattributed and cannot post.
 - Create and submit a **Payment Entry** (Receive) for `amount_cents / 100`, allocated against the Sales Invoice's outstanding, using the gateway's clearing/receivable account. Payment Request has built-in machinery for exactly this (`on_payment_authorized` in the payments-app pattern).
 - Keep the gateway event in **Paymob Transaction**. Create a **Paymob Audit Entry** only for an
   anomaly requiring human attention; routine successful processing is already visible through the

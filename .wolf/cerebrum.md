@@ -27,6 +27,7 @@
 
 ## Key Learnings
 
+- [2026-08-05] Frappe's `utils.synchronization.filelock` is site-scoped by default; use a Payment-Request-derived name around payer-link active-attempt lookup, intention creation, and identifier persistence to prevent concurrent checkout creation.
 - [2026-08-05] A verified decline is not terminal for a still-valid hosted checkout: retain its immutable transaction evidence, then allow only a later verified, exact-match `Success` to move the same attempt from `Failed` to `Paid` through the normal processor and ledger path.
 - [2026-08-05] Release hardening currently targets `0.1.0-alpha`; v1 requires a passing clean CI run and a completed Paymob sandbox smoke-test record, not just the presence of CI/checklist files.
 - [2026-08-04] Treat `Paymob Settings.enabled` as a server-side feature boundary: every entry

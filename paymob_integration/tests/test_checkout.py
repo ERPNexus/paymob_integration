@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import frappe
@@ -224,6 +225,7 @@ class TestCheckoutURL(UnitTestCase):
 				return_value=["1002"],
 			),
 			patch("paymob_integration.api._active_attempt", return_value=pending),
+			patch("paymob_integration.api.filelock", return_value=nullcontext()),
 			patch(
 				"paymob_integration.api.settings.get_credential_set",
 				return_value=Mock(country="Egypt", mode="Test"),

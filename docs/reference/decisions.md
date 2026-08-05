@@ -82,3 +82,9 @@ The app sets its signed payment URL at `validate`, before ERPNext's own submit-t
 Every enabled Paymob Integration ID must be configured for immediate/standalone payment. A verified
 `Success` settles `Pending → Paid` once. Retired signed flags are stored as `Unsupported`, audited
 for review, and never mutate state or the ledger. Refund is the only outbound money movement.
+
+## ADR-0030 — Payer links serialize checkout reuse
+
+Signed payer-link checkout takes Frappe's site-scoped file lock for the Payment Request while it
+reloads, reuses a ready attempt, or creates and persists one intention. Desk checkout deliberately
+keeps its explicit new-attempt behavior.

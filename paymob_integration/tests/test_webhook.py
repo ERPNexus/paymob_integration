@@ -12,7 +12,14 @@ from werkzeug.test import EnvironBuilder
 from werkzeug.wrappers import Request
 
 from paymob_integration import webhooks
-from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_payment_request
+from paymob_integration.paymob import processor
+from paymob_integration.tests.helpers import (
+	NoCommitIntegrationTestCase,
+	cleanup_fixture,
+	given_attempt,
+	given_submitted_payment_request,
+	payment_entry_count,
+)
 from paymob_integration.tests.test_hmac_verify import SECRET, VALID_OBJ, _sign_processed
 
 
@@ -30,6 +37,11 @@ def _post(payload, hmac):
 	frappe.local.request = Request(environ)
 	frappe.local.form_dict = frappe._dict(payload)
 	return webhooks.processed_callback()
+
+
+def _clearing_account():
+	company = frappe.defaults.get_global_default("company")
+	return frappe.get_cached_value("Company", company, "default_cash_account")
 
 
 class TestProcessedCallback(NoCommitIntegrationTestCase):
@@ -281,6 +293,59 @@ class TestProcessedCallback(NoCommitIntegrationTestCase):
 			frappe.delete_doc("Payment Request", payment_request.name, force=True)
 			invoice.cancel()
 			frappe.delete_doc("Sales Invoice", invoice.name, force=True)
+
+	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
+	def test_mismatched_order_id_stays_unattributed_when_processed(self, enabled_credential_sets):
+		enabled_credential_sets.return_value = [_credentials()]
+		attempt, payment_request, invoice = given_attempt()
+		self.addCleanup(cleanup_fixture, attempt.name, payment_request.name, invoice.name)
+		self.addCleanup(frappe.db.delete, "Paymob Audit Entry", {"paymob_transaction_id": VALID_OBJ["id"]})
+		attempt.paymob_order_id = "999999"
+		attempt.save(ignore_permissions=True)
+		obj = {**VALID_OBJ, "order": {**VALID_OBJ["order"], "merchant_order_id": attempt.name}}
+		before = payment_entry_count()
+
+		with patch("paymob_integration.webhooks.frappe.enqueue"):
+			_post({"obj": obj}, _sign_processed(obj))
+		txn = frappe.get_doc("Paymob Transaction", "123456:Success")
+		with patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(payment_account=_clearing_account()),
+		):
+			processor.process_transaction(txn.name)
+
+		txn.reload()
+		self.assertFalse(txn.attempt)
+		self.assertEqual(txn.processed, 1)
+		self.assertEqual(payment_entry_count(), before)
+
+	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
+	def test_matching_identifiers_link_and_post_payment(self, enabled_credential_sets):
+		enabled_credential_sets.return_value = [_credentials()]
+		attempt, payment_request, invoice = given_attempt()
+		self.addCleanup(cleanup_fixture, attempt.name, payment_request.name, invoice.name)
+		self.addCleanup(frappe.db.delete, "Paymob Audit Entry", {"paymob_transaction_id": VALID_OBJ["id"]})
+		attempt.paymob_order_id = str(VALID_OBJ["order"]["id"])
+		attempt.save(ignore_permissions=True)
+		obj = {**VALID_OBJ, "order": {**VALID_OBJ["order"], "merchant_order_id": attempt.name}}
+
+		with patch("paymob_integration.webhooks.frappe.enqueue"):
+			_post({"obj": obj}, _sign_processed(obj))
+		txn = frappe.get_doc("Paymob Transaction", "123456:Success")
+		with patch(
+			"paymob_integration.paymob.settings.get_credential_set",
+			return_value=Mock(payment_account=_clearing_account()),
+		):
+			processor.process_transaction(txn.name)
+
+		attempt.reload()
+		txn.reload()
+		self.assertEqual(txn.attempt, attempt.name)
+		self.assertEqual(txn.processed, 1)
+		self.assertEqual(attempt.state, "Paid")
+		payment_entry = frappe.get_doc("Payment Entry", attempt.payment_entry)
+		self.assertEqual(payment_entry.references[0].payment_request, payment_request.name)
+		self.assertEqual(payment_entry.references[0].reference_name, invoice.name)
 
 	@patch("paymob_integration.webhooks.settings.enabled_credential_sets")
 	def test_unknown_merchant_order_id_stores_with_blank_links(self, enabled_credential_sets):

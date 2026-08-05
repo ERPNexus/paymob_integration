@@ -87,12 +87,14 @@ checkout in a new tab. The Payment Request's company and currency select the mat
 credentials. Customer billing details use the linked document's selected address when available,
 then the customer's primary address.
 
-Use **Paymob Attempts** on the same Payment Request to see each checkout try. If a card is declined,
-start a new payment; the previous attempt remains as history.
+Use **Paymob Attempts** on the same Payment Request to see each checkout try. A decline remains in
+the history, but Paymob may still confirm that same unexpired checkout afterward; only a verified
+matching success records the payment. Starting checkout from Desk intentionally creates a new try.
 
 By default, ERPNext emails the payer a signed payment link when you submit an incoming Payment Request.
-It opens a fresh checkout if the earlier one has expired. Turn off **Send Payment Link Email** in Paymob
-Settings to disable this site-wide, or use the request's existing **Mute Email** option for one request.
+Opening that link in multiple tabs reuses one ready checkout; it opens a fresh one only after expiry.
+Turn off **Send Payment Link Email** in Paymob Settings to disable this site-wide, or use the request's
+existing **Mute Email** option for one request.
 
 Paymob payment alerts are editable native **Notifications**. Open **Notifications** in Desk to edit their
 recipients, content, or enabled state. They are on by default for payment received, failure, expiry,

@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.contacts.doctype.address.address import get_default_address
 from frappe.utils import add_to_date, get_url, now_datetime, validate_email_address
+from frappe.utils.synchronization import filelock
 
 from paymob_integration.paymob import amounts, audit, intention, refund, settings, transactions
 
@@ -76,6 +77,17 @@ def start_checkout(payment_request: str):
 
 def _checkout(request, reuse_pending=False):
 	"""Create, or safely reuse, the hosted checkout for a submitted request."""
+	if reuse_pending:
+		# Payer links can be opened in multiple browser tabs at once. Keep the lookup, intention
+		# creation, and identifier save together so only one live checkout is created per request.
+		with filelock(f"paymob-checkout-{request.name}"):
+			request = frappe.get_doc("Payment Request", request.name)
+			return _checkout_for_request(request, reuse_pending=True)
+	return _checkout_for_request(request)
+
+
+def _checkout_for_request(request, reuse_pending=False):
+	"""Run one checkout flow; payer-link callers hold their request-scoped lock."""
 	_validate_payable(request)
 	source = frappe.get_doc(request.reference_doctype, request.reference_name)
 	country = _merchant_country(request, source)

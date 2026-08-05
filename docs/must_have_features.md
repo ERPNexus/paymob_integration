@@ -22,10 +22,10 @@ Each feature is tagged with WHY it is required — the concrete failure that occ
    WHY: duplicate delivery must be assumed (undocumented retries, reconciliation poller racing the webhook, replays). Without dedup, one payment creates two submitted Payment Entries — the invoice shows overpayment, the ledger is wrong, and finance reconciles by hand.
 
 6. **Explicit transaction state machine with legal-transition enforcement.**
-   WHY: callbacks and poll results can arrive out of order or stale. Without `pending → paid | failed | expired` and refund transition rules, a late duplicate can flip a `paid` record to `failed` (or worse, a `failed` one to `paid`), and nothing stops double-processing.
+   WHY: callbacks and poll results can arrive out of order or stale. The one recovery exception is a later verified, exact-amount success for the same unexpired checkout (`failed → paid`); every other stale transition is rejected and cannot double-post.
 
 7. **Unique `special_reference` per payment attempt, persisted with intention ID + Paymob order ID before redirecting the customer.**
-   WHY: this is the correlation and idempotency key on the *outbound* side. If the intention IDs aren't stored before redirect and the server restarts, an incoming callback can't be matched to its invoice — an orphaned payment. Uniqueness also prevents accidentally creating two live Paymob orders for the same Payment Request.
+   WHY: this is the correlation and idempotency key on the *outbound* side. Payer-link opens lock and reuse one ready checkout, while callback attribution requires both the merchant reference and signed order ID. This prevents competing live orders and orphaned or misfiled payments.
 
 8. **Server-side amount/currency verification on callback.**
    WHY: trust but verify — the ledger write must use `amount_cents` and `currency` from the *verified callback* (and check they match the expectation stored at intention time), never values echoed from the browser redirect. A mismatch must block auto-posting and flag for review.

@@ -51,7 +51,7 @@ Paymob-generated ID (`intention_order_id` in the create response, `order.id`/`or
 *Source: [Create Intention — Key values in the response](https://developers.paymob.com/paymob-docs/developers/intention-apis/create-intention).*
 
 ### Special Reference / `merchant_order_id`
-**Your** unique reference (e.g., ERPNext Payment Request name), passed as `special_reference` when creating the intention and echoed back as `merchant_order_id` in the transaction callback. Because it must be unique on Paymob's side, it doubles as an idempotency guard against creating two Paymob orders for the same ERPNext document.
+**Your** unique reference (e.g., ERPNext Payment Request name), passed as `special_reference` when creating the intention and echoed back as `merchant_order_id` in the transaction callback. It identifies an attempt only alongside the callback's signed `order.id`, which must equal the attempt's frozen Paymob order ID. Because it must be unique on Paymob's side, it doubles as an idempotency guard against creating two Paymob orders for the same ERPNext document.
 *Source: [Create Intention body parameters](https://developers.paymob.com/paymob-docs/developers/intention-apis/create-intention).*
 
 ### Unified Checkout
@@ -159,8 +159,9 @@ A scheduled job that finds locally-`pending` payments older than some threshold 
 
 ### Transaction state machine
 Explicit set of states a payment record moves through with allowed transitions only, e.g. `draft →
-pending → (paid | failed | expired)` and `paid → partially_refunded → refunded`. Prevents illegal
-transitions like `failed → paid` when a late callback arrives out of order.
+pending → (paid | failed | expired)` and `paid → partially_refunded → refunded`. A later verified,
+exact-amount success may move `failed → paid` for the same still-valid checkout; other backwards
+transitions remain illegal.
 
 ### PCI-DSS scope avoidance
 Never letting raw card data (PAN, CVV) touch your servers. Hosted checkout achieves this: card entry happens on Paymob's domain; you receive only masked data (`source_data.pan` is the **last 4 digits only**) and tokens. Paymob's own docs: "You don't need to handle sensitive card data yourself."

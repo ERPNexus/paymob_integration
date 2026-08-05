@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from unittest.mock import Mock, patch
 
 import frappe
@@ -93,6 +93,7 @@ class TestPayLink(UnitTestCase):
 				return_value=["1001"],
 			),
 			patch("paymob_integration.api._active_attempt", return_value=attempt),
+			patch("paymob_integration.api.filelock", return_value=nullcontext()),
 			patch("paymob_integration.api.settings.get_credential_set", return_value=credentials),
 			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),
 		):
@@ -103,6 +104,55 @@ class TestPayLink(UnitTestCase):
 	def test_contact_email_uses_the_same_fallback_as_billing_data(self):
 		request = frappe._dict(email_to="payer@example.test")
 		self.assertEqual(api._contact_email(request, frappe._dict(contact_email=None)), "payer@example.test")
+
+
+class TestPayerLinkCheckout(NoCommitIntegrationTestCase):
+	def setUp(self):
+		super().setUp()
+		self.payment_request, self.invoice = given_submitted_payment_request()
+		self.credentials = Mock(country="Egypt", mode="Test", public_key="pk_test_FAKE_public")
+
+	def tearDown(self):
+		for attempt in frappe.get_all(
+			"Paymob Payment Attempt", {"payment_request": self.payment_request.name}, pluck="name"
+		):
+			frappe.delete_doc("Paymob Payment Attempt", attempt, force=True)
+		self.payment_request.cancel()
+		frappe.delete_doc("Payment Request", self.payment_request.name, force=True)
+		self.invoice.cancel()
+		frappe.delete_doc("Sales Invoice", self.invoice.name, force=True)
+		super().tearDown()
+
+	def test_repeated_payer_link_open_reuses_one_checkout(self):
+		result = {
+			"intention_id": "pi_FAKE_1",
+			"order_id": "987654",
+			"client_secret": "egy_csk_FAKE_1",
+		}
+		with (
+			patch("paymob_integration.api._merchant_country", return_value="Egypt"),
+			patch("paymob_integration.api.settings.resolve_integrations", return_value=["1234"]),
+			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
+			patch(
+				"paymob_integration.api.settings.get_settings",
+				return_value=frappe._dict(intention_expiration_seconds=3600),
+			),
+			patch(
+				"paymob_integration.api.intention.create_intention", return_value=result
+			) as create_intention,
+			patch(
+				"paymob_integration.api.build_checkout_url", side_effect=lambda _credentials, secret: secret
+			),
+		):
+			first = api._checkout(self.payment_request, reuse_pending=True)
+			second = api._checkout(self.payment_request, reuse_pending=True)
+
+		self.assertEqual(first, second)
+		self.assertEqual(first["checkout_url"], result["client_secret"])
+		self.assertEqual(
+			frappe.db.count("Paymob Payment Attempt", {"payment_request": self.payment_request.name}), 1
+		)
+		create_intention.assert_called_once()
 
 
 class TestSubmitTimeEmail(NoCommitIntegrationTestCase):

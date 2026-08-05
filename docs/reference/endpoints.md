@@ -5,7 +5,7 @@
 | Endpoint | Purpose | Ledger authority |
 |---|---|---|
 | `get_enabled_status` | Returns the site-wide enabled state to Desk. | No |
-| `start_checkout` | Creates or reuses a pending attempt and starts hosted checkout. | No |
+| `start_checkout` | Creates a new Desk checkout and starts hosted checkout. | No |
 | `request_refund` | Requests one full or partial refund under a row lock and `refund` permission. | No |
 | `processed_callback` | Verifies, stores, and queues signed Paymob transaction facts. | Yes, through the processor only |
 
@@ -13,6 +13,11 @@
 `hmac.compare_digest` before any payload-directed database access, then persists before returning
 HTTP 200. Duplicate event keys also return HTTP 200 without a second write. Internal storage errors
 return non-2xx so Paymob can retry.
+
+The signed `/paymob-pay` route reuses one ready, unexpired checkout per Payment Request. Its
+site-scoped lock covers the active-attempt lookup through intention creation and identifier
+persistence. Callback attribution requires both the merchant reference and signed Paymob order ID
+to match the stored attempt.
 
 ## Refund request
 

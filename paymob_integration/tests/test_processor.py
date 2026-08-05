@@ -265,23 +265,10 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700009"}), 0)
 		self.assertEqual(txn.processed, 1)
 
-	def test_reprocessing_a_processed_row_is_a_noop(self):
-		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
-		txn = self._given_transaction(
-			"Success", "700010", attempt=attempt.name, payment_request=payment_request.name
-		)
-
-		processor.process_transaction(txn.name)
-		processor.process_transaction(txn.name)
-
-		attempt.reload()
-		self.assertEqual(attempt.state, "Failed")
-		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700010"}), 1)
-
 	def test_audit_entry_is_immutable(self):
-		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
+		attempt, payment_request, _invoice = self._given_attempt(state="Paid")
 		txn = self._given_transaction(
-			"Success", "700011", attempt=attempt.name, payment_request=payment_request.name
+			"Decline", "700011", attempt=attempt.name, payment_request=payment_request.name
 		)
 		processor.process_transaction(txn.name)
 
