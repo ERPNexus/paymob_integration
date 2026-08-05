@@ -8,5 +8,4 @@ Do not include live credentials, card data, HMAC secrets, customer data, or raw 
 Use fake values and redact logs before sending them.
 
 Reports will be acknowledged when received and handled through coordinated disclosure. We will work
-with the reporter on a fix and disclosure date, but this alpha does not promise a response or fix
-timeline.
+with the reporter on a fix and disclosure date.

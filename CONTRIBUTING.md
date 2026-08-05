@@ -6,21 +6,21 @@ Use Frappe v16 and ERPNext v16 from the `version-16` branch with Python `>=3.14,
 10.11, and Redis 7. From a Bench root:
 
 ```bash
-bench init --skip-redis-config-generation --frappe-branch version-16 /tmp/paymob-alpha-bench
-cd /tmp/paymob-alpha-bench
+bench init --skip-redis-config-generation --frappe-branch version-16 /tmp/paymob-release-bench
+cd /tmp/paymob-release-bench
 bench get-app --branch version-16 https://github.com/frappe/erpnext
 ln -s /home/frappe/frappe-bench-16/apps/paymob_integration apps/paymob_integration
-bench new-site --db-root-password root --admin-password admin --db-host 127.0.0.1 --db-port 3306 alpha.test
-bench --site alpha.test install-app erpnext
-bench --site alpha.test install-app paymob_integration
-bench --site alpha.test migrate
+bench new-site --db-root-password root --admin-password admin --db-host 127.0.0.1 --db-port 3306 release.test
+bench --site release.test install-app erpnext
+bench --site release.test install-app paymob_integration
+bench --site release.test migrate
 ```
 
 ```bash
 cd apps/paymob_integration
 pre-commit install
 pre-commit run --all-files
-bench --site alpha.test run-tests --app paymob_integration
+bench --site release.test run-tests --app paymob_integration
 ```
 
 Tests must use fake-only credentials and mocks. Never make live Paymob calls or commit test data to
