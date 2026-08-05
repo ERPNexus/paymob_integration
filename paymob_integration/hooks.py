@@ -43,6 +43,10 @@ add_to_apps_screen = [
 # include js in doctype views
 doctype_js = {"Payment Request": "public/js/payment_request.js"}
 after_install = "paymob_integration.notifications.seed"
+after_migrate = [
+	"paymob_integration.notifications.seed",
+	"paymob_integration.notifications.refresh_defaults",
+]
 doc_events = {"Payment Request": {"validate": "paymob_integration.payment_request.prepare_payment_email"}}
 jinja = {"methods": ["paymob_integration.pay_link.build"]}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}

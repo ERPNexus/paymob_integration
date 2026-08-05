@@ -39,19 +39,6 @@ def refresh_defaults():
 			)
 
 
-def migrate_retired_records():
-	"""Rename the retired combined alert and remove the retired capture card on old sites."""
-	old_name = "Paymob Refund or Void Activity"
-	new_name = "Paymob Refund Activity"
-	if frappe.db.exists("Notification", old_name):
-		if frappe.db.exists("Notification", new_name):
-			frappe.delete_doc("Notification", old_name, ignore_permissions=True)
-		else:
-			frappe.rename_doc("Notification", old_name, new_name, force=True)
-	if frappe.db.exists("Number Card", "Awaiting Capture"):
-		frappe.delete_doc("Number Card", "Awaiting Capture", ignore_permissions=True)
-
-
 def _spec() -> list[dict]:
 	specs = [
 		{
