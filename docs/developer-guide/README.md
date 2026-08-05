@@ -2,17 +2,8 @@
 
 **Audience:** the developer installing, configuring, extending, or integrating the app.
 
-How to *build against* and *operate* the app technically. Written as features ship (per
-[../../rules/documentation.md](../../rules/documentation.md)). Link into
-[../reference/](../reference/) for exact states, fields, decisions, and endpoint contracts.
-
-## Planned topics (filled as slices land)
-
-- Install & site setup (`bench get-app`, `install-app`, `migrate`).
-- Configuring credentials and integration IDs securely.
-- The payment flow end to end (see [../architecture.md](../architecture.md)).
-- Webhook/callback contracts and HMAC verification (see [endpoints](../reference/endpoints.md)).
-- Extension points (hooks) and how to test payment flows.
+See the [architecture](../architecture.md) for the end-to-end flow and
+[reference documentation](../reference/) for exact states, fields, decisions, and endpoint contracts.
 
 ## Payer links and notifications
 
@@ -25,3 +16,24 @@ the seven shipped templates, then later Desk edits in **Notifications** are pres
 customer messages with the linked Payment Request Company; Frappe sends them through the site's configured
 **Email Account**, which controls the From address and display name. See [endpoints](../reference/endpoints.md)
 and [decisions](../reference/decisions.md) for the contract.
+
+## Local checks
+
+Use Frappe/ERPNext `version-16` with Python `>=3.14,<3.15`. The app has no live Paymob calls in
+automated tests; HTTP calls are mocked and credentials are fake fixtures only.
+
+```bash
+pre-commit install
+pre-commit run --all-files
+bench --site <clean-site> migrate
+bench --site <clean-site> run-tests --app paymob_integration
+```
+
+Keep integration tests on `NoCommitIntegrationTestCase`, assert Payment Entry count and allocation,
+and never call `frappe.db.commit()` in tests. Review money-moving changes against
+[`rules/payments.md`](../../rules/payments.md) and [`rules/implementation-gate.md`](../../rules/implementation-gate.md).
+
+## Sandbox acceptance
+
+Run the [sandbox smoke-test checklist](sandbox-smoke-test.md). Record only non-sensitive evidence;
+do not attach credentials, HMAC secrets, card data, or raw webhook payloads.

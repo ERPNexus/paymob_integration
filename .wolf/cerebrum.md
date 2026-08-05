@@ -2,12 +2,13 @@
 
 > OpenWolf's learning memory. Updated automatically as the AI learns from interactions.
 > Do not edit manually unless correcting an error.
-> Last updated: 2026-07-26
+> Last updated: 2026-08-04
 
 ## User Preferences
 
 <!-- How the user likes things done. Code style, tools, patterns, communication. -->
 - [2026-08-03] Do not add cleanup migrations for retired development-only fields while the app has no production sites.
+- [2026-08-04] Complete the requested scope, including documentation and policy cleanup; do not defer it as a follow-up.
 - [2026-08-03] Keep OpenWolf state compact: discard generated historical logs and stale temporary-path metadata; retain durable instructions and curated project learnings.
 - [2026-08-03] When the user requests a post-delivery grilling session, keep it short or medium-length according to the feature's challenging cases and edge-case risk. It is manual/on-demand, not an automatic delivery step.
 - [2026-07-29] Translate the payment state `Authorized` as `محجوز`, not `التفويض` or `مصرّح به`; it denotes a card-funds hold awaiting capture.
@@ -26,6 +27,9 @@
 
 ## Key Learnings
 
+- [2026-08-05] Release hardening currently targets `0.1.0-alpha`; v1 requires a passing clean CI run and a completed Paymob sandbox smoke-test record, not just the presence of CI/checklist files.
+- [2026-08-04] Treat `Paymob Settings.enabled` as a server-side feature boundary: every entry
+  point uses one settings predicate, while Desk visibility only mirrors that guard for usability.
 - A Frappe Document Type Number Card always opens its filtered List view; it cannot express the
   Open Audit Entries report's `supersedes` anti-join. Keep the report as the canonical open-item
   count and expose `Paymob Audit Entry.description` in the list when the card is the triage path.
@@ -204,6 +208,9 @@
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
+- [2026-08-04] The imported GitHub issue extension is at
+  `/home/frappe/.claude/skills/github-issues/SKILL.md`; do not resolve the anatomy entry as the
+  repository-local `.claude/skills/github-issues/SKILL.md`, which does not exist.
 - [2026-08-03] Tests under `paymob_integration/tests/` use module paths such as
   `paymob_integration.tests.test_events`; `paymob_integration.paymob_integration.tests.*` does not
   exist. Verify a plan's copied `bench run-tests --module` paths against the package tree before use.
@@ -268,6 +275,10 @@
 ## Decision Log
 
 <!-- Significant technical decisions with rationale. Why X was chosen over Y. -->
+- [2026-08-04] Paymob Audit Entry is an exception-and-accountability ledger: new rows are limited
+  to anomalies requiring human attention and capture/refund/void requests naming the user. Routine
+  expiry, poller recovery, and no-op reversals stay visible through attempts, transactions, Payment
+  Entries, and logs; their legacy Select options and translations remain for historical records.
 - [2026-08-03] Enabled Paymob Integration IDs sharing country, currency, and Test/Live mode must have one capture mode. Different countries, currencies, and modes may use different capture modes; mixed same-group configuration is rejected.
 - [2026-08-03] A Paymob Payment Attempt snapshots capture mode at checkout creation. Later Settings changes must not alter processing of its existing checkout; verified callback flags and the stored attempt determine the outcome.
 - [2026-08-03] A verified authorization on an attempt configured for Auto Capture is a configuration mismatch: preserve the `Authorized` state and raise a needs-attention audit entry.
@@ -310,11 +321,6 @@
 - For Paymob gateway errors, never expose a raw response. The client may show only an allowlisted
   string `detail` or `message` with the HTTP status; this preserves useful diagnostics without
   exposing echoed credentials, customer data, or newly-added gateway fields.
-- [ADR-0026] `capture_mode` on a `Paymob Integration ID` is a merchant-declared label — Paymob only
-  honours a hold if that integration is auth-only in **Paymob's own dashboard**, and nothing checks
-  the two agree. When Paymob captures a hold anyway, post the Payment Entry (the money moved and is
-  verified) and raise it as `Capture Not Requested` audit + `needs_human_attention`. Never force
-  state back to `Authorized`: that writes state from intent, which ADR-0022 forbids.
-- Outbound void is an authorization-only action; a charge is refunded, never voided, and the two
-  buttons are never offered together. The **inbound** `Void` branch and `states.LEGAL["Paid"] →
-  "Voided"` stay untouched — a void taken in Paymob's dashboard must still post its reversal.
+- [2026-08-04] This unreleased app is immediate-capture-only: `Success` settles to `Paid`; signed
+	Auth/Capture/Void flags are stored as `Unsupported`, audited for review, and never mutate the
+	ledger. Refund is the only outbound reversal action.

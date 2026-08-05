@@ -33,7 +33,10 @@ class TestResolveIntegrations(FrappeTestCase):
 		get_settings.return_value = frappe._dict(
 			enabled=1,
 			mode="Test",
-			integration_ids=[_row(integration_id="1001", enabled=0), _row(integration_id="1002", mode="Live")],
+			integration_ids=[
+				_row(integration_id="1001", enabled=0),
+				_row(integration_id="1002", mode="Live"),
+			],
 		)
 		with self.assertRaises(frappe.ValidationError):
 			settings.resolve_integrations("Egypt", "EGP")

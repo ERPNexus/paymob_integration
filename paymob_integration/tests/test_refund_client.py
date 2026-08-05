@@ -14,6 +14,7 @@ class TestRefundClient(UnitTestCase):
 		):
 			refund.request(credentials, transaction_id="123", amount_cents=10000)
 		request.assert_called_once_with(
-			"POST", "https://accept.example.test/api/acceptance/void_refund/refund",
+			"POST",
+			"https://accept.example.test/api/acceptance/void_refund/refund",
 			json_body={"auth_token": "token", "transaction_id": "123", "amount_cents": 10000},
 		)

@@ -11,17 +11,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository currently is
 
-A Frappe app (`paymob_integration`) that integrates Paymob payments with ERPNext. **Almost no
-implementation exists yet.** `paymob_integration/hooks.py` is untouched boilerplate — every hook is
-commented out. There are no DocTypes, no tests, and no Python modules beyond empty `__init__.py`
-files.
-
-What *does* exist is the design layer, and it is the point of this repo:
+A Frappe app (`paymob_integration`) that integrates immediate Paymob payments and refunds with
+ERPNext. It has DocTypes, webhook processing, reconciliation, hosted checkout, and Frappe tests.
 
 | Folder | Contains | Audience |
 |---|---|---|
 | `rules/` | 14 repo commitments, each ending in a Definition of Done checklist | contributors + AI agents |
-| `plans/` | 13 numbered build phases, in payment-lifecycle order | whoever builds the next slice |
+| `plans/` | numbered build phases, in payment-lifecycle order | whoever builds the next slice |
 | `docs/` | published product documentation (ships with the app) | merchants, integrating developers |
 | `learning/` | the owner's private study notes — gitignored, **not shipped, not a spec** | owner only |
 
@@ -68,7 +64,7 @@ the clearing account is set on the **in-memory** Payment Request before the call
 
 **Money is written from verified inbound facts, never from an outbound API response.** A ledger
 entry comes from a webhook that passed HMAC-SHA512 verification, or from a Transaction Inquiry
-result. The HTTP response to a capture/refund call is not evidence — the request may have succeeded
+result. The HTTP response to a refund call is not evidence — the request may have succeeded
 with the response lost.
 
 **Three independent checks gate every posting:** authenticity (HMAC), success state, and amount +
@@ -82,7 +78,7 @@ never trusts a browser-supplied amount or reference.
 
 **Duplicates are handled differently in each direction.** Inbound: a unique database constraint on
 `event_key = "<transaction_id>:<event_kind>"` — a constraint, not an `if`. Outbound: a server-side
-row lock taken *before* the request, because a capture/refund has no ID until the call creates one
+row lock taken *before* the request, because a refund has no ID until the call creates one
 and Paymob accepts no idempotency key.
 
 Recovery is a scheduled poller (`plans/10`) that inquires on pending attempts — because Paymob's
@@ -98,8 +94,8 @@ The full list is `rules/payments.md` (18 requirements) and the "Global constrain
 - Money is **integer cents**. No float arithmetic, no float equality. Every amount is stored with
   its currency code, and currency is part of the match check. Never default to `"EGP"`.
 - `hmac.compare_digest`, never `==`.
-- Reads (Transaction Inquiry) may be retried automatically. **Capture, refund and void may never
-  be.** Re-running one is a human decision.
+- Reads (Transaction Inquiry) may be retried automatically. **Refunds may never be.** Re-running
+  one is a human decision.
 - A 401, timeout, or 5xx never changes payment state. Auth-token expiry ≠ intention expiry.
 - Credentials use the **Password** fieldtype with `get_password()`, never `Data`. Only the public
   key and the per-session client secret may reach the browser. Never log a credential, card data,

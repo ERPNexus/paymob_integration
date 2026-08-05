@@ -100,11 +100,18 @@ refunds, review-needed audit entries, and refund request activity. The linked Pa
 Request's Company appears in customer-facing email branding; your configured site **Email Account**
 controls the actual From address and display name.
 
-**Audience:** the merchant / ERPNext user operating Paymob payments.
+## Reconciliation and refunds
 
-Plain-language, task-oriented docs — how to *use* the app, no code. Written as features ship
-(per [../../rules/documentation.md](../../rules/documentation.md)). Describe behavior in prose and
-link into [../reference/](../reference/) for the exact rules rather than restating them.
+Pending attempts are periodically checked with Paymob when a processed callback is lost. A verified
+inquiry result follows the same amount, currency, duplicate, and ledger rules as a callback. An
+authentic mismatch is recorded for review and never posts automatically.
+
+From a paid attempt, an authorized user may request a partial or full refund. The app locks the
+attempt before making the one outbound request and waits for Paymob's signed refund callback before
+creating the reversal entry. Do not resend a refund after a timeout; investigate the Paymob result
+and make any second request a deliberate human decision.
+
+For reproducible acceptance evidence, use the [sandbox smoke-test checklist](../developer-guide/sandbox-smoke-test.md).
 
 ## What the customer sees after paying
 
@@ -133,11 +140,3 @@ A user granted **Paymob Refund Manager** can open a paid Payment Request and cho
 (full or partial). ERPNext sends one request to Paymob, then waits for Paymob's signed
 confirmation before posting the reversing entry. If a request remains in progress after a network
 error, do not send it again: Paymob may still have received it. Review the linked audit entry.
-
-## Planned topics (filled as slices land)
-
-- Connecting a Paymob account (credentials, test vs live).
-- Choosing which payment methods to offer.
-- What each payment status means to you (links to [states](../reference/states.md)).
-- What "needs review" means and how to resolve it.
-- Reading a payment's history and reconciling.

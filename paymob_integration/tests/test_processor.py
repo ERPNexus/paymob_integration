@@ -175,7 +175,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(retry.special_reference, f"{payment_request.name}-2")
 
 	def test_success_on_failed_attempt_is_refused_and_audited(self):
-		attempt, payment_request, invoice = self._given_attempt(state="Failed")
+		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
 
 		txn = self._given_transaction(
 			"Success", "700003", attempt=attempt.name, payment_request=payment_request.name
@@ -196,7 +196,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(entries[0].docstatus, 1)
 
 	def test_decline_on_paid_attempt_is_refused_and_audited(self):
-		attempt, payment_request, invoice = self._given_attempt(state="Paid")
+		attempt, payment_request, _invoice = self._given_attempt(state="Paid")
 
 		txn = self._given_transaction(
 			"Decline", "700004", attempt=attempt.name, payment_request=payment_request.name
@@ -208,7 +208,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700004"}), 1)
 
 	def test_decline_on_already_failed_attempt_is_a_noop(self):
-		attempt, payment_request, invoice = self._given_attempt(state="Failed")
+		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
 
 		txn = self._given_transaction(
 			"Decline", "700005", attempt=attempt.name, payment_request=payment_request.name
@@ -220,7 +220,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(txn.processed, 1)
 
 	def test_unsupported_event_is_stored_audited_and_never_posts(self):
-		attempt, payment_request, invoice = self._given_attempt()
+		attempt, payment_request, _invoice = self._given_attempt()
 		before = self._payment_entry_count()
 		txn = self._given_transaction(
 			"Unsupported", "700006", attempt=attempt.name, payment_request=payment_request.name
@@ -241,7 +241,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		)
 
 	def test_pending_kind_is_consumed_without_state_change(self):
-		attempt, payment_request, invoice = self._given_attempt()
+		attempt, payment_request, _invoice = self._given_attempt()
 		txn = self._given_transaction(
 			"Pending", "700007", attempt=attempt.name, payment_request=payment_request.name
 		)
@@ -277,7 +277,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(txn.processed, 1)
 
 	def test_reprocessing_a_processed_row_is_a_noop(self):
-		attempt, payment_request, invoice = self._given_attempt(state="Failed")
+		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
 		txn = self._given_transaction(
 			"Success", "700010", attempt=attempt.name, payment_request=payment_request.name
 		)
@@ -290,7 +290,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700010"}), 1)
 
 	def test_audit_entry_is_immutable(self):
-		attempt, payment_request, invoice = self._given_attempt(state="Failed")
+		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
 		txn = self._given_transaction(
 			"Success", "700011", attempt=attempt.name, payment_request=payment_request.name
 		)
@@ -305,7 +305,7 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 			entry.save()
 
 	def test_open_audit_entries_report_excludes_superseded_rows(self):
-		attempt, payment_request, invoice = self._given_attempt(state="Failed")
+		_attempt, payment_request, _invoice = self._given_attempt(state="Failed")
 
 		first = self._make_audit_entry(payment_request.name, "800001", needs_action=1)
 		second = self._make_audit_entry(payment_request.name, "800002", needs_action=1)
@@ -418,7 +418,7 @@ class TestAmountMismatch(NoCommitIntegrationTestCase):
 		self.assertNotEqual(invoice.status, "Paid")
 
 	def test_overpayment_is_held_for_review(self):
-		attempt, payment_request, invoice = self._given_attempt()
+		attempt, payment_request, _invoice = self._given_attempt()
 		txn = self._given_transaction(
 			"800102", 27556, attempt=attempt.name, payment_request=payment_request.name
 		)
@@ -431,7 +431,7 @@ class TestAmountMismatch(NoCommitIntegrationTestCase):
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "800102"}), 1)
 
 	def test_currency_mismatch_is_held_for_review(self):
-		attempt, payment_request, invoice = self._given_attempt()
+		attempt, payment_request, _invoice = self._given_attempt()
 		txn = self._given_transaction(
 			"800103", 27555, currency="SAR", attempt=attempt.name, payment_request=payment_request.name
 		)
@@ -451,7 +451,7 @@ class TestAmountMismatch(NoCommitIntegrationTestCase):
 		self.assertEqual(entries[0].received_currency, "SAR")
 
 	def test_exact_match_raises_no_flag_and_no_audit_entry(self):
-		attempt, payment_request, invoice = self._given_attempt()
+		attempt, payment_request, _invoice = self._given_attempt()
 		before = frappe.db.count("Payment Entry")
 		txn = self._given_transaction(
 			"800104", 27555, attempt=attempt.name, payment_request=payment_request.name
@@ -467,7 +467,7 @@ class TestAmountMismatch(NoCommitIntegrationTestCase):
 		self.assertTrue(attempt.payment_entry)
 
 	def test_mismatch_appears_in_open_audit_entries_report(self):
-		attempt, payment_request, invoice = self._given_attempt()
+		attempt, payment_request, _invoice = self._given_attempt()
 		txn = self._given_transaction(
 			"800105", 27554, attempt=attempt.name, payment_request=payment_request.name
 		)

@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev mariadb-client redis-tools
+
+      - name: Install Bench and checks
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install frappe-bench pre-commit
+
+      - name: Verify services
+        run: |
+          mariadb-admin ping -h 127.0.0.1 -P 3306 -uroot -proot
+          redis-cli -h 127.0.0.1 -p 6379 ping
+
+      - name: Create Bench
+        run: |
+          if bench init --help | grep -q -- '--skip-redis-config-generation'; then
+            bench init --skip-redis-config-generation --frappe-branch version-16 ci-bench
+          else
+            bench init --skip-redis-config --frappe-branch version-16 ci-bench
+          fi
+          cd ci-bench
+          bench get-app --branch version-16 https://github.com/frappe/erpnext
+          ln -s "$GITHUB_WORKSPACE" apps/paymob_integration
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+          bench new-site --db-root-password root --admin-password admin --db-host 127.0.0.1 --db-port 3306 ci.test
+          bench --site ci.test install-app erpnext
+          bench --site ci.test install-app paymob_integration
+          bench --site ci.test migrate
+          bench --site ci.test list-apps
+
+      - name: Run repository checks
+        run: |
+          python -m compileall -q paymob_integration
+          pre-commit run --all-files
+
+      - name: Run app tests
+        run: |
+          cd ci-bench
+          bench worker --queue short,default,long >/tmp/paymob-alpha-worker.log 2>&1 &
+          echo $! >/tmp/paymob-alpha-worker.pid
+          bench --site ci.test run-tests --app paymob_integration 2>&1 | tee /tmp/paymob-alpha-tests.log
+
+      - name: Scan tracked files for secrets
+        shell: bash
+        run: |
+          set -o pipefail
+          findings=$(git grep -nI -E 'sk_(test|live)_[A-Za-z0-9_-]{12,}|pk_(test|live)_[A-Za-z0-9_-]{12,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|mysql://[^ ]+:[^ ]+@|redis://[^ ]+:[^ ]+@|ngrok|trycloudflare' -- . || true)
+          printf '%s\n' "$findings"
+          dangerous=$(printf '%s\n' "$findings" | grep -Ev '_FAKE_|example\\.(com|test)|127\\.0\\.0\\.1|localhost|redis://127\\.0\\.0\\.1|docs/references\\.md|\\.wolf/cerebrum\\.md' || true)
+          if [ -n "$dangerous" ]; then
+            printf '%s\n' "$dangerous" >&2
+            exit 1
+          fi
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paymob-alpha-ci-diagnostics
+          if-no-files-found: ignore
+          path: |
+            /tmp/paymob-alpha-tests.log
+            /tmp/paymob-alpha-worker.log
+            /tmp/paymob-alpha-worker.pid

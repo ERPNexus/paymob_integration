@@ -52,6 +52,7 @@ class _RefundTestCase(NoCommitIntegrationTestCase):
 		)
 		return attempt
 
+
 class TestRequestRefund(_RefundTestCase):
 	def test_disabled_paymob_changes_nothing(self):
 		attempt = self._charged_attempt()
