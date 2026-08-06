@@ -50,10 +50,16 @@ inquiry with no transaction after the checkout expiry time.
 A verified refund delta creates a separate Pay Payment Entry. The original incoming Payment Entry
 is never edited or cancelled.
 
-## ADR-0017 — Refund deltas come from signed child transactions
+## ADR-0017 — Refund deltas come from signed child transactions (superseded by ADR-0032)
 
 Only the signed child transaction amount can post a refund delta. Unsigned cumulative parent totals
 are stored for evidence but do not move the ledger.
+
+**Superseded 2026-08-06.** No standalone/hosted-checkout card refund on `capital` ever sent a child
+transaction — two independent live refunds (`510236778`, `510198387`) each arrived as exactly one
+parent re-send, so every real refund landed in "needs review" forever. ADR-0032 replaces the "wait
+for a child transaction" remedy while keeping this ADR's underlying distrust of the unsigned
+`refunded_amount_cents` field intact.
 
 ## ADR-0018 — A refund lock needs an in-progress marker
 
@@ -96,3 +102,19 @@ keeps its explicit new-attempt behavior.
 that field is the reference document's `owner`, which is whoever created the record, not the payer —
 mailing a Paymob checkout link to an internal user is worse than mailing no one. When no customer
 email can be resolved, the email is muted rather than sent to the wrong address.
+
+## ADR-0032 — A full refund posts from the signed parent re-send
+
+Supersedes ADR-0017. A parent re-send (`has_parent_transaction = 0`) whose signed `amount_cents`
+equals Paymob's reported cumulative `refunded_amount_cents`, with `is_refunded` set (both signed
+fields) and nothing yet posted on the attempt, is treated as a full refund and posts from the signed
+`amount_cents` — the same shared refund path a signed child transaction uses. Evidence: live
+transactions `510236778` (EGP 499.00) and `510198387` (EGP 249.00) on `capital`, each a single
+parent re-send with no child ever received.
+
+`refunded_amount_cents` is still not HMAC-signed (Paymob signs `amount_cents, is_refunded`, and 18
+other fields — see `hmac_verify.py:38-59` — but not this one), so it never supplies the posted
+amount; it only selects whether this branch runs. Any other shape — a partial refund, or a re-send
+after something has already been posted — still cannot prove its delta and is held for a human
+(`_hold_parent_refund`), unchanged. Automatic partial refunds are out of scope: the general fix is an
+authenticated Transaction Inquiry read, which belongs to the Phase 10 reconciliation poller.

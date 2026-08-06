@@ -157,6 +157,197 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(attempt.refund_requested_at, lock)
 		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
 
+	def test_full_refund_from_parent_resend_posts(self):
+		"""ADR-0032: a parent re-send whose signed amount_cents matches the whole charge, with
+		Paymob's cumulative total agreeing and nothing posted yet, is the only shape a standalone
+		card refund ever takes (no child transaction is ever sent) — it posts from the signed
+		amount_cents, not the unsigned refunded_amount_cents.
+		"""
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-full",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+
+		processor.process_transaction(parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(attempt.state, "Refunded")
+		self.assertEqual(attempt.refunded_amount_cents, 27555)
+		self.assertFalse(attempt.needs_human_attention)
+		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
+		entry = frappe.get_doc(
+			"Payment Entry", frappe.get_all("Payment Entry", order_by="creation desc", pluck="name")[0]
+		)
+		self.assertEqual(entry.payment_type, "Pay")
+		self.assertEqual(entry.docstatus, 1)
+		self.assertEqual(entry.paid_amount, 275.55)
+
+	def test_duplicate_full_refund_resend_posts_nothing_more(self):
+		"""Same payload twice collides on event_key (transactions.event_key suffixes Refund keys
+		with refunded_amount_cents) before it ever reaches the processor a second time.
+		"""
+		attempt, request = self._paid_attempt()
+		payload = dict(
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+		first = given_transaction("Refund", "refund-dup-1", attempt.name, request.name, **payload)
+		processor.process_transaction(first.name)
+		before = payment_entry_count()
+
+		second = given_transaction("Refund", "refund-dup-2", attempt.name, request.name, **payload)
+		processor.process_transaction(second.name)
+
+		self.assertEqual(payment_entry_count(), before)
+
+	def test_partial_refund_from_parent_resend_still_holds(self):
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-partial",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=10000,
+		)
+
+		processor.process_transaction(parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(attempt.needs_human_attention, 1)
+		self.assertTrue(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
+
+	def test_tampered_total_on_parent_resend_holds(self):
+		"""refunded_amount_cents > amount_cents cannot pass the full_refund equality check and
+		cannot inflate a posting.
+		"""
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-tampered",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=99999,
+		)
+
+		processor.process_transaction(parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(attempt.needs_human_attention, 1)
+
+	def test_second_full_refund_resend_after_posted_one_holds(self):
+		attempt, request = self._paid_attempt()
+		first = given_transaction(
+			"Refund",
+			"refund-parent-second-1",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+		processor.process_transaction(first.name)
+		before = payment_entry_count()
+
+		second = given_transaction(
+			"Refund",
+			"refund-parent-second-2",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=30000,
+		)
+		processor.process_transaction(second.name)
+
+		attempt.reload()
+		second.reload()
+		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(attempt.needs_human_attention, 1)
+		self.assertEqual(second.processed, 1)
+
+	def test_full_refund_currency_mismatch_refuses(self):
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-currency",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			currency="USD",
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+
+		processor.process_transaction(parent.name)
+
+		self.assertEqual(payment_entry_count(), before)
+		audit_entry = frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction": parent.name}, "event")
+		self.assertEqual(audit_entry, "Amount Mismatch")
+
+	def test_full_refund_with_no_verified_charge_refuses(self):
+		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())
+		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-no-charge",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+
+		processor.process_transaction(parent.name)
+
+		self.assertEqual(payment_entry_count(), before)
+		audit_entry = frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction": parent.name}, "event")
+		self.assertEqual(audit_entry, "Amount Mismatch")
+
+	def test_replay_of_stored_live_parent_refund_payload(self):
+		"""Rebuilt from the live capital fixture 510236778:Refund:49900 — the payload that
+		originally landed as a stuck Refund Requires Review entry.
+		"""
+		attempt, request, invoice = given_attempt(credentials=_credentials())
+		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
+		success = given_transaction("Success", "510236778", attempt.name, request.name, amount_cents=49900)
+		processor.process_transaction(success.name)
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"510236778",
+			attempt.name,
+			request.name,
+			amount_cents=49900,
+			has_parent_transaction=0,
+			refunded_amount_cents=49900,
+		)
+
+		processor.process_transaction(parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(attempt.state, "Refunded")
+		self.assertEqual(attempt.refunded_amount_cents, 49900)
+
 	def test_refund_with_no_payment_entry_posts_nothing(self):
 		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)

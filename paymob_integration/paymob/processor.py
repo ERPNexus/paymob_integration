@@ -44,15 +44,23 @@ def process_transaction(transaction):
 		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
 		if txn.event_kind == "Refund":
 			if not txn.has_parent_transaction:
-				# The parent re-send is routine bookkeeping on every refund, signed or not — it carries
-				# no amount_cents of its own. Only flag it when Paymob's cumulative total outruns what
-				# this app has posted (a refund happened at Paymob but never reached the ledger); a
-				# parent that lands before its signed child is a transient false positive, accepted as
-				# the safer failure direction. ADR-0017: this unsigned field still never posts money.
-				if (txn.refunded_amount_cents or 0) > (attempt.refunded_amount_cents or 0):
-					return _hold_parent_refund(txn, attempt)
-				_mark_processed(txn)
-				return
+				# The parent re-send carries the signed original charge in amount_cents, not the
+				# refund delta — its own reported total is what decides what happens next. A full
+				# refund (Paymob's cumulative total equals the signed charge, is_refunded set, and
+				# nothing posted yet) falls through to the shared refund path below and posts from
+				# the signed amount_cents (ADR-0032, superseding ADR-0017). Anything else — a
+				# partial refund, or a re-send after something is already posted — still cannot
+				# prove its delta and is held for a human.
+				full_refund = (
+					txn.is_refunded
+					and (attempt.refunded_amount_cents or 0) == 0
+					and (txn.refunded_amount_cents or 0) == txn.amount_cents
+				)
+				if not full_refund:
+					if (txn.refunded_amount_cents or 0) > (attempt.refunded_amount_cents or 0):
+						return _hold_parent_refund(txn, attempt)
+					_mark_processed(txn)
+					return
 			delta_cents = txn.amount_cents
 			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
 			# The same verified charge api._verified_charge caps the outbound request against —
