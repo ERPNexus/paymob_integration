@@ -42,6 +42,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 	def test_child_refund_posts_its_signed_delta(self):
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
+		attempt.db_set("refund_requested_at", frappe.utils.now_datetime())
 		refund = given_transaction(
 			"Refund",
 			"refund-child",
@@ -58,6 +59,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(payment_entry_count(), before + 1)
 		self.assertEqual(attempt.state, "Partially Refunded")
 		self.assertEqual(attempt.refunded_amount_cents, 10000)
+		self.assertIsNone(attempt.refund_requested_at)
 		entry = frappe.get_doc(
 			"Payment Entry", frappe.get_all("Payment Entry", order_by="creation desc", pluck="name")[0]
 		)
@@ -89,7 +91,9 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 
 	def test_parent_resend_ahead_of_posted_refunds_is_audited(self):
 		"""Paymob's cumulative total on the parent re-send outrunning what this app has actually
-		posted is the #6 symptom — a refund happened at Paymob that never reached the ledger.
+		posted means a refund happened at Paymob that never reached the ledger (the child
+		transaction is missing). ADR-0017: the unsigned resend cannot post money, but it must not
+		vanish silently either — hold it for a human.
 		"""
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
@@ -119,7 +123,6 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		)
 		self.assertEqual(audit_entry.event, "Refund Requires Review")
 		self.assertEqual(audit_entry.needs_action, 1)
-		# The comparison that triggered the hold, not the re-send's amount_cents (the original charge).
 		self.assertEqual(audit_entry.expected_amount_cents, 0)
 		self.assertEqual(audit_entry.received_amount_cents, 10000)
 
@@ -130,6 +133,8 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		"""
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
+		attempt.db_set("refund_requested_at", frappe.utils.now_datetime())
+		lock = attempt.refund_requested_at
 		parent = given_transaction(
 			"Refund",
 			"refund-parent-routine",
@@ -148,6 +153,8 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(parent.processed, 1)
 		self.assertEqual(attempt.state, "Paid")
 		self.assertFalse(attempt.needs_human_attention)
+		self.assertEqual(attempt.refunded_amount_cents, 0)
+		self.assertEqual(attempt.refund_requested_at, lock)
 		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
 
 	def test_refund_with_no_payment_entry_posts_nothing(self):

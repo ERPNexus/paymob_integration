@@ -1,7 +1,4 @@
-# Paymob Integration 0.1.0-alpha
-
-> **Alpha warning:** this is the first public alpha. Payment behavior and upgrade paths may change
-> before a stable release. Test on a disposable site and keep verified backups before upgrades.
+# Paymob Integration 1.0.0
 
 Paymob Integration adds hosted Paymob checkout for incoming ERPNext Payment Requests. It verifies
 signed callbacks, reconciles missing callbacks, protects against duplicate delivery, creates
@@ -70,17 +67,16 @@ does not prove live-mode readiness; review [the smoke-test checklist](docs/devel
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
-## Alpha limitations and upgrade risk
+## Upgrade guidance
 
-This release has no compatibility promise for future alpha migrations or payment-state changes.
-Keep backups, test upgrades on a disposable clone, and review the changelog before updating.
+Keep verified backups, test upgrades on a disposable clone, and review the changelog before updating.
 
 ## Roadmap
 
 - **`payments` app integration** — register Paymob as a `Payment Gateway Controller` so ERPNext's
   webshop "Pay Now", POS, and any other app already speaking that interface get a working checkout
   for free, instead of every storefront hand-rolling its own Sales Order → Payment Request wiring.
-  This remains unsupported in 0.1.0-alpha and needs a design decision because the `payments` app
+  This remains unsupported in 1.0.0 and needs a design decision because the `payments` app
   models one gateway account per site while this app's Credential Set table is multi-country/multi-currency.
 
 ## Contributing

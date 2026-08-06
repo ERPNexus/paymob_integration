@@ -82,3 +82,17 @@ The app sets its signed payment URL at `validate`, before ERPNext's own submit-t
 Every enabled Paymob Integration ID must be configured for immediate/standalone payment. A verified
 `Success` settles `Pending → Paid` once. Retired signed flags are stored as `Unsupported`, audited
 for review, and never mutate state or the ledger. Refund is the only outbound money movement.
+
+## ADR-0030 — Payer links serialize checkout reuse
+
+Signed payer-link checkout takes Frappe's site-scoped file lock for the Payment Request while it
+reloads, reuses a ready attempt, or creates and persists one intention. Desk checkout deliberately
+keeps its explicit new-attempt behavior.
+
+## ADR-0031 — Payment-link email only ever addresses the customer
+
+`prepare_payment_email` resolves a recipient itself (the reference doc's `contact_email`, else the
+`Customer`'s `email_id`) instead of trusting `Payment Request.email_to`. ERPNext's own fallback for
+that field is the reference document's `owner`, which is whoever created the record, not the payer —
+mailing a Paymob checkout link to an internal user is worse than mailing no one. When no customer
+email can be resolved, the email is muted rather than sent to the wrong address.

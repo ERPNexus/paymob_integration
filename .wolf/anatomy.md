@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-08-05T07:08:04.617Z
-> Files: 213 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-08-06T13:24:21.414Z
+> Files: 218 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../mnt/c/Users/bedo7/.claude/
 
@@ -21,6 +21,7 @@
 - `floating-inventing-swan.md` — Phases 06 + 07 — State Machine, Audit Trail & Amount Verification (~5554 tok)
 - `https-github-com-users-notabdelrahmanels-abstract-rainbow.md` — Fix #8 — Process button corrupts the session and logs the user out (~1874 tok)
 - `let-s-plan-plans-10-reconciliation-polle-steady-feigenbaum.md` — Phase 10 — Reconciliation & Expiry (~4626 tok)
+- `mighty-wiggling-pond.md` — Fix: refund callback posts no reversal Payment Entry (~1815 tok)
 - `plan-10-11-at-merry-jellyfish.md` — Plan — Issues #10 and #11 (~2198 tok)
 - `plan-14-15-at-humming-widget.md` — Plan — issues #14 and #15 (~1982 tok)
 - `plan-a-fix-for-sparkling-lollipop.md` — Fix — Paymob Settings owns capture mode (~4737 tok)
@@ -48,15 +49,13 @@
 - `.editorconfig` — Editor configuration (~109 tok)
 - `.eslintrc` (~671 tok)
 - `.gitignore` — Git ignore rules (~422 tok)
+- `.local.md` — Local-only Cloudflare Tunnel hostname and Bench commands for Paymob testing. (~70 tok)
 - `.pre-commit-config.yaml` (~538 tok)
 - `AGENTS.md` — OpenWolf (~955 tok)
 - `CLAUDE.md` — OpenWolf (~1913 tok)
 - `DESIGN.md` — DESIGN.md — Paymob Integration visual system (~989 tok)
 - `license.txt` (~268 tok)
 - `pyproject.toml` — Python project configuration (~565 tok)
-- `CHANGELOG.md` — 0.1.0-alpha release notes
-- `CONTRIBUTING.md` — Supported development environment and contribution checks
-- `SECURITY.md` — Vulnerability reporting and disclosure policy
 - `README.md` — Project documentation (~289 tok)
 - `TESTING_CHECKLIST.local.md` — Pre-Launch Testing Checklist — Paymob Integration (~2493 tok)
 
@@ -165,15 +164,14 @@
 ## docs/developer-guide/
 
 - `README.md` — Project documentation (~191 tok)
-- `sandbox-smoke-test.md` — Non-sensitive Paymob sandbox acceptance checklist
 
 ## docs/reference/
 
-- `decisions.md` — Decisions (ADRs) (~11304 tok)
+- `decisions.md` — Decisions (ADRs) (~1084 tok)
 - `endpoints.md` — Endpoint, setting, error, reconciliation, and outbound-request contracts (~7437 tok)
 - `fields.md` — Functional and technical field reference, including active and legacy audit events (~7163 tok)
 - `README.md` — Project documentation (~381 tok)
-- `states.md` — Payment-attempt states, transitions, review flags, and routine no-audit outcomes (~3179 tok)
+- `states.md` — States & Transitions (~577 tok)
 
 ## docs/user-guide/
 
@@ -192,7 +190,7 @@
 - `__init__.py` (~7 tok)
 - `_debug_probe.py` — run (~113 tok)
 - `_probe.py` — run (~432 tok)
-- `api.py` — Whitelisted entry points for logged-in Desk users. (~3612 tok)
+- `api.py` — Whitelisted entry points for logged-in Desk users. (~2991 tok)
 - `dashboard.py` — Adds Paymob attempts to the Payment Request Connections dashboard. (~64 tok)
 - `email.py` — Shared inline, mobile-safe email card renderer for Paymob messages. (~700 tok)
 - `hooks.py` — Declares views (~2032 tok)
@@ -200,7 +198,7 @@
 - `notifications.py` — Seed editable, opt-out-able Paymob notifications once per site. (~1421 tok)
 - `patches.txt` (~73 tok)
 - `pay_link.py` — Builds Frappe-signed payer payment links. (~60 tok)
-- `payment_request.py` — Payment Request lifecycle hooks. (~437 tok)
+- `payment_request.py` — Payment Request lifecycle hooks. (~835 tok)
 - `tasks.py` — Reconciles pending attempts, expires abandoned checkout, and logs routine recovery (~1900 tok)
 - `webhooks.py` — The app's one `allow_guest=True` endpoint. Paymob's servers have no Frappe session; the (~962 tok)
 
@@ -240,7 +238,7 @@
 - `hmac_verify.py` — Verifies Paymob's two callback signatures: the response callback (browser redirect, display (~1084 tok)
 - `intention.py` — Create a Paymob Intention once per payment attempt; never retry it automatically. (~315 tok)
 - `ledger.py` — Single Payment Entry write path for verified payments and reversals (~2500 tok)
-- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~3858 tok)
+- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~3135 tok)
 - `refund.py` — One-shot Paymob refund HTTP call; signed callbacks retain ledger authority. (~180 tok)
 - `session.py` — Run privileged work inside a request without corrupting the caller's session (issue #8; (~531 tok)
 - `settings.py` — Read Paymob Settings. No other module opens that doctype directly. (~831 tok)
@@ -295,6 +293,7 @@
 ## paymob_integration/paymob_integration/doctype/paymob_transaction/
 
 - `__init__.py` (~0 tok)
+- `paymob_transaction_dashboard.py` — Native Connections dashboard for Paymob Transaction documents. (~65 tok)
 - `paymob_transaction.js` — For license information, please see license.txt (~204 tok)
 - `paymob_transaction.json` (~1034 tok)
 - `paymob_transaction.py` — For license information, please see license.txt (~335 tok)
@@ -332,25 +331,27 @@
 ## paymob_integration/tests/
 
 - `__init__.py` (~0 tok)
-- `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~1819 tok)
+- `_repro_scratch.py` — run (~293 tok)
+- `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~2390 tok)
 - `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
-- `test_checkout.py` — TestCreateIntention: setUp, call, test_returns_the_three_identifiers, test_authenticates_with_the_se (~4100 tok)
+- `test_checkout.py` — TestCreateIntention: setUp, call, test_returns_the_three_identifiers, test_authenticates_with_the_se (~4762 tok)
 - `test_events.py` — Event-classification regressions for refunds, standalone success, and unsupported flags. (~580 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
 - `test_ledger.py` — Direct tests for paymob.ledger.post_payment — the single Payment Entry write path (~2146 tok)
 - `test_notifications.py` — Notification catalogue, templates, seeding, refresh, and enable/disable checks (~850 tok)
-- `test_pay_link.py` — TestPayLink: test_build_uses_frappe_signed_params, test_payment_request_hook_only_sets_a_valid_paymo (~1436 tok)
+- `test_pay_link.py` — TestPayLink: test_build_uses_frappe_signed_params, test_payment_request_hook_only_sets_a_valid_paymo (~3655 tok)
 - `test_payment_attempt_dashboard.py` — Focused native dashboard-data regression check. (~156 tok)
+- `test_payment_request.py` — TestCustomerEmail: test_prefers_the_reference_documents_contact_email, test_falls_back_to_the_custom (~1188 tok)
 - `test_processor.py` — Integration paths for paymob.processor.process_transaction. A `Success` on a `Pending` (~4881 tok)
 - `test_reconciliation.py` — Poller retry, expiry, recovery, ledger, and routine no-audit checks (~3828 tok)
 - `test_refund_client.py` — Unit test for the one-shot refund API call. (~330 tok)
-- `test_refund_ledger.py` — Verified reversal posting and no-Payment-Entry no-op checks (~2000 tok)
-- `test_refund.py` — Refund locks, permissions, amounts, and requesting-user audit checks (~1500 tok)
+- `test_refund_ledger.py` — Verified reversal callbacks create on-account Payment Entries exactly once. (~1732 tok)
+- `test_refund.py` — Outbound refund requests: the lock, the marker, the permission gate, and the amount (~1864 tok)
 - `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 9 mor (~1754 tok)
 - `test_session.py` — Direct unit test of `as_administrator()` (fix for issue #8): everything `frappe.set_user` (~652 tok)
 - `test_states.py` — TestCheck: test_all_pairs, test_failed_to_paid_is_illegal, test_paid_to_failed_is_illegal, test_succ (~480 tok)
 - `test_transaction_process_button.py` — The Desk 'Process' button (ADR-0013): a manual rescue for a row stuck at `processed = 0`, (~1196 tok)
-- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~4026 tok)
+- `test_webhook.py` — Endpoint tests for the processed callback, driven through a real werkzeug request so the (~5377 tok)
 
 ## paymob_integration/translations/
 

@@ -5,12 +5,14 @@ from urllib.parse import urlencode
 import frappe
 from frappe import _
 from frappe.contacts.doctype.address.address import get_default_address
-from frappe.utils import add_to_date, get_url, now_datetime, validate_email_address
+from frappe.utils import add_to_date, get_url, now_datetime, validate_email_address, validate_phone_number
+from frappe.utils.synchronization import filelock
 
 from paymob_integration.paymob import amounts, audit, intention, refund, settings, transactions
 
 WEBHOOK_PATH = "/api/method/paymob_integration.webhooks.processed_callback"
 RESULT_PATH = "/paymob-result"
+TEST_PHONE_NUMBER = "+201000000000"
 
 
 @frappe.whitelist(methods=["POST"])
@@ -20,7 +22,7 @@ def request_refund(attempt: str, amount_cents: int):
 	attempt_doc.check_permission("refund")
 	settings.is_enabled(throw=True)
 	if attempt_doc.refund_requested_at:
-		frappe.throw(_("A refund for this payment is already in progress."))
+		frappe.throw(_("A previous refund is awaiting Paymob confirmation."))
 	if attempt_doc.state not in ("Paid", "Partially Refunded"):
 		frappe.throw(_("Only paid Paymob payments can be refunded."))
 
@@ -68,14 +70,29 @@ def get_enabled_status():
 
 @frappe.whitelist(methods=["POST"])
 def start_checkout(payment_request: str):
-	"""Create a checkout from the stored Payment Request, never browser-supplied money."""
+	"""Create a checkout from the stored Payment Request, never browser-supplied money.
+
+	Reuses a still-pending, unexpired attempt so repeat clicks on the Desk Pay button and the
+	emailed payer link (paymob_pay.py) never mint two Paymob orders for one Payment Request.
+	"""
 	request = frappe.get_doc("Payment Request", payment_request)
 	request.check_permission("write")
-	return _checkout(request)
+	return _checkout(request, reuse_pending=True)
 
 
 def _checkout(request, reuse_pending=False):
 	"""Create, or safely reuse, the hosted checkout for a submitted request."""
+	if reuse_pending:
+		# Payer links can be opened in multiple browser tabs at once. Keep the lookup, intention
+		# creation, and identifier save together so only one live checkout is created per request.
+		with filelock(f"paymob-checkout-{request.name}"):
+			request = frappe.get_doc("Payment Request", request.name)
+			return _checkout_for_request(request, reuse_pending=True)
+	return _checkout_for_request(request)
+
+
+def _checkout_for_request(request, reuse_pending=False):
+	"""Run one checkout flow; payer-link callers hold their request-scoped lock."""
 	_validate_payable(request)
 	source = frappe.get_doc(request.reference_doctype, request.reference_name)
 	country = _merchant_country(request, source)
@@ -83,12 +100,15 @@ def _checkout(request, reuse_pending=False):
 	if reuse_pending:
 		attempt = _active_attempt(request.name)
 		if attempt:
-			credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
-			return {
-				"attempt": attempt.name,
-				"checkout_url": build_checkout_url(credentials, attempt.get_password("client_secret")),
-			}
+			client_secret = attempt.get_password("client_secret")
+			if client_secret:
+				credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+				return {
+					"attempt": attempt.name,
+					"checkout_url": build_checkout_url(credentials, client_secret),
+				}
 
+	billing_data = _billing_data(request, source)
 	credentials = settings.get_credential_set(country, request.currency)
 	attempt = _create_attempt(request, credentials, _contact_email(request, source))
 	result = intention.create_intention(
@@ -96,7 +116,7 @@ def _checkout(request, reuse_pending=False):
 		amount_cents=attempt.expected_amount_cents,
 		currency=attempt.currency,
 		special_reference=attempt.special_reference,
-		billing_data=_billing_data(request, source),
+		billing_data=billing_data,
 		items=_items(request, attempt.expected_amount_cents),
 		notification_url=get_url(WEBHOOK_PATH),
 		redirection_url=get_url(RESULT_PATH),
@@ -111,6 +131,7 @@ def _checkout(request, reuse_pending=False):
 	)
 	attempt.set("client_secret", result["client_secret"])
 	attempt.save(ignore_permissions=True)
+	frappe.db.commit()
 
 	frappe.logger("paymob").info(
 		f"intention created payment_request={request.name} "
@@ -131,6 +152,7 @@ def _active_attempt(payment_request):
 			"state": "Pending",
 			"expires_at": [">", now_datetime()],
 			"paymob_intention_id": ["is", "set"],
+			"paymob_order_id": ["is", "set"],
 		},
 		"name",
 		order_by="expires_at desc",
@@ -201,6 +223,13 @@ def _create_attempt(request, credentials, contact_email=None):
 
 def _billing_data(request, source):
 	"""Paymob requires these keys; customer data stays on existing ERPNext records."""
+	phone_number = source.get("contact_mobile") or request.get("phone_number")
+	if not phone_number and settings.get_settings().mode == "Test":
+		phone_number = TEST_PHONE_NUMBER
+	if not validate_phone_number(phone_number):
+		frappe.throw(
+			_("The Payment Request needs a valid customer phone number before starting Paymob checkout.")
+		)
 	contact = (
 		frappe.db.get_value(
 			"Contact", source.get("contact_person"), ["first_name", "last_name"], as_dict=True
@@ -213,7 +242,7 @@ def _billing_data(request, source):
 		# Unlike the other "NA" placeholders below, Paymob format-validates this field and
 		# rejects both "NA" and non-email values such as a fallback user ID.
 		"email": _contact_email(request, source) or "na@na.com",
-		"phone_number": source.get("contact_mobile") or request.get("phone_number") or "NA",
+		"phone_number": phone_number,
 		"street": "NA",
 		"building": "NA",
 		"floor": "NA",

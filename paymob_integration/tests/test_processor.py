@@ -145,55 +145,44 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(entries[0].needs_action, 1)
 		self.assertEqual(entries[0].paymob_transaction, second.name)
 
-	def test_decline_on_pending_attempt_moves_to_failed(self):
+	def test_success_after_decline_posts_once_without_audit(self):
 		attempt, payment_request, invoice = self._given_attempt()
 		before = self._payment_entry_count()
-		gl_before = frappe.db.count("GL Entry", {"voucher_type": "Sales Invoice", "voucher_no": invoice.name})
-		invoice_status_before = invoice.status
 
-		txn = self._given_transaction(
+		decline = self._given_transaction(
 			"Decline", "700002", attempt=attempt.name, payment_request=payment_request.name
 		)
-		processor.process_transaction(txn.name)
+		processor.process_transaction(decline.name)
 
 		attempt.reload()
-		invoice.reload()
 		self.assertEqual(attempt.state, "Failed")
 		self.assertEqual(self._payment_entry_count(), before)
-		self.assertEqual(
-			frappe.db.count("GL Entry", {"voucher_type": "Sales Invoice", "voucher_no": invoice.name}),
-			gl_before,
-		)
-		self.assertEqual(invoice.status, invoice_status_before)
 
-		retry = api._create_attempt(payment_request, _credentials())
-		self.addCleanup(
-			lambda: frappe.delete_doc(
-				"Paymob Payment Attempt", retry.name, force=True, ignore_permissions=True
-			)
-		)
-		self.assertEqual(retry.special_reference, f"{payment_request.name}-2")
-
-	def test_success_on_failed_attempt_is_refused_and_audited(self):
-		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
-
-		txn = self._given_transaction(
+		success = self._given_transaction(
 			"Success", "700003", attempt=attempt.name, payment_request=payment_request.name
 		)
-		processor.process_transaction(txn.name)
-
+		processor.process_transaction(success.name)
+		invoice.reload()
+		payment_request.reload()
 		attempt.reload()
-		self.assertEqual(attempt.state, "Failed")
-		self.assertEqual(attempt.needs_human_attention, 1)
-		entries = frappe.get_all(
-			"Paymob Audit Entry",
-			filters={"paymob_transaction_id": "700003"},
-			fields=["name", "event", "needs_action", "docstatus"],
+		success.reload()
+		self.assertEqual(attempt.state, "Paid")
+		self.assertEqual(success.processed, 1)
+		self.assertEqual(self._payment_entry_count(), before + 1)
+		self.assertTrue(attempt.payment_entry)
+		payment_entry = frappe.get_doc("Payment Entry", attempt.payment_entry)
+		self.assertEqual(payment_entry.docstatus, 1)
+		self.assertEqual(payment_entry.references[0].reference_name, invoice.name)
+		self.assertEqual(payment_entry.references[0].payment_request, payment_request.name)
+		self.assertEqual(invoice.outstanding_amount, 0)
+		self.assertEqual(payment_request.status, "Paid")
+		self.assertEqual(attempt.needs_human_attention, 0)
+		self.assertFalse(
+			frappe.db.exists("Paymob Audit Entry", {"paymob_transaction_id": success.paymob_transaction_id})
 		)
-		self.assertEqual(len(entries), 1)
-		self.assertEqual(entries[0].event, "Illegal Transition")
-		self.assertEqual(entries[0].needs_action, 1)
-		self.assertEqual(entries[0].docstatus, 1)
+
+		processor.process_transaction(success.name)
+		self.assertEqual(self._payment_entry_count(), before + 1)
 
 	def test_decline_on_paid_attempt_is_refused_and_audited(self):
 		attempt, payment_request, _invoice = self._given_attempt(state="Paid")
@@ -276,23 +265,10 @@ class TestProcessTransaction(NoCommitIntegrationTestCase):
 		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700009"}), 0)
 		self.assertEqual(txn.processed, 1)
 
-	def test_reprocessing_a_processed_row_is_a_noop(self):
-		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
-		txn = self._given_transaction(
-			"Success", "700010", attempt=attempt.name, payment_request=payment_request.name
-		)
-
-		processor.process_transaction(txn.name)
-		processor.process_transaction(txn.name)
-
-		attempt.reload()
-		self.assertEqual(attempt.state, "Failed")
-		self.assertEqual(frappe.db.count("Paymob Audit Entry", {"paymob_transaction_id": "700010"}), 1)
-
 	def test_audit_entry_is_immutable(self):
-		attempt, payment_request, _invoice = self._given_attempt(state="Failed")
+		attempt, payment_request, _invoice = self._given_attempt(state="Paid")
 		txn = self._given_transaction(
-			"Success", "700011", attempt=attempt.name, payment_request=payment_request.name
+			"Decline", "700011", attempt=attempt.name, payment_request=payment_request.name
 		)
 		processor.process_transaction(txn.name)
 

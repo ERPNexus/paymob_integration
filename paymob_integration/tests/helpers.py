@@ -14,6 +14,35 @@ class NoCommitIntegrationTestCase(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		# ERPNext only seeds this via the setup wizard; a fresh `bench new-site` + `install-app`
+		# never runs it, so Company.create_default_warehouses() fails looking up "Transit".
+		if not frappe.db.exists("Warehouse Type", "Transit"):
+			frappe.get_doc({"doctype": "Warehouse Type", "name": "Transit"}).insert()
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			frappe.get_doc(
+				{
+					"doctype": "Company",
+					"company_name": company,
+					"country": "India",
+					"default_currency": "EGP",
+					"create_chart_of_accounts_based_on": "Standard Template",
+					"chart_of_accounts": "Standard",
+				}
+			).save()
+		frappe.defaults.set_global_default("company", company)
+		# Same gap as Warehouse Type above: the setup wizard seeds the running Fiscal Year, a
+		# fresh site has none, and every submitted document validates its posting date against one.
+		year = frappe.utils.nowdate()[:4]
+		if not frappe.db.exists("Fiscal Year", year):
+			frappe.get_doc(
+				{
+					"doctype": "Fiscal Year",
+					"year": year,
+					"year_start_date": f"{year}-01-01",
+					"year_end_date": f"{year}-12-31",
+				}
+			).insert()
 		commit = patch.object(frappe.db, "commit", return_value=None)
 		commit.start()
 		cls.addClassCleanup(commit.stop)
@@ -163,6 +192,7 @@ def given_submitted_sales_invoice(grand_total="275.55", currency="EGP"):
 			"customer": customer,
 			"currency": currency,
 			"conversion_rate": 1,
+			"selling_price_list": _ensure_price_list(currency),
 			"disable_rounded_total": 1,
 			"due_date": frappe.utils.nowdate(),
 			"items": [{"item_code": item, "qty": 1, "rate": grand_total}],
@@ -171,6 +201,24 @@ def given_submitted_sales_invoice(grand_total="275.55", currency="EGP"):
 	invoice.insert(ignore_permissions=True)
 	invoice.submit()
 	return invoice
+
+
+def _ensure_price_list(currency):
+	# Same setup-wizard gap as the fixtures in NoCommitIntegrationTestCase.setUpClass: a fresh
+	# site has no "Standard Selling" Price List, and every Sales Invoice needs one.
+	name = f"Paymob Test Selling {currency}"
+	if not frappe.db.exists("Price List", name):
+		frappe.get_doc(
+			{
+				"doctype": "Price List",
+				"price_list_name": name,
+				"enabled": 1,
+				"buying": 0,
+				"selling": 1,
+				"currency": currency,
+			}
+		).insert(ignore_permissions=True)
+	return name
 
 
 def _ensure_customer(currency):
@@ -190,13 +238,22 @@ def _ensure_customer(currency):
 
 def _ensure_item():
 	code = "PAYMOB-TEST-ITEM"
+	if not frappe.db.exists("UOM", "Nos"):
+		frappe.get_doc({"doctype": "UOM", "uom_name": "Nos", "must_be_whole_number": 1}).insert(
+			ignore_permissions=True
+		)
+	item_group = "Paymob Test Items"
+	if not frappe.db.exists("Item Group", item_group):
+		frappe.get_doc({"doctype": "Item Group", "item_group_name": item_group, "is_group": 0}).insert(
+			ignore_permissions=True
+		)
 	if not frappe.db.exists("Item", code):
 		frappe.get_doc(
 			{
 				"doctype": "Item",
 				"item_code": code,
 				"item_name": code,
-				"item_group": frappe.db.get_value("Item Group", {"is_group": 0}, "name"),
+				"item_group": item_group,
 				"stock_uom": "Nos",
 				"is_stock_item": 0,
 			}

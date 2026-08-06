@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-alpha
+## 1.0.0
 
 ### Supported payment flow
 
@@ -25,7 +25,7 @@
 
 - Added setup, contributor, security, and sandbox smoke-test guidance.
 
-### Known alpha limitations
+### Known limitations
 
 - No authorization/capture, void, stored-card/tokenization, subscription, BNPL, POS, or webshop
-  gateway-controller support. Alpha upgrades may require migration review.
+  gateway-controller support.

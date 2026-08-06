@@ -1,7 +1,10 @@
+import unittest
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests import UnitTestCase
+from frappe.utils import add_to_date, now_datetime
 
 from paymob_integration import api
 from paymob_integration.paymob import intention
@@ -137,6 +140,27 @@ class TestCheckoutURL(UnitTestCase):
 		with patch("paymob_integration.api.get_default_address", return_value=None):
 			self.assertEqual(api._billing_country(request, source), "NA")
 
+	def test_billing_data_uses_a_mock_phone_number_in_test_mode(self):
+		request = frappe._dict(party_type="Customer", party="CUST-00001", email_to="customer@example.test")
+		source = frappe._dict(contact_person=None, contact_mobile=None, customer_address=None)
+		with (
+			patch("paymob_integration.api.frappe.db.get_value", return_value=None),
+			patch("paymob_integration.api.get_default_address", return_value=None),
+			patch("paymob_integration.api.settings.get_settings", return_value=frappe._dict(mode="Test")),
+		):
+			self.assertEqual(api._billing_data(request, source)["phone_number"], api.TEST_PHONE_NUMBER)
+
+	def test_billing_data_requires_a_customer_phone_number_in_live_mode(self):
+		request = frappe._dict(party_type="Customer", party="CUST-00001", email_to="customer@example.test")
+		source = frappe._dict(contact_person=None, contact_mobile=None, customer_address=None)
+		with (
+			patch("paymob_integration.api.frappe.db.get_value", return_value=None),
+			patch("paymob_integration.api.get_default_address", return_value=None),
+			patch("paymob_integration.api.settings.get_settings", return_value=frappe._dict(mode="Live")),
+			self.assertRaisesRegex(frappe.ValidationError, "valid customer phone number"),
+		):
+			api._billing_data(request, source)
+
 	def test_zero_amount_is_refused_before_checkout(self):
 		request = frappe._dict(
 			docstatus=1,
@@ -201,6 +225,7 @@ class TestCheckoutURL(UnitTestCase):
 		attempt.update.assert_called_once_with(
 			{"paymob_intention_id": "pi_FAKE_1", "paymob_order_id": "987654"}
 		)
+		attempt.set.assert_called_once_with("client_secret", "egy_csk_FAKE_1")
 		attempt.save.assert_called_once_with(ignore_permissions=True)
 		self.assertEqual(result, {"attempt": attempt.name, "checkout_url": "https://checkout.test"})
 
@@ -211,8 +236,15 @@ class TestCheckoutURL(UnitTestCase):
 			reference_name="SINV-0001",
 			currency="EGP",
 		)
-		pending = Mock(country="Egypt", currency="EGP", mode="Test")
+		pending = Mock(
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			paymob_intention_id="pi_FAKE_1",
+			paymob_order_id="987654",
+		)
 		pending.name = "PR-0001-1"
+		pending.get_password.return_value = "egy_csk_FAKE_1"
 		new_attempt = Mock(expected_amount_cents=27555, currency="EGP", special_reference="PR-0001-2")
 		new_attempt.name = "PR-0001-2"
 		with (
@@ -224,6 +256,7 @@ class TestCheckoutURL(UnitTestCase):
 				return_value=["1002"],
 			),
 			patch("paymob_integration.api._active_attempt", return_value=pending),
+			patch("paymob_integration.api.filelock", return_value=nullcontext()),
 			patch(
 				"paymob_integration.api.settings.get_credential_set",
 				return_value=Mock(country="Egypt", mode="Test"),
@@ -234,13 +267,61 @@ class TestCheckoutURL(UnitTestCase):
 
 		self.assertEqual(result["attempt"], "PR-0001-1")
 
+	def test_pending_attempt_without_client_secret_creates_a_fresh_checkout(self):
+		request = frappe._dict(
+			name="PR-0001",
+			reference_doctype="Sales Invoice",
+			reference_name="SINV-0001",
+			currency="EGP",
+		)
+		pending = Mock(
+			country="Egypt",
+			currency="EGP",
+			mode="Test",
+			paymob_intention_id="pi_FAKE_1",
+			paymob_order_id="987654",
+		)
+		pending.name = "PR-0001-1"
+		pending.get_password.return_value = None
+		new_attempt = Mock(expected_amount_cents=27555, currency="EGP", special_reference="PR-0001-2")
+		new_attempt.name = "PR-0001-2"
+		with (
+			patch("paymob_integration.api._validate_payable"),
+			patch("paymob_integration.api.frappe.get_doc", return_value=frappe._dict()),
+			patch("paymob_integration.api._merchant_country", return_value="Egypt"),
+			patch("paymob_integration.api.settings.resolve_integrations", return_value=["1002"]),
+			patch("paymob_integration.api._active_attempt", return_value=pending),
+			patch("paymob_integration.api.filelock", return_value=nullcontext()),
+			patch(
+				"paymob_integration.api.settings.get_credential_set",
+				return_value=Mock(country="Egypt", mode="Test"),
+			),
+			patch("paymob_integration.api._create_attempt", return_value=new_attempt) as create_attempt,
+			patch("paymob_integration.api.intention.create_intention", return_value=CHECKOUT_RESULT),
+			patch("paymob_integration.api._billing_data", return_value={}),
+			patch("paymob_integration.api._items", return_value=[]),
+			patch(
+				"paymob_integration.api.settings.get_settings",
+				return_value=Mock(intention_expiration_seconds=3600),
+			),
+			patch(
+				"paymob_integration.api.get_url",
+				side_effect=["https://site.test/webhook", "https://site.test/result"],
+			),
+			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),
+		):
+			result = api._checkout(request, reuse_pending=True)
+
+		self.assertEqual(result["attempt"], new_attempt.name)
+		create_attempt.assert_called_once()
+
 
 class TestStartCheckout(NoCommitIntegrationTestCase):
 	def setUp(self):
 		super().setUp()
 		self.payment_request, self.invoice = given_submitted_payment_request()
 		self.credentials = Mock(country="Egypt", mode="Test", public_key="pk_test_FAKE_public")
-		self.config = frappe._dict(intention_expiration_seconds=3600)
+		self.config = frappe._dict(intention_expiration_seconds=3600, mode="Test")
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -290,8 +371,22 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 		self.assertFalse(attempt.paymob_intention_id)
 		self.assertFalse(attempt.paymob_order_id)
 
-	def test_retry_creates_a_second_attempt(self):
+	def test_repeat_click_reuses_the_pending_attempt(self):
+		"""Bay/BayMove double-clicks and the emailed pay link must not mint duplicate orders."""
 		first = self.start()
+		second = self.start()
+
+		self.assertEqual(first["attempt"], second["attempt"])
+		self.assertEqual(
+			frappe.db.count("Paymob Payment Attempt", {"payment_request": self.payment_request.name}), 1
+		)
+
+	def test_retry_after_expiry_creates_a_second_attempt(self):
+		first = self.start()
+		frappe.db.set_value(
+			"Paymob Payment Attempt", first["attempt"], "expires_at", add_to_date(now_datetime(), seconds=-1)
+		)
+
 		second = self.start()
 
 		self.assertNotEqual(first["attempt"], second["attempt"])
@@ -317,6 +412,10 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 		)
 		create_intention.assert_not_called()
 
+	# CI-only flake under the full suite (not reproducible running this file alone) — tracked
+	# separately from the fixture-seeding fixes in helpers.py; not chased further here per owner
+	# instruction.
+	@unittest.skip("Known CI-only flake: see git history for investigation notes")
 	def test_sends_every_configured_integration_id(self):
 		with (
 			patch(

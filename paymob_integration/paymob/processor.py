@@ -46,8 +46,9 @@ def process_transaction(transaction):
 			if not txn.has_parent_transaction:
 				# The parent re-send is routine bookkeeping on every refund, signed or not — it carries
 				# no amount_cents of its own. Only flag it when Paymob's cumulative total outruns what
-				# this app has posted (the #6 symptom); a parent that lands before its signed child is a
-				# transient false positive, accepted as the safer failure direction.
+				# this app has posted (a refund happened at Paymob but never reached the ledger); a
+				# parent that lands before its signed child is a transient false positive, accepted as
+				# the safer failure direction. ADR-0017: this unsigned field still never posts money.
 				if (txn.refunded_amount_cents or 0) > (attempt.refunded_amount_cents or 0):
 					return _hold_parent_refund(txn, attempt)
 				_mark_processed(txn)

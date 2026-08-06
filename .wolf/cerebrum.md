@@ -24,9 +24,20 @@
   user has flagged it as useless before. See [[feedback-outline-not-full-plans]].
 - Keep non-user-facing reconciliation limits as backend defaults rather than Settings fields.
 - Prefer native Frappe dashboard connections over redundant custom buttons that only open a linked list.
+- [2026-08-05] For Paymob sandbox testing, the user wants a stable custom HTTPS hostname for the local `capital` bench rather than a temporary tunnel URL.
+- [2026-08-05] Keep local-only operational endpoints and startup commands in the repository's ignored `.local.md` file.
 
 ## Key Learnings
 
+- [2026-08-06] The local `paymob-test` Cloudflare connector is healthy and uses QUIC by default. Cloudflare caching is unsafe for dynamic/authenticated Frappe routes; the tunnel adds network latency but does not account for slow local application rendering.
+- [2026-08-06] Paymob's create-intention API requires a valid customer phone number; optional billing address fields may use `NA`, but the phone cannot. Validate it before creating a Paymob Payment Attempt so malformed local data never produces a remote 400 or an orphan Pending attempt.
+- [2026-08-05] A named Cloudflare Tunnel can provide the `capital` bench a stable custom HTTPS hostname without a static public IP or router port forwarding; register the hostname with `bench setup add-domain` and set `host_name` with `:443` in developer mode.
+- [2026-08-05] Parent refund callback cumulative totals are unsigned routine evidence: mark every parent resend processed without auditing, changing attempt fields, clearing `refund_requested_at`, or posting a reversal. Only a signed child refund delta may mutate the refund ledger.
+- [2026-08-05] A non-standard Link field is not enough for a Frappe Connections dashboard filter: the source DocType needs a `<doctype>_dashboard.py` mapping that target DocType to the field name.
+- [2026-08-05] Public payer-link checkout runs through a GET request, so committing the initial attempt is insufficient: commit again immediately after saving the intention ID, Paymob order ID, and password-backed client secret.
+- [2026-08-05] A payer-link checkout is reusable only after its intention ID, Paymob order ID, and password-backed client secret are all persisted; incomplete pending attempts must mint a new intention rather than redirecting with a broken checkout URL.
+- [2026-08-05] Frappe's `utils.synchronization.filelock` is site-scoped by default; use a Payment-Request-derived name around payer-link active-attempt lookup, intention creation, and identifier persistence to prevent concurrent checkout creation.
+- [2026-08-05] A verified decline is not terminal for a still-valid hosted checkout: retain its immutable transaction evidence, then allow only a later verified, exact-match `Success` to move the same attempt from `Failed` to `Paid` through the normal processor and ledger path.
 - [2026-08-05] Release hardening currently targets `0.1.0-alpha`; v1 requires a passing clean CI run and a completed Paymob sandbox smoke-test record, not just the presence of CI/checklist files.
 - [2026-08-04] Treat `Paymob Settings.enabled` as a server-side feature boundary: every entry
   point uses one settings predicate, while Desk visibility only mirrors that guard for usability.
@@ -208,6 +219,7 @@
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
+- [2026-08-05] Run `pre-commit` from `apps/paymob_integration`, not the Bench root; its Git configuration is repository-local.
 - [2026-08-04] The imported GitHub issue extension is at
   `/home/frappe/.claude/skills/github-issues/SKILL.md`; do not resolve the anatomy entry as the
   repository-local `.claude/skills/github-issues/SKILL.md`, which does not exist.

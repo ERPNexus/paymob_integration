@@ -1,6 +1,8 @@
 """Payment Request lifecycle hooks."""
 
 import frappe
+from frappe.contacts.doctype.contact.contact import get_default_contact
+from frappe.utils import validate_email_address
 
 from paymob_integration import api, email, pay_link
 from paymob_integration.paymob import settings
@@ -42,6 +44,39 @@ def prepare_payment_email(doc, method=None):
 		doc.mute_email = 1
 		return
 
+	customer_email = _customer_email(doc, source)
+	if not customer_email:
+		# ERPNext falls back to the reference doc's owner when nothing else is set, which is
+		# never the customer. Silence the email rather than mail an internal user a payment link.
+		doc.mute_email = 1
+		return
+
+	doc.email_to = customer_email
 	doc.payment_url = pay_link.build(doc.name)
 	if not doc.message:
 		doc.message = DEFAULT_MESSAGE
+
+
+def _customer_email(doc, source):
+	"""The customer's own email only — never the invoice owner or another internal fallback.
+
+	`Customer.email_id` is a fetched field pulled from `customer_primary_contact`; it stays blank
+	whenever a Customer has contacts but none is flagged primary, even though a usable email
+	exists. `get_default_contact` covers that case: primary if set, otherwise any linked contact.
+	"""
+	email_address = validate_email_address(source.get("contact_email"))
+	if email_address:
+		return email_address
+	if doc.party_type != "Customer" or not doc.party:
+		return None
+
+	email_address = validate_email_address(frappe.db.get_value("Customer", doc.party, "email_id"))
+	if email_address:
+		return email_address
+
+	contact = get_default_contact("Customer", doc.party)
+	if contact:
+		email_address = validate_email_address(frappe.db.get_value("Contact", contact, "email_id"))
+		if email_address:
+			return email_address
+	return None

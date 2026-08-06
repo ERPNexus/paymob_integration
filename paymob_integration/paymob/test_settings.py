@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import UnitTestCase
 
 from paymob_integration import api
 from paymob_integration.paymob import settings
@@ -13,14 +13,14 @@ def _row(country="Egypt", currency="EGP", mode="Test", integration_id="1001", en
 	)
 
 
-class TestEnabledStatus(FrappeTestCase):
+class TestEnabledStatus(UnitTestCase):
 	@patch("paymob_integration.api.settings.is_enabled", return_value=False)
 	def test_returns_only_the_enabled_flag(self, is_enabled):
 		self.assertEqual(api.get_enabled_status(), {"enabled": False})
 		is_enabled.assert_called_once_with()
 
 
-class TestResolveIntegrations(FrappeTestCase):
+class TestResolveIntegrations(UnitTestCase):
 	@patch("paymob_integration.paymob.settings.get_settings")
 	def test_returns_all_enabled_ids_for_country_currency_and_mode(self, get_settings):
 		get_settings.return_value = frappe._dict(
