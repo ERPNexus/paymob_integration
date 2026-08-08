@@ -36,11 +36,11 @@ configured for immediate/standalone payment.
 
 ## Active settings and failure paths
 
-`Paymob Settings` also owns encrypted API credentials, public keys, base URLs, expiration and
-polling defaults, payment-account mappings, and notification toggles. `refund_confirmation_minutes`
-bounds how long `request_refund`'s in-progress marker blocks a second request: past that window
-the lock self-releases instead of waiting forever for a callback Paymob may never send.
-`test_connection` is a
+`Paymob Settings` also owns encrypted API credentials, public keys, base URLs, checkout expiration,
+payment-account mappings, and notification toggles. A fixed 20-minute window
+(`api.REFUND_CONFIRMATION_MINUTES`) bounds how long `request_refund`'s in-progress marker blocks a
+second request: past that window the lock self-releases instead of waiting forever for a callback
+Paymob may never send. `test_connection` is a
 read-only administrator action that validates credentials and reports a translated failure; it
 does not create a transaction or Payment Entry. The Desk `Paymob Transaction.process` action is a
 manual rescue for a stored row with `processed = 0` and routes through the same processor as the

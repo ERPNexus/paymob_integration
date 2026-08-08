@@ -13,6 +13,7 @@ from paymob_integration.paymob import amounts, audit, intention, refund, setting
 WEBHOOK_PATH = "/api/method/paymob_integration.webhooks.processed_callback"
 RESULT_PATH = "/paymob-result"
 TEST_PHONE_NUMBER = "+201000000000"
+REFUND_CONFIRMATION_MINUTES = 20
 
 
 @frappe.whitelist(methods=["POST"])
@@ -21,8 +22,7 @@ def request_refund(attempt: str, amount_cents: int):
 	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
 	attempt_doc.check_permission("refund")
 	settings.is_enabled(throw=True)
-	config = settings.get_settings()
-	window_start = add_to_date(now_datetime(), minutes=-(config.refund_confirmation_minutes or 0))
+	window_start = add_to_date(now_datetime(), minutes=-REFUND_CONFIRMATION_MINUTES)
 	if attempt_doc.refund_requested_at and attempt_doc.refund_requested_at >= window_start:
 		frappe.throw(_("A previous refund is awaiting Paymob confirmation."))
 	if attempt_doc.state not in ("Paid", "Partially Refunded"):

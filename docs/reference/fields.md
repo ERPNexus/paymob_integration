@@ -8,8 +8,9 @@ country, and mode. `state` is one of `Pending`, `Paid`, `Partially Refunded`, `R
 or `Expired`.
 
 `refund_requested_at` is an in-progress marker set under the refund row lock; it also self-releases
-once `Paymob Settings.refund_confirmation_minutes` elapses without a matching callback, so a
-callback Paymob never sends cannot wedge the attempt (amends ADR-0018 — see decisions.md).
+after a fixed 20-minute window (`api.REFUND_CONFIRMATION_MINUTES`) elapses without a matching
+callback, so a callback Paymob never sends cannot wedge the attempt (amends ADR-0018 — see
+decisions.md).
 `refund_requested_cents` records the amount *we* asked Paymob to refund, alongside the marker. It
 is the trusted number a partial parent-resend refund posts from — the unsigned
 `refunded_amount_cents` on the callback is only a cross-check (ADR-0033). Both fields are cleared

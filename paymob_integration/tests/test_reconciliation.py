@@ -82,9 +82,11 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 	def setUp(self):
 		self.settings = frappe._dict(
 			enabled=1,
-			stale_pending_minutes=0,
 			intention_expiration_seconds=3600,
 		)
+		stale_minutes_patcher = patch("paymob_integration.tasks.STALE_PENDING_MINUTES", 0)
+		stale_minutes_patcher.start()
+		self.addCleanup(stale_minutes_patcher.stop)
 		settings_patcher = patch(
 			"paymob_integration.paymob.settings.get_settings", side_effect=lambda: self.settings
 		)
@@ -243,8 +245,10 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 		self.assertEqual(get_all.call_args.kwargs["limit"], tasks.RECONCILE_BATCH_SIZE)
 		self.assertEqual(len(fake.inquiry_calls), 3)
 
+	@patch(
+		"paymob_integration.tasks.STALE_PENDING_MINUTES", 999999
+	)  # cutoff far in the past: nothing is stale
 	def test_selection_skips_fresh_and_settled_attempts(self):
-		self.settings.stale_pending_minutes = 999999  # cutoff far in the past: nothing is stale
 		self._given_attempt()  # fresh Pending attempt
 		attempt, payment_request, invoice = given_attempt(state="Paid", credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, payment_request.name, invoice.name)

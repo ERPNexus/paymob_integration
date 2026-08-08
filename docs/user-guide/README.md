@@ -13,7 +13,6 @@ to find the value in your Paymob dashboard.
 | **Enabled** | The master switch for the whole app. Turn this on only after your credentials and payment methods are configured and tested below. While it is off, no payment can be started. |
 | **Mode** | Choose **Test** or **Live** for the whole site. Test mode uses fake money, so you can try the flow safely. Live mode charges real customers. Paymob never falls back from Live to Test — if your Live credentials are missing or wrong, payments fail, they do not quietly switch to Test. |
 | **Intention Expiration Seconds** | How many seconds a checkout link stays valid before it expires. Default is 3600 (one hour). If a customer opens the checkout page after this time, they must start again. |
-| **Stale Pending Minutes** | How many minutes a payment can stay "pending" before the system checks with Paymob to find out what really happened. Default is 20. This is a safety net for payments where Paymob's confirmation message never arrives. |
 
 A word on "**Enabled**": you will see this same checkbox three times — once here, once on each
 credential row, and once on each payment-method row. They do not all mean the same thing. This one
@@ -128,8 +127,7 @@ messages have arrived. See [states.md](../reference/states.md) for what each sta
 
 Sometimes Paymob's confirmation message never reaches ERPNext — a network hiccup, a server
 restart, anything. You do not need to do anything about this: every 15 minutes, ERPNext quietly
-asks Paymob directly what happened to any payment that has been "pending" for a while (see
-**Stale Pending Minutes** above). If Paymob confirms the payment actually went through, ERPNext
+asks Paymob directly what happened to any payment that has been "pending" for a while. If Paymob confirms the payment actually went through, ERPNext
 records it exactly as if the original message had arrived — the Payment Request still ends up
 **Paid**, with a normal Payment Entry. If Paymob confirms nothing was ever charged and the
 checkout link's time is up, the attempt is marked **Expired** instead, so the customer can start a

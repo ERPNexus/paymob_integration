@@ -12,6 +12,7 @@ from paymob_integration.paymob import auth, client, events, processor, settings,
 
 INQUIRY_PATH = "/api/ecommerce/orders/transaction_inquiry"
 RECONCILE_BATCH_SIZE = 50
+STALE_PENDING_MINUTES = 20
 
 
 def reconcile_pending_attempts():
@@ -22,7 +23,7 @@ def reconcile_pending_attempts():
 	if not settings.is_enabled(config):
 		return
 
-	cutoff = add_to_date(now_datetime(), minutes=-(config.stale_pending_minutes or 0))
+	cutoff = add_to_date(now_datetime(), minutes=-STALE_PENDING_MINUTES)
 	rows = frappe.get_all(
 		"Paymob Payment Attempt",
 		filters={"state": "Pending", "creation": ["<", cutoff]},

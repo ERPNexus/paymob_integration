@@ -71,9 +71,9 @@ accepted but whose callback fell to `_hold_parent_refund` — a needs-review out
 terminal for that request, not a pending one — left the marker set forever, since nothing else
 cleared it and the Phase 10 poller only reconciles `Pending` attempts. The marker now clears on
 every terminal refund outcome (posted, held for review, or refused — see ADR-0033), and
-`request_refund` additionally treats the marker as stale once
-`Paymob Settings.refund_confirmation_minutes` elapses without any callback at all, so a callback
-Paymob never sends self-releases instead of wedging the attempt.
+`request_refund` additionally treats the marker as stale once a fixed 20-minute window
+(`api.REFUND_CONFIRMATION_MINUTES`) elapses without any callback at all, so a callback Paymob
+never sends self-releases instead of wedging the attempt.
 
 ## ADR-0019 — Refund capability is a DocType permission
 

@@ -12,8 +12,6 @@
   "credential_sets",
   "integration_ids",
   "intention_expiration_seconds",
-  "stale_pending_minutes",
-  "refund_confirmation_minutes",
   "notifications_section",
   "send_payment_link_email",
   "send_status_emails"
@@ -51,18 +49,6 @@
    "fieldname": "intention_expiration_seconds",
    "fieldtype": "Int",
    "label": "Intention Expiration Seconds"
-  },
-  {
-   "default": "20",
-   "fieldname": "stale_pending_minutes",
-   "fieldtype": "Int",
-   "label": "Stale Pending Minutes"
-  },
-  {
-   "default": "20",
-   "fieldname": "refund_confirmation_minutes",
-   "fieldtype": "Int",
-   "label": "Refund Confirmation Minutes"
   },
   {
    "fieldname": "notifications_section",
