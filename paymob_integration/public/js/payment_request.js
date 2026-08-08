@@ -1,5 +1,9 @@
 frappe.ui.form.on("Payment Request", {
 	refresh(frm) {
+		// ERPNext's own payment_request.js adds this button; it emails a payment link,
+		// which doesn't fit our Paymob checkout flow.
+		frm.remove_custom_button(__("Resend Payment Email"));
+
 		if (
 			frm.doc.docstatus !== 1 ||
 			frm.doc.payment_request_type !== "Inward" ||
