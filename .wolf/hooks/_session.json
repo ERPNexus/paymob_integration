@@ -1,177 +1,37 @@
 {
-  "session_id": "session-2026-08-06-1559",
-  "started": "2026-08-06T12:59:51.328Z",
+  "session_id": "session-2026-08-08-1234",
+  "started": "2026-08-08T09:34:58.086Z",
   "files_read": {
-    "/home/frappe/frappe-bench-16/apps/erpnext/erpnext/accounts/doctype/payment_request/payment_request.py": {
-      "count": 3,
-      "tokens": 0,
-      "first_read": "2026-08-06T13:01:13.886Z"
+    "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_checkout.py": {
+      "count": 1,
+      "tokens": 4762,
+      "first_read": "2026-08-08T09:36:00.224Z"
     },
-    "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_refund_ledger.py": {
-      "count": 2,
-      "tokens": 1737,
-      "first_read": "2026-08-06T13:02:22.273Z"
+    "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/api.py": {
+      "count": 1,
+      "tokens": 3066,
+      "first_read": "2026-08-08T09:38:21.639Z"
     },
     "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/paymob/processor.py": {
-      "count": 2,
-      "tokens": 3858,
-      "first_read": "2026-08-06T13:02:22.370Z"
-    },
-    "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/email.py": {
       "count": 1,
-      "tokens": 700,
-      "first_read": "2026-08-06T13:10:12.778Z"
-    },
-    "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/payment_request.py": {
-      "count": 1,
-      "tokens": 671,
-      "first_read": "2026-08-06T13:11:48.560Z"
-    },
-    "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/helpers.py": {
-      "count": 1,
-      "tokens": 2390,
-      "first_read": "2026-08-06T13:12:57.595Z"
-    },
-    "/home/frappe/frappe-bench-16/apps/frappe/frappe/contacts/doctype/contact/contact.py": {
-      "count": 1,
-      "tokens": 0,
-      "first_read": "2026-08-06T13:21:28.858Z"
-    },
-    "/home/frappe/frappe-bench-16/apps/paymob_integration/docs/reference/states.md": {
-      "count": 1,
-      "tokens": 3179,
-      "first_read": "2026-08-06T13:24:08.401Z"
+      "tokens": 3135,
+      "first_read": "2026-08-08T09:39:24.262Z"
     }
   },
   "files_written": [
     {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_refund_ledger.py",
-      "action": "edit",
-      "tokens": 20,
-      "at": "2026-08-06T13:00:04.863Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_refund_ledger.py",
-      "action": "edit",
-      "tokens": 97,
-      "at": "2026-08-06T13:00:20.894Z"
-    },
-    {
       "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_checkout.py",
       "action": "edit",
-      "tokens": 26,
-      "at": "2026-08-06T13:00:55.797Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_checkout.py",
-      "action": "edit",
-      "tokens": 96,
-      "at": "2026-08-06T13:01:17.060Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_pay_link.py",
-      "action": "edit",
-      "tokens": 30,
-      "at": "2026-08-06T13:01:55.361Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_pay_link.py",
-      "action": "edit",
-      "tokens": 104,
-      "at": "2026-08-06T13:02:16.349Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_refund_ledger.py",
-      "action": "edit",
-      "tokens": 708,
-      "at": "2026-08-06T13:05:02.476Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_refund_ledger.py",
-      "action": "edit",
-      "tokens": 11,
-      "at": "2026-08-06T13:05:38.909Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/payment_request.py",
-      "action": "edit",
-      "tokens": 58,
-      "at": "2026-08-06T13:11:23.107Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/payment_request.py",
-      "action": "edit",
-      "tokens": 289,
-      "at": "2026-08-06T13:11:38.263Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/docs/reference/decisions.md",
-      "action": "edit",
-      "tokens": 239,
-      "at": "2026-08-06T13:12:33.549Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_payment_request.py",
-      "action": "create",
-      "tokens": 933,
-      "at": "2026-08-06T13:13:34.617Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_payment_request.py",
-      "action": "edit",
-      "tokens": 80,
-      "at": "2026-08-06T13:13:45.785Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/payment_request.py",
-      "action": "edit",
-      "tokens": 38,
-      "at": "2026-08-06T13:21:39.595Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/payment_request.py",
-      "action": "edit",
-      "tokens": 270,
-      "at": "2026-08-06T13:21:54.943Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/paymob/processor.py",
-      "action": "edit",
-      "tokens": 196,
-      "at": "2026-08-06T13:22:52.571Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/tests/test_payment_request.py",
-      "action": "edit",
-      "tokens": 322,
-      "at": "2026-08-06T13:23:03.671Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/paymob_integration/paymob/processor.py",
-      "action": "edit",
-      "tokens": 400,
-      "at": "2026-08-06T13:23:07.018Z"
-    },
-    {
-      "file": "/home/frappe/frappe-bench-16/apps/paymob_integration/docs/reference/states.md",
-      "action": "edit",
-      "tokens": 170,
-      "at": "2026-08-06T13:24:21.437Z"
+      "tokens": 293,
+      "at": "2026-08-08T09:36:32.953Z"
     }
   ],
   "edit_counts": {
-    "paymob_integration/tests/test_refund_ledger.py": 4,
-    "paymob_integration/tests/test_checkout.py": 2,
-    "paymob_integration/tests/test_pay_link.py": 2,
-    "paymob_integration/payment_request.py": 4,
-    "docs/reference/decisions.md": 1,
-    "paymob_integration/tests/test_payment_request.py": 3,
-    "paymob_integration/paymob/processor.py": 2,
-    "docs/reference/states.md": 1
+    "paymob_integration/tests/test_checkout.py": 1
   },
-  "anatomy_hits": 6,
-  "anatomy_misses": 2,
-  "repeated_reads_warned": 4,
+  "anatomy_hits": 3,
+  "anatomy_misses": 0,
+  "repeated_reads_warned": 0,
   "cerebrum_warnings": 0,
-  "stop_count": 7
+  "stop_count": 0
 }

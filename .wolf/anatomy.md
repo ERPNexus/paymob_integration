@@ -1,11 +1,25 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-08-06T13:24:21.414Z
-> Files: 218 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-08-08T09:36:32.908Z
+> Files: 234 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../mnt/c/Users/bedo7/.claude/
 
 - `statusline-command.sh` — Windows counterpart of the WSL statusline-command.sh (user@host + model + context% + session%/week%) (~382 tok)
+
+## ../../../../../tmp/
+
+- `bootstrap_citest.py` — execute (~33 tok)
+
+## ../../../../../tmp/claude-1001/-home-frappe-frappe-bench-16-apps-paymob-integration/aae9305c-5b3c-44db-87e0-c2558516b9db/scratchpad/
+
+- `build_schema.py` (~36 tok)
+- `debug_refund.py` (~374 tok)
+- `dry_run_refund.py` (~410 tok)
+- `inspect_charge.py` (~158 tok)
+- `inspect_pr.py` (~96 tok)
+- `live_refund.py` (~341 tok)
+- `verify_pe.py` (~57 tok)
 
 ## ../../../.claude/
 
@@ -26,6 +40,7 @@
 - `plan-14-15-at-humming-widget.md` — Plan — issues #14 and #15 (~1982 tok)
 - `plan-a-fix-for-sparkling-lollipop.md` — Fix — Paymob Settings owns capture mode (~4737 tok)
 - `plan-sir-plans-11-refund-and-void-md-robust-rabin.md` — Phase 11 — Refund & Void, and Phase 12 — Pre-Go-Live Verification (~8797 tok)
+- `prompt-for-planning-agent-atomic-ember.md` — Supersede ADR-0017: post a full refund from the signed parent re-send (~2163 tok)
 - `there-is-a-bug-merry-kite.md` — Fix — authorize-only attempts that end up Paid, and mutually exclusive Void/Refund buttons (~2172 tok)
 - `would-you-plan-plans-08-ledger-write-pat-nested-pelican.md` — Phase 08 + 09 — Expanded Outlines: Ledger Write Path & Duplicate Payment Guard (~3418 tok)
 
@@ -52,7 +67,7 @@
 - `.local.md` — Local-only Cloudflare Tunnel hostname and Bench commands for Paymob testing. (~70 tok)
 - `.pre-commit-config.yaml` (~538 tok)
 - `AGENTS.md` — OpenWolf (~955 tok)
-- `CLAUDE.md` — OpenWolf (~1913 tok)
+- `CLAUDE.md` — OpenWolf (~1911 tok)
 - `DESIGN.md` — DESIGN.md — Paymob Integration visual system (~989 tok)
 - `license.txt` (~268 tok)
 - `pyproject.toml` — Python project configuration (~565 tok)
@@ -82,6 +97,19 @@
 ## .claude/skills/github-issues/
 
 - `SKILL.md` — GitHub Issues — paymob_integration extension (~546 tok)
+
+## .claude/worktrees/refund-adr0032/docs/reference/
+
+- `decisions.md` — Decisions (ADRs) (~1492 tok)
+- `states.md` — States & Transitions (~666 tok)
+
+## .claude/worktrees/refund-adr0032/paymob_integration/paymob/
+
+- `processor.py` — The enqueued consumer of stored Paymob Transaction rows (docs/reference/states.md, (~3219 tok)
+
+## .claude/worktrees/refund-adr0032/paymob_integration/tests/
+
+- `test_refund_ledger.py` — Verified reversal callbacks create on-account Payment Entries exactly once. (~3536 tok)
 
 ## .frappe-visual-review/2026-07-26T05-19-47/
 
@@ -143,6 +171,10 @@
 
 - `report.json` (~490 tok)
 
+## .github/workflows/
+
+- `ci.yml` — CI: CI (~1292 tok)
+
 ## .ruff_cache/
 
 - `.gitignore` — Git ignore rules (~10 tok)
@@ -190,7 +222,7 @@
 - `__init__.py` (~7 tok)
 - `_debug_probe.py` — run (~113 tok)
 - `_probe.py` — run (~432 tok)
-- `api.py` — Whitelisted entry points for logged-in Desk users. (~2991 tok)
+- `api.py` — Whitelisted entry points for logged-in Desk users. (~3066 tok)
 - `dashboard.py` — Adds Paymob attempts to the Payment Request Connections dashboard. (~64 tok)
 - `email.py` — Shared inline, mobile-safe email card renderer for Paymob messages. (~700 tok)
 - `hooks.py` — Declares views (~2032 tok)
@@ -231,7 +263,7 @@
 - `__init__.py` (~0 tok)
 - `amounts.py` — Convert ERPNext amounts to Paymob integer minor units. (~330 tok)
 - `analysis.py` — Shared renderer for the per-doctype "Analysis" HTML field. Each doctype's controller builds (~185 tok)
-- `audit.py` — The one function that creates a Paymob Audit Entry — grepping for "who creates an audit (~342 tok)
+- `audit.py` — The one function that creates a Paymob Audit Entry — grepping for "who creates an audit (~402 tok)
 - `auth.py` — API key to Bearer auth token, used by Transaction Inquiry. (~212 tok)
 - `client.py` — The only module that talks to the network. Every Paymob call goes through request(). (~445 tok)
 - `events.py` — Classifies verified Paymob callback flags, with retired settlement flags as Unsupported. (~167 tok)
@@ -259,7 +291,7 @@
 
 - `__init__.py` (~0 tok)
 - `paymob_audit_entry.js` — For license information, please see license.txt (~106 tok)
-- `paymob_audit_entry.json` (~1017 tok)
+- `paymob_audit_entry.json` (~1030 tok)
 - `paymob_audit_entry.py` — For license information, please see license.txt (~56 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_credential_set/
@@ -279,7 +311,7 @@
 - `__init__.py` (~0 tok)
 - `paymob_payment_attempt_dashboard.py` — Native Connections dashboard for Payment Attempt documents. (~104 tok)
 - `paymob_payment_attempt.js` — For license information, please see license.txt (~107 tok)
-- `paymob_payment_attempt.json` (~1368 tok)
+- `paymob_payment_attempt.json` (~1298 tok)
 - `paymob_payment_attempt.py` — For license information, please see license.txt (~57 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_settings/
@@ -334,7 +366,7 @@
 - `_repro_scratch.py` — run (~293 tok)
 - `helpers.py` — Build the ERPNext documents checkout integration tests act on. (~2390 tok)
 - `test_amounts.py` — TestMinorUnits: test_two_decimal_currency, test_decimal_arithmetic_is_exact, test_three_decimal_curr (~428 tok)
-- `test_checkout.py` — TestCreateIntention: setUp, call, test_returns_the_three_identifiers, test_authenticates_with_the_se (~4762 tok)
+- `test_checkout.py` — TestCreateIntention: setUp, call, test_returns_the_three_identifiers, test_authenticates_with_the_se (~5037 tok)
 - `test_events.py` — Event-classification regressions for refunds, standalone success, and unsupported flags. (~580 tok)
 - `test_hmac_verify.py` — Tests: valid_signature_passes, tampered_field_is_rejected, missing_hmac_is_rejected, unrelated_extra_param_is_ignored + 12 more (~1650 tok)
 - `test_ledger.py` — Direct tests for paymob.ledger.post_payment — the single Payment Entry write path (~2146 tok)
@@ -347,6 +379,7 @@
 - `test_refund_client.py` — Unit test for the one-shot refund API call. (~330 tok)
 - `test_refund_ledger.py` — Verified reversal callbacks create on-account Payment Entries exactly once. (~1732 tok)
 - `test_refund.py` — Outbound refund requests: the lock, the marker, the permission gate, and the amount (~1864 tok)
+- `test_resolve_attention.py` — Closing a `needs_human_attention` flag after it was handled manually, outside this app. (~1058 tok)
 - `test_result_page.py` — TestResultPage: setUp, tearDown, render, test_paid_attempt_with_valid_signature_renders_paid + 9 mor (~1754 tok)
 - `test_session.py` — Direct unit test of `as_administrator()` (fix for issue #8): everything `frappe.set_user` (~652 tok)
 - `test_states.py` — TestCheck: test_all_pairs, test_failed_to_paid_is_illegal, test_paid_to_failed_is_illegal, test_succ (~480 tok)
@@ -355,7 +388,7 @@
 
 ## paymob_integration/translations/
 
-- `ar.csv` (~3133 tok)
+- `ar.csv` (~2671 tok)
 
 ## paymob_integration/workspace_sidebar/
 
@@ -387,6 +420,7 @@
 
 ## rules/
 
+- `accuracy.md` — Rule: Accuracy Over Assumption (~600 tok)
 - `audit-trail.md` — Exception-and-accountability Audit Entry rule and review gate (~700 tok)
 - `commits.md` — Rule: Commit Messages (~284 tok)
 - `configuration.md` — Rule: Configuration (~626 tok)
@@ -398,7 +432,7 @@
 - `implementation-gate.md` — Implementation Gate — must-not-get-wrong list (~1432 tok)
 - `logging.md` — Rule: Logging (~676 tok)
 - `payments.md` — Rule: Money Safety (~1390 tok)
-- `README.md` — Project documentation (~897 tok)
+- `README.md` — Project documentation (~970 tok)
 - `secrets.md` — Rule: Secrets (~552 tok)
 - `slices.md` — Rule: Slices (~672 tok)
 - `stored-payment-data.md` — Rule: Stored Payment Data (~598 tok)

@@ -381,6 +381,32 @@ class TestStartCheckout(NoCommitIntegrationTestCase):
 			frappe.db.count("Paymob Payment Attempt", {"payment_request": self.payment_request.name}), 1
 		)
 
+	def test_failed_attempt_is_reopened_for_retry(self):
+		"""A failed transaction has not consumed the Paymob intention, so retrying reopens it."""
+		first = self.start()
+		frappe.db.set_value("Paymob Payment Attempt", first["attempt"], "state", "Failed")
+
+		second = self.start()
+
+		self.assertEqual(first["attempt"], second["attempt"])
+		self.assertEqual(
+			frappe.db.count("Paymob Payment Attempt", {"payment_request": self.payment_request.name}), 1
+		)
+
+	def test_expired_failed_attempt_creates_a_second_attempt(self):
+		first = self.start()
+		frappe.db.set_value("Paymob Payment Attempt", first["attempt"], "state", "Failed")
+		frappe.db.set_value(
+			"Paymob Payment Attempt", first["attempt"], "expires_at", add_to_date(now_datetime(), seconds=-1)
+		)
+
+		second = self.start()
+
+		self.assertNotEqual(first["attempt"], second["attempt"])
+		self.assertEqual(
+			frappe.db.count("Paymob Payment Attempt", {"payment_request": self.payment_request.name}), 2
+		)
+
 	def test_retry_after_expiry_creates_a_second_attempt(self):
 		first = self.start()
 		frappe.db.set_value(

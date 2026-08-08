@@ -53,9 +53,11 @@ DocType they cover. `--module` is the way to run one file; there is no single-te
 The payment lifecycle, and the file layout it implies, is fixed by `plans/README.md`. Six ideas
 carry most of the design; each is an ADR in `docs/reference/decisions.md`.
 
-**A `Paymob Payment Attempt` DocType owns lifecycle state — not the Payment Request.** A retry is a
-new attempt with a new `special_reference`, and `failed` is terminal *for that attempt only*. Fields
-on the Payment Request cannot express "one failed attempt plus one pending attempt".
+**A `Paymob Payment Attempt` DocType owns lifecycle state — not the Payment Request.** `failed` is
+terminal *for that attempt's checkout*, but Paymob does not consume the intention on a failed
+transaction — only on success — so a Failed attempt is reopened for retry (same `special_reference`,
+same order ID) as long as it has not expired. A brand-new attempt is only minted once the prior one
+expires. Fields on the Payment Request cannot express "one failed attempt plus one pending attempt".
 
 **There is exactly one function that creates Payment Entries.** Grepping for "who inserts a Payment
 Entry" must return one answer, forever. It delegates to ERPNext's own

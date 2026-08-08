@@ -33,6 +33,7 @@ blocks a merge.
 
 | Rule | Purpose | Enforcement |
 |---|---|---|
+| [accuracy.md](accuracy.md) | Claims about Paymob's API are confirmed against a primary source, never assumed | Convention (blocking at review) |
 | [frappe-discipline.md](frappe-discipline.md) | Use the Frappe APIs that keep validation, not the ones that skip it | Convention (blocking at review) |
 | [error-handling.md](error-handling.md) | No swallowed errors; failures never change payment state | Convention (blocking at review) |
 | [logging.md](logging.md) | Every payment stage is traceable by Payment Request name | Convention (Definition of Done) |

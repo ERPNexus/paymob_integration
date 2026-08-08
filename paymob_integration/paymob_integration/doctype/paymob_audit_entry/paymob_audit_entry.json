@@ -85,12 +85,13 @@
    "read_only": 1
   },
   {
-   "fieldname": "needs_action",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Needs Action",
-   "read_only": 1
+    "fieldname": "needs_action",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Needs Action",
+    "read_only": 0,
+    "allow_on_submit": 1
   },
   {
    "fieldname": "actor",

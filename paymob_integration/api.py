@@ -144,12 +144,17 @@ def _checkout_for_request(request, reuse_pending=False):
 
 
 def _active_attempt(payment_request):
-	"""Return a ready, unexpired checkout so a browser refresh does not mint another one."""
+	"""Return a ready, unexpired checkout so a browser refresh or a retry after a failed
+	transaction reuses the same Paymob intention instead of minting a new order ID.
+
+	Paymob does not consume the intention on a failed transaction, only on success, so a
+	Failed attempt within its original expiry window is still safe to reopen.
+	"""
 	name = frappe.db.get_value(
 		"Paymob Payment Attempt",
 		{
 			"payment_request": payment_request,
-			"state": "Pending",
+			"state": ["in", ("Pending", "Failed")],
 			"expires_at": [">", now_datetime()],
 			"paymob_intention_id": ["is", "set"],
 			"paymob_order_id": ["is", "set"],
