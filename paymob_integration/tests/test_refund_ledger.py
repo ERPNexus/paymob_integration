@@ -348,6 +348,121 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(attempt.state, "Refunded")
 		self.assertEqual(attempt.refunded_amount_cents, 49900)
 
+	def test_partial_refund_from_recorded_request_posts(self):
+		"""ADR-0033: the locally recorded `refund_requested_cents` — not the unsigned cumulative
+		field — drives a partial refund posted from a parent re-send.
+		"""
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		attempt.db_set(
+			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
+		)
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-partial-recorded",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=10000,
+		)
+
+		processor.process_transaction(parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(attempt.state, "Partially Refunded")
+		self.assertEqual(attempt.refunded_amount_cents, 10000)
+		self.assertIsNone(attempt.refund_requested_at)
+		self.assertIsNone(attempt.refund_requested_cents)
+		entry = frappe.get_doc(
+			"Payment Entry", frappe.get_all("Payment Entry", order_by="creation desc", pluck="name")[0]
+		)
+		self.assertEqual(entry.paid_amount, 100)
+
+	def test_second_partial_refund_from_recorded_request_completes_it(self):
+		attempt, request = self._paid_attempt()
+		attempt.db_set(
+			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
+		)
+		first = given_transaction(
+			"Refund",
+			"refund-parent-partial-1",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=10000,
+		)
+		processor.process_transaction(first.name)
+		before = payment_entry_count()
+		attempt.reload()
+		attempt.db_set(
+			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 17555}
+		)
+		second = given_transaction(
+			"Refund",
+			"refund-parent-partial-2",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+
+		processor.process_transaction(second.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(attempt.state, "Refunded")
+		self.assertEqual(attempt.refunded_amount_cents, 27555)
+		self.assertIsNone(attempt.refund_requested_at)
+
+	def test_mismatched_cumulative_against_recorded_request_still_holds(self):
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		attempt.db_set(
+			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
+		)
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-partial-mismatch",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=15000,
+		)
+
+		processor.process_transaction(parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(attempt.needs_human_attention, 1)
+		self.assertIsNone(attempt.refund_requested_at)
+		self.assertIsNone(attempt.refund_requested_cents)
+
+	def test_reprocessing_the_same_partial_refund_row_is_a_no_op(self):
+		attempt, request = self._paid_attempt()
+		attempt.db_set(
+			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
+		)
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-partial-reprocess",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=10000,
+		)
+		processor.process_transaction(parent.name)
+		before = payment_entry_count()
+
+		processor.process_transaction(parent.name)
+
+		self.assertEqual(payment_entry_count(), before)
+
 	def test_refund_with_no_payment_entry_posts_nothing(self):
 		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
