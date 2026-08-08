@@ -354,9 +354,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		"""
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
-		attempt.db_set(
-			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
-		)
+		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
 		parent = given_transaction(
 			"Refund",
 			"refund-parent-partial-recorded",
@@ -382,9 +380,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 
 	def test_second_partial_refund_from_recorded_request_completes_it(self):
 		attempt, request = self._paid_attempt()
-		attempt.db_set(
-			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
-		)
+		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
 		first = given_transaction(
 			"Refund",
 			"refund-parent-partial-1",
@@ -397,9 +393,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		processor.process_transaction(first.name)
 		before = payment_entry_count()
 		attempt.reload()
-		attempt.db_set(
-			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 17555}
-		)
+		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 17555})
 		second = given_transaction(
 			"Refund",
 			"refund-parent-partial-2",
@@ -421,9 +415,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 	def test_mismatched_cumulative_against_recorded_request_still_holds(self):
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
-		attempt.db_set(
-			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
-		)
+		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
 		parent = given_transaction(
 			"Refund",
 			"refund-parent-partial-mismatch",
@@ -444,9 +436,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 
 	def test_reprocessing_the_same_partial_refund_row_is_a_no_op(self):
 		attempt, request = self._paid_attempt()
-		attempt.db_set(
-			{"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000}
-		)
+		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
 		parent = given_transaction(
 			"Refund",
 			"refund-parent-partial-reprocess",
