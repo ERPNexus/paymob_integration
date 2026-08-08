@@ -94,6 +94,7 @@ class TestPostPayment(NoCommitIntegrationTestCase):
 		reference = payment_entry.references[0]
 		self.assertEqual(reference.reference_name, invoice.name)
 		self.assertEqual(reference.payment_request, payment_request.name)
+		self.assertEqual(payment_entry.payment_request, payment_request.name)
 		self.assertEqual(
 			payment_entry.paid_amount, float(amounts.from_minor_units(txn.amount_cents, txn.currency))
 		)

@@ -9,6 +9,7 @@
   "event_kind",
   "attempt",
   "payment_request",
+  "payment_entry",
   "source",
   "money_section",
   "amount_cents",
@@ -59,6 +60,14 @@
    "in_standard_filter": 1,
    "label": "Payment Request",
    "options": "Payment Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Payment Entry",
+   "options": "Payment Entry",
    "read_only": 1
   },
   {

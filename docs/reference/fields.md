@@ -25,6 +25,22 @@ delivery; `event_kind` is `Success`, `Decline`, `Pending`, `Refund`, or `Unsuppo
 `raw_payload` is redacted before storage. Paymob's `is_auth`, `is_capture`, and `is_voided` values
 remain there only because the HMAC contract signs them; they are not active fields or workflows.
 
+A `Refund` transaction that posts a reversal gets its own `payment_entry` set (bookkeeping, via
+`db_set`) to the Payment Entry `post_refund` created, giving programmatic access to the reversal
+from the transaction log.
+
+## Payment Entry (custom field)
+
+A refund Payment Entry is never added to the original Payment Entry's `references` table —
+ERPNext validates an allocation against the referenced document's outstanding balance, which is
+already 0 once the original charge is fully paid, so a reversal would always fail that check.
+Instead, both `post_payment` and `post_refund` set a plain custom Link field, `payment_request`
+(added by the `add_payment_entry_paymob_payment_request_link` patch), directly on the Payment
+Entry. It carries no ERPNext validation, and its name matches the default fieldname ERPNext's own
+`payment_request_dashboard.py` falls back to when counting a doctype's linked documents on the
+Connections tab — so both the original charge and any later refund show up there directly,
+alongside `Paymob Payment Attempt` and `Paymob Transaction`.
+
 ## Paymob Audit Entry
 
 Audit entries are submitted and immutable. They cover reviewable anomalies and accountability

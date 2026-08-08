@@ -70,6 +70,10 @@ def post_payment(attempt, transaction):
 			)
 		)
 
+	# Bookkeeping, not money: the custom `payment_request` field (see post_refund) carries no
+	# ERPNext validation and matches the Connections tab's default fallback fieldname, so it
+	# surfaces this entry there directly, alongside a later refund of the same Payment Request.
+	payment_entry.db_set("payment_request", attempt.payment_request)
 	attempt.payment_entry = payment_entry.name
 	attempt.save(ignore_permissions=True)
 	frappe.logger("paymob").info(
@@ -183,6 +187,13 @@ def post_refund(attempt, transaction, delta_cents):
 			"target_exchange_rate": target_exchange_rate,
 			"reference_no": transaction.paymob_transaction_id,
 			"reference_date": nowdate(),
+			# Deliberately no `references` row: ERPNext validates any reference's allocated_amount
+			# against its outstanding balance, which is 0 once the original charge is fully paid —
+			# a reversal would always fail that check. The original incoming entry stays allocated
+			# to the Payment Request as historical evidence. This custom `payment_request` field
+			# carries no such validation, and its name matches the default fieldname the
+			# Connections tab's count query falls back to, so it surfaces the reversal there too.
+			"payment_request": attempt.payment_request,
 		}
 	)
 	payment_entry.insert(ignore_permissions=True)
@@ -193,6 +204,7 @@ def post_refund(attempt, transaction, delta_cents):
 			)
 		)
 	payment_entry.submit()
+	transaction.db_set("payment_entry", payment_entry.name)
 	frappe.logger("paymob").info(
 		f"refund entry posted payment_request={attempt.payment_request} attempt={attempt.name} "
 		f"txn={transaction.paymob_transaction_id} payment_entry={payment_entry.name}"

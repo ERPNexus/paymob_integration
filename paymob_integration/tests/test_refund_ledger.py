@@ -66,6 +66,9 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(entry.payment_type, "Pay")
 		self.assertEqual(entry.docstatus, 1)
 		self.assertFalse(entry.references)
+		self.assertEqual(entry.payment_request, request.name)
+		refund.reload()
+		self.assertEqual(refund.payment_entry, entry.name)
 
 	def test_the_unsigned_cumulative_field_never_drives_the_amount(self):
 		"""`refunded_amount_cents` on the callback is not HMAC-signed (ADR-0017); only the
