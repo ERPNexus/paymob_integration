@@ -10,6 +10,7 @@
   "attempt",
   "paymob_transaction_id",
   "paymob_transaction",
+  "payment_entry",
   "supersedes",
   "event_section",
   "event",
@@ -53,6 +54,14 @@
    "fieldtype": "Link",
    "label": "Paymob Transaction",
    "options": "Paymob Transaction",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "attempt.payment_entry",
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
    "read_only": 1
   },
   {

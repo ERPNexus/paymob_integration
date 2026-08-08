@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-08-08T11:35:44.504Z
-> Files: 244 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-08-08T11:42:15.940Z
+> Files: 245 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../../mnt/c/Users/bedo7/.claude/
 
@@ -318,8 +318,9 @@
 ## paymob_integration/paymob_integration/doctype/paymob_audit_entry/
 
 - `__init__.py` (~0 tok)
+- `paymob_audit_entry_dashboard.py` — get_data (~131 tok)
 - `paymob_audit_entry.js` — For license information, please see license.txt (~106 tok)
-- `paymob_audit_entry.json` (~1030 tok)
+- `paymob_audit_entry.json` (~1092 tok)
 - `paymob_audit_entry.py` — For license information, please see license.txt (~56 tok)
 
 ## paymob_integration/paymob_integration/doctype/paymob_credential_set/
