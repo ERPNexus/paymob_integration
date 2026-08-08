@@ -9,6 +9,10 @@ change without reading its diff.
 
 ## The requirement
 
+**Never run `git commit` or `git push` until `pre-commit run --all-files` has been run in that
+same turn and exits clean (no files modified).** Relying on the git hook to catch it implicitly is
+not enough — its output must actually be checked before the commit is trusted.
+
 Every commit uses Conventional Commits:
 
 ```
