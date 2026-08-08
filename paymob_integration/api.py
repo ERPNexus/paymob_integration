@@ -21,7 +21,9 @@ def request_refund(attempt: str, amount_cents: int):
 	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
 	attempt_doc.check_permission("refund")
 	settings.is_enabled(throw=True)
-	if attempt_doc.refund_requested_at:
+	config = settings.get_settings()
+	window_start = add_to_date(now_datetime(), minutes=-(config.refund_confirmation_minutes or 0))
+	if attempt_doc.refund_requested_at and attempt_doc.refund_requested_at >= window_start:
 		frappe.throw(_("A previous refund is awaiting Paymob confirmation."))
 	if attempt_doc.state not in ("Paid", "Partially Refunded"):
 		frappe.throw(_("Only paid Paymob payments can be refunded."))
@@ -38,7 +40,7 @@ def request_refund(attempt: str, amount_cents: int):
 	if amount_cents > remaining:
 		frappe.throw(_("The refund amount cannot exceed the remaining paid amount."))
 
-	attempt_doc.db_set("refund_requested_at", now_datetime())
+	attempt_doc.db_set({"refund_requested_at": now_datetime(), "refund_requested_cents": amount_cents})
 	audit.record(
 		None,
 		attempt_doc,

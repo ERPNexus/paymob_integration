@@ -45,23 +45,33 @@ def process_transaction(transaction):
 		if txn.event_kind == "Refund":
 			if not txn.has_parent_transaction:
 				# The parent re-send carries the signed original charge in amount_cents, not the
-				# refund delta — its own reported total is what decides what happens next. A full
-				# refund (Paymob's cumulative total equals the signed charge, is_refunded set, and
-				# nothing posted yet) falls through to the shared refund path below and posts from
-				# the signed amount_cents (ADR-0032, superseding ADR-0017). Anything else — a
-				# partial refund, or a re-send after something is already posted — still cannot
-				# prove its delta and is held for a human.
-				full_refund = (
+				# refund delta — its own reported total is what decides what happens next.
+				posted_cents = attempt.refunded_amount_cents or 0
+				reported_cents = txn.refunded_amount_cents or 0
+				# A full refund (Paymob's cumulative total equals the signed charge, is_refunded
+				# set, and nothing posted yet) posts from the signed amount_cents (ADR-0032,
+				# superseding ADR-0017).
+				full_refund = txn.is_refunded and posted_cents == 0 and reported_cents == txn.amount_cents
+				# A partial refund we ourselves requested: the locally recorded requested amount
+				# is trusted, cross-checked against Paymob's unsigned cumulative total agreeing
+				# that exactly that much more was refunded (ADR-0033). This also covers a second
+				# partial refund, since posted_cents already reflects the first.
+				partial_refund = (
 					txn.is_refunded
-					and (attempt.refunded_amount_cents or 0) == 0
-					and (txn.refunded_amount_cents or 0) == txn.amount_cents
+					and attempt.refund_requested_cents
+					and reported_cents == posted_cents + attempt.refund_requested_cents
 				)
-				if not full_refund:
-					if (txn.refunded_amount_cents or 0) > (attempt.refunded_amount_cents or 0):
+				if full_refund:
+					delta_cents = txn.amount_cents
+				elif partial_refund:
+					delta_cents = attempt.refund_requested_cents
+				else:
+					if reported_cents > posted_cents:
 						return _hold_parent_refund(txn, attempt)
 					_mark_processed(txn)
 					return
-			delta_cents = txn.amount_cents
+			else:
+				delta_cents = txn.amount_cents
 			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
 			# The same verified charge api._verified_charge caps the outbound request against —
 			# not attempt.expected_amount_cents, the pre-charge snapshot — so the two directions
@@ -119,7 +129,7 @@ def process_transaction(transaction):
 		elif txn.event_kind == "Refund":
 			ledger.post_refund(attempt, txn, delta_cents)
 			attempt.refunded_amount_cents = total_cents
-			attempt.refund_requested_at = None
+			_release_refund_lock(attempt)
 			attempt.save(ignore_permissions=True)
 
 		_mark_processed(txn)
@@ -220,9 +230,18 @@ def _refuse(txn, attempt, target):
 	)
 
 
+def _release_refund_lock(attempt):
+	"""Clears the outstanding-refund marker on every terminal outcome — success, hold, or
+	refusal — so a callback Paymob never sends cannot wedge the attempt forever (ADR-0018 amendment).
+	"""
+	attempt.refund_requested_at = None
+	attempt.refund_requested_cents = None
+
+
 def _refuse_refund(txn, attempt):
 	"""Hold an authentic but impossible refund amount for human review; post nothing."""
 	attempt.needs_human_attention = 1
+	_release_refund_lock(attempt)
 	attempt.save(ignore_permissions=True)
 	audit.record(
 		txn,
@@ -252,6 +271,7 @@ def _hold_parent_refund(txn, attempt):
 	posted_cents = attempt.refunded_amount_cents or 0
 	reported_cents = txn.refunded_amount_cents or 0
 	attempt.needs_human_attention = 1
+	_release_refund_lock(attempt)
 	attempt.save(ignore_permissions=True)
 	audit.record(
 		txn,

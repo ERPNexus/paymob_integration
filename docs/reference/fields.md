@@ -7,9 +7,15 @@ facts are `special_reference`, `paymob_order_id`, expected integer `amount_cents
 country, and mode. `state` is one of `Pending`, `Paid`, `Partially Refunded`, `Refunded`, `Failed`,
 or `Expired`.
 
-`refund_requested_at` is an in-progress marker set under the refund row lock and cleared only after
-a verified refund is processed. `refunded_amount_cents` is the sum of signed child refund deltas.
-`needs_human_attention` flags review without changing lifecycle state.
+`refund_requested_at` is an in-progress marker set under the refund row lock; it also self-releases
+once `Paymob Settings.refund_confirmation_minutes` elapses without a matching callback, so a
+callback Paymob never sends cannot wedge the attempt (amends ADR-0018 — see decisions.md).
+`refund_requested_cents` records the amount *we* asked Paymob to refund, alongside the marker. It
+is the trusted number a partial parent-resend refund posts from — the unsigned
+`refunded_amount_cents` on the callback is only a cross-check (ADR-0033). Both fields are cleared
+together on every terminal refund outcome: posted, held for review, or refused.
+`refunded_amount_cents` is the sum of signed child refund deltas. `needs_human_attention` flags
+review without changing lifecycle state.
 
 ## Paymob Transaction
 

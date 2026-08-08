@@ -64,7 +64,16 @@ for a child transaction" remedy while keeping this ADR's underlying distrust of 
 ## ADR-0018 — A refund lock needs an in-progress marker
 
 The refund request holds the attempt lock and sets `refund_requested_at` before contacting Paymob.
-Only verified callback processing clears the marker.
+
+**Amended 2026-08-08.** Originally only verified callback processing cleared the marker. Live
+evidence on `capital` (`ACC-PRQ-2026-00028-1`, txn `511436444`) showed a refund that Paymob
+accepted but whose callback fell to `_hold_parent_refund` — a needs-review outcome that is
+terminal for that request, not a pending one — left the marker set forever, since nothing else
+cleared it and the Phase 10 poller only reconciles `Pending` attempts. The marker now clears on
+every terminal refund outcome (posted, held for review, or refused — see ADR-0033), and
+`request_refund` additionally treats the marker as stale once
+`Paymob Settings.refund_confirmation_minutes` elapses without any callback at all, so a callback
+Paymob never sends self-releases instead of wedging the attempt.
 
 ## ADR-0019 — Refund capability is a DocType permission
 
@@ -118,3 +127,20 @@ amount; it only selects whether this branch runs. Any other shape — a partial 
 after something has already been posted — still cannot prove its delta and is held for a human
 (`_hold_parent_refund`), unchanged. Automatic partial refunds are out of scope: the general fix is an
 authenticated Transaction Inquiry read, which belongs to the Phase 10 reconciliation poller.
+
+## ADR-0033 — A partial refund posts from the locally recorded request
+
+Extends ADR-0032. `request_refund` now records `refund_requested_cents` alongside
+`refund_requested_at` — the amount *we* asked Paymob to refund, before the call is made. A parent
+re-send whose reported cumulative `refunded_amount_cents` equals what's already posted on the
+attempt plus that recorded amount, with `is_refunded` set, is treated as a partial refund and posts
+from the recorded amount, not the unsigned field — the same distrust ADR-0017 established, applied
+to a number this app produced itself rather than one Paymob sent. A second partial refund is the
+same test again, since `refunded_amount_cents` already reflects the first posting. Anything that
+doesn't match — no recorded request, or a mismatched cumulative — still falls through to
+`_hold_parent_refund` for a human, unchanged.
+
+Evidence: live transaction `511436444` (EGP 649.50) on `capital`, `ACC-PRQ-2026-00028-1` — a
+requested half-refund that Paymob accepted and arrived as a parent re-send with a cumulative total
+of `64950`, not `129900`, so it failed ADR-0032's full-refund equality test and fell to
+`_hold_parent_refund` (`PMB-AUD-2026-00462`) with no reversal posted.

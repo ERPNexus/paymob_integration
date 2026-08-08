@@ -33,8 +33,13 @@ class NoCommitIntegrationTestCase(IntegrationTestCase):
 		frappe.defaults.set_global_default("company", company)
 		# Same gap as Warehouse Type above: the setup wizard seeds the running Fiscal Year, a
 		# fresh site has none, and every submitted document validates its posting date against one.
-		year = frappe.utils.nowdate()[:4]
-		if not frappe.db.exists("Fiscal Year", year):
+		# Checked by date coverage, not by a "<year>"-named record: an existing Fiscal Year (e.g. a
+		# non-calendar year like "2026-2027") can already cover today under a different name.
+		today = frappe.utils.nowdate()
+		if not frappe.db.exists(
+			"Fiscal Year", {"year_start_date": ["<=", today], "year_end_date": [">=", today]}
+		):
+			year = today[:4]
 			frappe.get_doc(
 				{
 					"doctype": "Fiscal Year",
