@@ -40,6 +40,9 @@ class TestPostPayment(NoCommitIntegrationTestCase):
 		return attempt, payment_request, invoice
 
 	def _cleanup_fixture(self, attempt_name, payment_request_name, invoice_name):
+		# Audit entries first — a Paymob Audit Entry can link to a Payment Entry, which blocks
+		# cancelling that Payment Entry while the link exists.
+		frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
 		for payment_entry in frappe.get_all(
 			"Payment Entry Reference", {"payment_request": payment_request_name}, pluck="parent"
 		):
@@ -47,7 +50,6 @@ class TestPostPayment(NoCommitIntegrationTestCase):
 			if pe.docstatus == 1:
 				pe.cancel()
 			frappe.delete_doc("Payment Entry", payment_entry, force=True, ignore_permissions=True)
-		frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
 		frappe.db.delete("Paymob Transaction", {"payment_request": payment_request_name})
 		frappe.delete_doc("Paymob Payment Attempt", attempt_name, force=True, ignore_permissions=True)
 		payment_request = frappe.get_doc("Payment Request", payment_request_name)

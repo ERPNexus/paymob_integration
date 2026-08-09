@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import frappe
 
-from paymob_integration.paymob import processor
+from paymob_integration.paymob import client, processor, transactions
 from paymob_integration.tests.helpers import (
 	NoCommitIntegrationTestCase,
 	cleanup_fixture,
@@ -16,6 +16,27 @@ from paymob_integration.tests.helpers import (
 
 def _credentials():
 	return Mock(country="Egypt", mode="Test")
+
+
+def _child_obj(txn_id, charged, amount_cents, refunded_amount_cents, currency="EGP", **overrides):
+	"""The real shape Transaction Inquiry returns for a signed child refund transaction
+	(ADR-0034): `has_parent_transaction`, `is_refund`, and `success` are all set, and
+	`parent_transaction` names the charge it reverses.
+	"""
+	return {
+		"id": txn_id,
+		"amount_cents": amount_cents,
+		"currency": currency,
+		"success": True,
+		"pending": False,
+		"is_refunded": False,
+		"is_voided": False,
+		"has_parent_transaction": True,
+		"is_refund": True,
+		"parent_transaction": charged.paymob_transaction_id,
+		"refunded_amount_cents": refunded_amount_cents,
+		**overrides,
+	}
 
 
 def _clearing_account():
@@ -35,7 +56,10 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 	def _paid_attempt(self):
 		attempt, request, invoice = given_attempt(credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
-		success = given_transaction("Success", "refund-success", attempt.name, request.name)
+		# Frappe's IntegrationTestCase only rolls back at class teardown (no per-test savepoint —
+		# see frappe.tests.classes.integration_test_case), so every call in this class shares one
+		# transaction: the id must be unique per call, not a literal reused across test methods.
+		success = given_transaction("Success", f"success-{attempt.name}", attempt.name, request.name)
 		processor.process_transaction(success.name)
 		return attempt, request
 
@@ -92,47 +116,10 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		)
 		self.assertEqual(entry.paid_amount, 100)
 
-	def test_parent_resend_ahead_of_posted_refunds_is_audited(self):
-		"""Paymob's cumulative total on the parent re-send outrunning what this app has actually
-		posted means a refund happened at Paymob that never reached the ledger (the child
-		transaction is missing). ADR-0017: the unsigned resend cannot post money, but it must not
-		vanish silently either — hold it for a human.
-		"""
-		attempt, request = self._paid_attempt()
-		before = payment_entry_count()
-		parent = given_transaction(
-			"Refund",
-			"refund-parent",
-			attempt.name,
-			request.name,
-			amount_cents=10000,
-			has_parent_transaction=0,
-			refunded_amount_cents=10000,
-		)
-
-		processor.process_transaction(parent.name)
-
-		parent.reload()
-		attempt.reload()
-		self.assertEqual(payment_entry_count(), before)
-		self.assertEqual(parent.processed, 1)
-		self.assertEqual(attempt.state, "Paid")
-		self.assertEqual(attempt.needs_human_attention, 1)
-		audit_entry = frappe.db.get_value(
-			"Paymob Audit Entry",
-			{"paymob_transaction": parent.name},
-			["event", "needs_action", "expected_amount_cents", "received_amount_cents"],
-			as_dict=True,
-		)
-		self.assertEqual(audit_entry.event, "Refund Requires Review")
-		self.assertEqual(audit_entry.needs_action, 1)
-		self.assertEqual(audit_entry.expected_amount_cents, 0)
-		self.assertEqual(audit_entry.received_amount_cents, 10000)
-
 	def test_routine_parent_resend_with_matching_total_is_quiet(self):
 		"""The parent re-send arrives on every refund, signed or not. When Paymob's cumulative
-		total already matches what this app posted, it is routine bookkeeping — no audit entry,
-		no flag, just marked processed.
+		total already matches what this app posted, it is routine bookkeeping — no inquiry call,
+		no audit entry, no flag, just marked processed.
 		"""
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
@@ -148,25 +135,113 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			refunded_amount_cents=0,
 		)
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference") as by_reference:
+			processor.process_transaction(parent.name)
 
+		by_reference.assert_not_called()
 		parent.reload()
 		attempt.reload()
 		self.assertEqual(payment_entry_count(), before)
 		self.assertEqual(parent.processed, 1)
 		self.assertEqual(attempt.state, "Paid")
 		self.assertFalse(attempt.needs_human_attention)
-		self.assertEqual(attempt.refunded_amount_cents, 0)
+		# Never set before a first refund posts — falsy, not literally 0 (`processor` treats it as
+		# `attempt.refunded_amount_cents or 0` throughout, never writes a default).
+		self.assertFalse(attempt.refunded_amount_cents)
 		self.assertEqual(attempt.refund_requested_at, lock)
 		self.assertFalse(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
 
-	def test_full_refund_from_parent_resend_posts(self):
-		"""ADR-0032: a parent re-send whose signed amount_cents matches the whole charge, with
-		Paymob's cumulative total agreeing and nothing posted yet, is the only shape a standalone
-		card refund ever takes (no child transaction is ever sent) — it posts from the signed
-		amount_cents, not the unsigned refunded_amount_cents.
+	def test_half_refund_parent_resend_fetches_and_posts_the_signed_child(self):
+		"""ADR-0034: the parent re-send posts nothing itself. It triggers a Transaction Inquiry
+		that fetches the signed child transaction, and that child — stored as its own Paymob
+		Transaction row — is what posts the reversal, through the same branch a webhook-delivered
+		child already uses.
 		"""
 		attempt, request = self._paid_attempt()
+		charged = transactions.verified_charge(attempt.name)
+		before = payment_entry_count()
+		attempt.db_set("refund_requested_at", frappe.utils.now_datetime())
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-half-1",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=13778,
+		)
+		child_obj = _child_obj("refund-child-half-1", charged, 13778, 13778)
+
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj) as by_reference:
+			processor.process_transaction(parent.name)
+
+		by_reference.assert_called_once()
+		parent.reload()
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(parent.processed, 1)
+		self.assertEqual(attempt.state, "Partially Refunded")
+		self.assertEqual(attempt.refunded_amount_cents, 13778)
+		self.assertIsNone(attempt.refund_requested_at)
+		child = frappe.get_doc("Paymob Transaction", "refund-child-half-1:Refund:13778")
+		self.assertEqual(child.processed, 1)
+		entry = frappe.get_doc(
+			"Payment Entry", frappe.get_all("Payment Entry", order_by="creation desc", pluck="name")[0]
+		)
+		self.assertEqual(entry.paid_amount, 137.78)
+		self.assertEqual(child.payment_entry, entry.name)
+
+	def test_second_half_refund_completes_the_reversal(self):
+		"""The exact live regression on `ACC-PRQ-2026-00028-1`: two half refunds must produce two
+		Payment Entries of 649.50-equivalent size each, never one of the full charge.
+		"""
+		attempt, request = self._paid_attempt()
+		charged = transactions.verified_charge(attempt.name)
+		first_parent = given_transaction(
+			"Refund",
+			"refund-parent-half-2a",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=13778,
+		)
+		first_child_obj = _child_obj("refund-child-half-2a", charged, 13778, 13778)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=first_child_obj):
+			processor.process_transaction(first_parent.name)
+		before = payment_entry_count()
+		attempt.reload()
+
+		second_parent = given_transaction(
+			"Refund",
+			"refund-parent-half-2b",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=27555,
+		)
+		second_child_obj = _child_obj("refund-child-half-2b", charged, 13777, 27555)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=second_child_obj):
+			processor.process_transaction(second_parent.name)
+
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before + 1)
+		self.assertEqual(attempt.state, "Refunded")
+		self.assertEqual(attempt.refunded_amount_cents, 27555)
+		entries = frappe.get_all(
+			"Payment Entry",
+			filters={"payment_type": "Pay", "payment_request": request.name},
+			pluck="paid_amount",
+		)
+		self.assertEqual(len(entries), 2)
+		self.assertAlmostEqual(sum(entries), 275.55, places=2)
+		# The exact live regression: never a single reversal of the full charge.
+		self.assertNotIn(275.55, entries)
+
+	def test_full_refund_parent_resend_fetches_and_posts_the_signed_child(self):
+		attempt, request = self._paid_attempt()
+		charged = transactions.verified_charge(attempt.name)
 		before = payment_entry_count()
 		parent = given_transaction(
 			"Refund",
@@ -177,8 +252,10 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			has_parent_transaction=0,
 			refunded_amount_cents=27555,
 		)
+		child_obj = _child_obj("refund-child-full", charged, 27555, 27555)
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj):
+			processor.process_transaction(parent.name)
 
 		attempt.reload()
 		self.assertEqual(payment_entry_count(), before + 1)
@@ -194,30 +271,35 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(entry.paid_amount, 275.55)
 
 	def test_duplicate_full_refund_resend_posts_nothing_more(self):
-		"""Same payload twice collides on event_key (transactions.event_key suffixes Refund keys
-		with refunded_amount_cents) before it ever reaches the processor a second time.
+		"""A second parent re-send whose cumulative total matches what the first already posted
+		is routine, not a second inquiry: the early `reported <= posted` check short-circuits it
+		before `inquiry.by_reference` is ever called again.
 		"""
 		attempt, request = self._paid_attempt()
-		payload = dict(
-			amount_cents=27555,
-			has_parent_transaction=0,
-			refunded_amount_cents=27555,
-		)
+		charged = transactions.verified_charge(attempt.name)
+		payload = dict(amount_cents=27555, has_parent_transaction=0, refunded_amount_cents=27555)
 		first = given_transaction("Refund", "refund-dup-1", attempt.name, request.name, **payload)
-		processor.process_transaction(first.name)
+		child_obj = _child_obj("refund-dup-child", charged, 27555, 27555)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj):
+			processor.process_transaction(first.name)
 		before = payment_entry_count()
 
 		second = given_transaction("Refund", "refund-dup-2", attempt.name, request.name, **payload)
-		processor.process_transaction(second.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference") as by_reference:
+			processor.process_transaction(second.name)
 
+		by_reference.assert_not_called()
 		self.assertEqual(payment_entry_count(), before)
 
-	def test_partial_refund_from_parent_resend_still_holds(self):
+	def test_inquiry_returning_nothing_holds_for_review(self):
+		"""No child transaction exists yet at Paymob (or the inquiry answered 404) — the resend
+		alone cannot prove any delta. Held, not posted.
+		"""
 		attempt, request = self._paid_attempt()
 		before = payment_entry_count()
 		parent = given_transaction(
 			"Refund",
-			"refund-parent-partial",
+			"refund-parent-no-child",
 			attempt.name,
 			request.name,
 			amount_cents=27555,
@@ -225,18 +307,24 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			refunded_amount_cents=10000,
 		)
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=None):
+			processor.process_transaction(parent.name)
 
+		parent.reload()
 		attempt.reload()
 		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(parent.processed, 1)
 		self.assertEqual(attempt.needs_human_attention, 1)
-		self.assertTrue(frappe.db.exists("Paymob Audit Entry", {"paymob_transaction": parent.name}))
+		audit_entry = frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction": parent.name}, "event")
+		self.assertEqual(audit_entry, "Refund Requires Review")
 
-	def test_tampered_total_on_parent_resend_holds(self):
-		"""refunded_amount_cents > amount_cents cannot pass the full_refund equality check and
-		cannot inflate a posting.
+	def test_child_whose_delta_contradicts_the_cumulative_total_holds(self):
+		"""The returned child is a real, signed child of this attempt, but its amount does not
+		reconcile against what Paymob itself reports as the running total — a lost intermediate
+		child, or two refunds landing between polls.
 		"""
 		attempt, request = self._paid_attempt()
+		charged = transactions.verified_charge(attempt.name)
 		before = payment_entry_count()
 		parent = given_transaction(
 			"Refund",
@@ -245,10 +333,13 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			request.name,
 			amount_cents=27555,
 			has_parent_transaction=0,
-			refunded_amount_cents=99999,
+			refunded_amount_cents=27555,
 		)
+		# posted (0) + this child's delta (10000) != reported (27555)
+		child_obj = _child_obj("refund-child-tampered", charged, 10000, 27555)
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj):
+			processor.process_transaction(parent.name)
 
 		attempt.reload()
 		self.assertEqual(payment_entry_count(), before)
@@ -256,6 +347,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 
 	def test_second_full_refund_resend_after_posted_one_holds(self):
 		attempt, request = self._paid_attempt()
+		charged = transactions.verified_charge(attempt.name)
 		first = given_transaction(
 			"Refund",
 			"refund-parent-second-1",
@@ -265,7 +357,9 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			has_parent_transaction=0,
 			refunded_amount_cents=27555,
 		)
-		processor.process_transaction(first.name)
+		first_child_obj = _child_obj("refund-child-second-1", charged, 27555, 27555)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=first_child_obj):
+			processor.process_transaction(first.name)
 		before = payment_entry_count()
 
 		second = given_transaction(
@@ -277,7 +371,9 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			has_parent_transaction=0,
 			refunded_amount_cents=30000,
 		)
-		processor.process_transaction(second.name)
+		# Nothing more was actually refunded at Paymob — the inquiry finds no further child.
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=None):
+			processor.process_transaction(second.name)
 
 		attempt.reload()
 		second.reload()
@@ -285,8 +381,12 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 		self.assertEqual(attempt.needs_human_attention, 1)
 		self.assertEqual(second.processed, 1)
 
-	def test_full_refund_currency_mismatch_refuses(self):
+	def test_child_currency_mismatch_refuses(self):
+		"""The currency mismatch check runs on the fetched child, once it is stored and
+		reprocessed — never on the parent re-send's own (irrelevant) currency field.
+		"""
 		attempt, request = self._paid_attempt()
+		charged = transactions.verified_charge(attempt.name)
 		before = payment_entry_count()
 		parent = given_transaction(
 			"Refund",
@@ -294,18 +394,25 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			attempt.name,
 			request.name,
 			amount_cents=27555,
-			currency="USD",
 			has_parent_transaction=0,
 			refunded_amount_cents=27555,
 		)
+		child_obj = _child_obj("refund-child-currency", charged, 27555, 27555, currency="USD")
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj):
+			processor.process_transaction(parent.name)
 
 		self.assertEqual(payment_entry_count(), before)
-		audit_entry = frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction": parent.name}, "event")
+		# The mismatch fires while reprocessing the stored *child*, not the parent re-send itself.
+		audit_entry = frappe.db.get_value(
+			"Paymob Audit Entry", {"attempt": attempt.name}, "event", order_by="creation desc"
+		)
 		self.assertEqual(audit_entry, "Amount Mismatch")
 
-	def test_full_refund_with_no_verified_charge_refuses(self):
+	def test_no_verified_charge_holds_for_review(self):
+		"""Without a verified charge, the child's `parent_transaction` can never be matched — this
+		holds for review rather than posting, exactly like an inquiry that finds nothing.
+		"""
 		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
 		before = payment_entry_count()
@@ -319,142 +426,96 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 			refunded_amount_cents=27555,
 		)
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=None):
+			processor.process_transaction(parent.name)
 
 		self.assertEqual(payment_entry_count(), before)
 		audit_entry = frappe.db.get_value("Paymob Audit Entry", {"paymob_transaction": parent.name}, "event")
-		self.assertEqual(audit_entry, "Amount Mismatch")
+		self.assertEqual(audit_entry, "Refund Requires Review")
 
 	def test_replay_of_stored_live_parent_refund_payload(self):
-		"""Rebuilt from the live capital fixture 510236778:Refund:49900 — the payload that
+		"""Rebuilt from the live capital fixture test-510236778:Refund:27555 — the payload that
 		originally landed as a stuck Refund Requires Review entry.
 		"""
 		attempt, request, invoice = given_attempt(credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
-		success = given_transaction("Success", "510236778", attempt.name, request.name, amount_cents=49900)
+		success = given_transaction(
+			"Success", "test-510236778", attempt.name, request.name, amount_cents=27555
+		)
 		processor.process_transaction(success.name)
+		charged = transactions.verified_charge(attempt.name)
 		before = payment_entry_count()
 		parent = given_transaction(
 			"Refund",
-			"510236778",
-			attempt.name,
-			request.name,
-			amount_cents=49900,
-			has_parent_transaction=0,
-			refunded_amount_cents=49900,
-		)
-
-		processor.process_transaction(parent.name)
-
-		attempt.reload()
-		self.assertEqual(payment_entry_count(), before + 1)
-		self.assertEqual(attempt.state, "Refunded")
-		self.assertEqual(attempt.refunded_amount_cents, 49900)
-
-	def test_partial_refund_from_recorded_request_posts(self):
-		"""ADR-0033: the locally recorded `refund_requested_cents` — not the unsigned cumulative
-		field — drives a partial refund posted from a parent re-send.
-		"""
-		attempt, request = self._paid_attempt()
-		before = payment_entry_count()
-		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
-		parent = given_transaction(
-			"Refund",
-			"refund-parent-partial-recorded",
-			attempt.name,
-			request.name,
-			amount_cents=27555,
-			has_parent_transaction=0,
-			refunded_amount_cents=10000,
-		)
-
-		processor.process_transaction(parent.name)
-
-		attempt.reload()
-		self.assertEqual(payment_entry_count(), before + 1)
-		self.assertEqual(attempt.state, "Partially Refunded")
-		self.assertEqual(attempt.refunded_amount_cents, 10000)
-		self.assertIsNone(attempt.refund_requested_at)
-		self.assertIsNone(attempt.refund_requested_cents)
-		entry = frappe.get_doc(
-			"Payment Entry", frappe.get_all("Payment Entry", order_by="creation desc", pluck="name")[0]
-		)
-		self.assertEqual(entry.paid_amount, 100)
-
-	def test_second_partial_refund_from_recorded_request_completes_it(self):
-		attempt, request = self._paid_attempt()
-		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
-		first = given_transaction(
-			"Refund",
-			"refund-parent-partial-1",
-			attempt.name,
-			request.name,
-			amount_cents=27555,
-			has_parent_transaction=0,
-			refunded_amount_cents=10000,
-		)
-		processor.process_transaction(first.name)
-		before = payment_entry_count()
-		attempt.reload()
-		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 17555})
-		second = given_transaction(
-			"Refund",
-			"refund-parent-partial-2",
+			"test-510236778",
 			attempt.name,
 			request.name,
 			amount_cents=27555,
 			has_parent_transaction=0,
 			refunded_amount_cents=27555,
 		)
+		child_obj = _child_obj("test-510236778-child", charged, 27555, 27555)
 
-		processor.process_transaction(second.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj):
+			processor.process_transaction(parent.name)
 
 		attempt.reload()
 		self.assertEqual(payment_entry_count(), before + 1)
 		self.assertEqual(attempt.state, "Refunded")
 		self.assertEqual(attempt.refunded_amount_cents, 27555)
-		self.assertIsNone(attempt.refund_requested_at)
 
-	def test_mismatched_cumulative_against_recorded_request_still_holds(self):
+	def test_reprocessing_the_same_parent_resend_is_a_no_op(self):
 		attempt, request = self._paid_attempt()
-		before = payment_entry_count()
-		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
+		charged = transactions.verified_charge(attempt.name)
 		parent = given_transaction(
 			"Refund",
-			"refund-parent-partial-mismatch",
-			attempt.name,
-			request.name,
-			amount_cents=27555,
-			has_parent_transaction=0,
-			refunded_amount_cents=15000,
-		)
-
-		processor.process_transaction(parent.name)
-
-		attempt.reload()
-		self.assertEqual(payment_entry_count(), before)
-		self.assertEqual(attempt.needs_human_attention, 1)
-		self.assertIsNone(attempt.refund_requested_at)
-		self.assertIsNone(attempt.refund_requested_cents)
-
-	def test_reprocessing_the_same_partial_refund_row_is_a_no_op(self):
-		attempt, request = self._paid_attempt()
-		attempt.db_set({"refund_requested_at": frappe.utils.now_datetime(), "refund_requested_cents": 10000})
-		parent = given_transaction(
-			"Refund",
-			"refund-parent-partial-reprocess",
+			"refund-parent-reprocess",
 			attempt.name,
 			request.name,
 			amount_cents=27555,
 			has_parent_transaction=0,
 			refunded_amount_cents=10000,
 		)
-		processor.process_transaction(parent.name)
+		child_obj = _child_obj("refund-child-reprocess", charged, 10000, 10000)
+		with patch("paymob_integration.paymob.inquiry.by_reference", return_value=child_obj):
+			processor.process_transaction(parent.name)
 		before = payment_entry_count()
 
-		processor.process_transaction(parent.name)
+		with patch("paymob_integration.paymob.inquiry.by_reference") as by_reference:
+			processor.process_transaction(parent.name)
 
+		by_reference.assert_not_called()
 		self.assertEqual(payment_entry_count(), before)
+
+	def test_inquiry_failure_leaves_the_row_unprocessed(self):
+		"""A `PaymobError` from the inquiry propagates: nothing posts, the attempt is untouched,
+		and the parent row stays `processed = 0` for the next `tasks._sweep_unprocessed_refunds`
+		run to retry. A timeout never changes payment state.
+		"""
+		attempt, request = self._paid_attempt()
+		before = payment_entry_count()
+		parent = given_transaction(
+			"Refund",
+			"refund-parent-inquiry-fails",
+			attempt.name,
+			request.name,
+			amount_cents=27555,
+			has_parent_transaction=0,
+			refunded_amount_cents=10000,
+		)
+
+		with patch(
+			"paymob_integration.paymob.inquiry.by_reference",
+			side_effect=client.PaymobNetworkError("timed out"),
+		):
+			with self.assertRaises(client.PaymobNetworkError):
+				processor.process_transaction(parent.name)
+
+		parent.reload()
+		attempt.reload()
+		self.assertEqual(payment_entry_count(), before)
+		self.assertEqual(parent.processed, 0)
+		self.assertFalse(attempt.needs_human_attention)
 
 	def test_refund_with_no_payment_entry_posts_nothing(self):
 		attempt, request, invoice = given_attempt(state="Paid", credentials=_credentials())

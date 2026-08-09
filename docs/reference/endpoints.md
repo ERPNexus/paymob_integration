@@ -27,6 +27,12 @@ verified `Success` transaction, records `Refund Requested`, and calls
 `POST /api/acceptance/void_refund/refund` once. A response never posts a Payment Entry; only the
 later signed refund callback can do that. Outbound writes are never retried automatically.
 
+The refund callback Paymob actually delivers is a re-send of the *parent* transaction, which posts
+nothing itself: it triggers a `POST /api/ecommerce/orders/transaction_inquiry` call
+(`paymob.inquiry.by_reference`, shared with the Phase 10 poller) that fetches the signed child
+refund transaction, and that child is what posts the reversal (ADR-0034). Transaction Inquiry is
+therefore also a refund-path dependency, not only a reconciliation-poller one.
+
 ## Settings
 
 `Paymob Settings.is_enabled` is a server-side feature boundary for checkout, refund, callbacks,

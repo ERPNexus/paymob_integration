@@ -10,13 +10,10 @@ or `Expired`.
 `refund_requested_at` is an in-progress marker set under the refund row lock; it also self-releases
 after a fixed 20-minute window (`api.REFUND_CONFIRMATION_MINUTES`) elapses without a matching
 callback, so a callback Paymob never sends cannot wedge the attempt (amends ADR-0018 — see
-decisions.md).
-`refund_requested_cents` records the amount *we* asked Paymob to refund, alongside the marker. It
-is the trusted number a partial parent-resend refund posts from — the unsigned
-`refunded_amount_cents` on the callback is only a cross-check (ADR-0033). Both fields are cleared
-together on every terminal refund outcome: posted, held for review, or refused.
-`refunded_amount_cents` is the sum of signed child refund deltas. `needs_human_attention` flags
-review without changing lifecycle state.
+decisions.md). It is cleared on every terminal refund outcome: posted, held for review, or refused.
+`refunded_amount_cents` is the sum of signed child refund deltas — a parent re-send never supplies
+one directly; it only triggers the Transaction Inquiry that fetches the signed child (ADR-0034).
+`needs_human_attention` flags review without changing lifecycle state.
 
 ## Paymob Transaction
 

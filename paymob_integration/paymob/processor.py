@@ -7,7 +7,17 @@ authentic amount/currency mismatch for a human, and posts the Payment Entry thro
 import frappe
 from frappe import _
 
-from paymob_integration.paymob import amounts, audit, ledger, session, states, transactions
+from paymob_integration.paymob import (
+	amounts,
+	audit,
+	events,
+	inquiry,
+	ledger,
+	session,
+	settings,
+	states,
+	transactions,
+)
 
 ACTOR = "paymob_integration.paymob.processor.process_transaction"
 
@@ -42,36 +52,10 @@ def process_transaction(transaction):
 
 		# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
 		attempt = frappe.get_doc("Paymob Payment Attempt", txn.attempt, for_update=True)
+		if txn.event_kind == "Refund" and not txn.has_parent_transaction:
+			return _process_parent_refund_resend(txn, attempt)
 		if txn.event_kind == "Refund":
-			if not txn.has_parent_transaction:
-				# The parent re-send carries the signed original charge in amount_cents, not the
-				# refund delta — its own reported total is what decides what happens next.
-				posted_cents = attempt.refunded_amount_cents or 0
-				reported_cents = txn.refunded_amount_cents or 0
-				# A full refund (Paymob's cumulative total equals the signed charge, is_refunded
-				# set, and nothing posted yet) posts from the signed amount_cents (ADR-0032,
-				# superseding ADR-0017).
-				full_refund = txn.is_refunded and posted_cents == 0 and reported_cents == txn.amount_cents
-				# A partial refund we ourselves requested: the locally recorded requested amount
-				# is trusted, cross-checked against Paymob's unsigned cumulative total agreeing
-				# that exactly that much more was refunded (ADR-0033). This also covers a second
-				# partial refund, since posted_cents already reflects the first.
-				partial_refund = (
-					txn.is_refunded
-					and attempt.refund_requested_cents
-					and reported_cents == posted_cents + attempt.refund_requested_cents
-				)
-				if full_refund:
-					delta_cents = txn.amount_cents
-				elif partial_refund:
-					delta_cents = attempt.refund_requested_cents
-				else:
-					if reported_cents > posted_cents:
-						return _hold_parent_refund(txn, attempt)
-					_mark_processed(txn)
-					return
-			else:
-				delta_cents = txn.amount_cents
+			delta_cents = txn.amount_cents
 			total_cents = (attempt.refunded_amount_cents or 0) + delta_cents
 			# The same verified charge api._verified_charge caps the outbound request against —
 			# not attempt.expected_amount_cents, the pre-charge snapshot — so the two directions
@@ -130,6 +114,10 @@ def process_transaction(transaction):
 			ledger.post_refund(attempt, txn, delta_cents)
 			attempt.refunded_amount_cents = total_cents
 			_release_refund_lock(attempt)
+			# `needs_human_attention` is deliberately NOT cleared here. A prior parent re-send held
+			# for review may be what set it, but so may an Amount Mismatch on the original charge,
+			# an Illegal Transition, or an Unsupported event — none of which this posting resolves.
+			# The open Paymob Audit Entry is the durable record; a human clears both together.
 			attempt.save(ignore_permissions=True)
 
 		_mark_processed(txn)
@@ -235,7 +223,6 @@ def _release_refund_lock(attempt):
 	refusal — so a callback Paymob never sends cannot wedge the attempt forever (ADR-0018 amendment).
 	"""
 	attempt.refund_requested_at = None
-	attempt.refund_requested_cents = None
 
 
 def _refuse_refund(txn, attempt):
@@ -260,6 +247,59 @@ def _refuse_refund(txn, attempt):
 		f"refund refused payment_request={attempt.payment_request} attempt={attempt.name} "
 		f"txn={txn.paymob_transaction_id}"
 	)
+
+
+def _process_parent_refund_resend(txn, attempt):
+	"""The parent re-send carries the signed original charge in `amount_cents`, not the refund
+	delta, and posts nothing itself (ADR-0034). It only triggers a Transaction Inquiry for the
+	signed child transaction that actually proves the delta; that child is stored as its own
+	Paymob Transaction row and reprocessed through the branch that already handles a real child
+	(`delta_cents = txn.amount_cents`, above) — `ledger.post_refund` stays the only refund-posting
+	call.
+	"""
+	posted_cents = attempt.refunded_amount_cents or 0
+	reported_cents = txn.refunded_amount_cents or 0
+	if reported_cents <= posted_cents:
+		_mark_processed(txn)
+		return
+
+	credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+	# A PaymobError here propagates: the row stays unprocessed, the attempt untouched, and the
+	# tasks.py refund sweep retries it on the next scheduled run. A timeout never changes state.
+	obj = inquiry.by_reference(credentials, attempt.special_reference)
+
+	charged = transactions.verified_charge(attempt.name)
+	if not (
+		obj
+		and obj.get("has_parent_transaction")
+		and obj.get("is_refund")
+		and obj.get("success")
+		and charged
+		and str(obj.get("parent_transaction")) == charged.paymob_transaction_id
+	):
+		return _hold_parent_refund(txn, attempt)
+
+	if posted_cents + (obj.get("amount_cents") or 0) != reported_cents:
+		# Paymob's own cumulative total disagrees with the child it just returned — a lost
+		# intermediate child, or two refunds between polls. Held for a human, not auto-posted.
+		return _hold_parent_refund(txn, attempt)
+
+	kind = events.classify_event(obj)
+	child = transactions.store(
+		obj, kind, attempt.name, attempt.payment_request, source="Inquiry", hmac_verified=0
+	)
+	if child is None:
+		# The child row already exists (an earlier inquiry, or the poller beat this call to it).
+		child = frappe.get_doc("Paymob Transaction", transactions.key_for(obj, kind))
+		if child.processed:
+			_mark_processed(txn)
+			return
+
+	# The child posts first: `process_transaction` is idempotent on `processed`, so consuming the
+	# parent only after the money is posted costs one wasted re-entry at worst, while the reverse
+	# order would consume the parent for good if the child's posting failed after a commit.
+	process_transaction(child.name)
+	_mark_processed(txn)
 
 
 def _hold_parent_refund(txn, attempt):

@@ -10,6 +10,10 @@ list of entries. Governed by [`../../rules/documentation.md`](../../rules/docume
 | [decisions.md](decisions.md) | ADRs — the *why* behind non-obvious choices |
 | [endpoints.md](endpoints.md) | Endpoints, settings, and named error paths |
 
+Alongside them, [paymob-payload.md](paymob-payload.md) catalogues every field Paymob's transaction
+payload actually carries, captured from a live inquiry. It is a wire reference, not a registry —
+consult it before adding a field or a reconciliation rule.
+
 ## The entry format: one entry, two lenses
 
 Every entry has both views. If you can't write the Functional line, the feature isn't clear

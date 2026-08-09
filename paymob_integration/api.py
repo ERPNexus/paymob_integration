@@ -40,7 +40,7 @@ def request_refund(attempt: str, amount_cents: int):
 	if amount_cents > remaining:
 		frappe.throw(_("The refund amount cannot exceed the remaining paid amount."))
 
-	attempt_doc.db_set({"refund_requested_at": now_datetime(), "refund_requested_cents": amount_cents})
+	attempt_doc.db_set("refund_requested_at", now_datetime())
 	audit.record(
 		None,
 		attempt_doc,

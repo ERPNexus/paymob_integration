@@ -171,7 +171,7 @@ class TestRequestRefund(_RefundTestCase):
 		attempt = self._charged_attempt()
 		frappe.set_user(self.refund_manager)
 		stale = frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=-30)
-		attempt.db_set({"refund_requested_at": stale, "refund_requested_cents": 5000})
+		attempt.db_set("refund_requested_at", stale)
 		with patch("paymob_integration.paymob.refund.request", return_value={}) as refund:
 			api.request_refund(attempt.name, 10000)
 		refund.assert_called_once()

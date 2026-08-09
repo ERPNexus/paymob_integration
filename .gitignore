@@ -110,3 +110,5 @@ learning/
 scratch/
 tmp/
 *.local.md
+.wolf/anatomy.md
+.wolf/hooks/_session.json

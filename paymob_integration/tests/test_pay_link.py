@@ -201,7 +201,7 @@ class TestPayerLinkCheckout(NoCommitIntegrationTestCase):
 			patch("paymob_integration.api.settings.get_credential_set", return_value=self.credentials),
 			patch(
 				"paymob_integration.api.settings.get_settings",
-				return_value=frappe._dict(intention_expiration_seconds=3600),
+				return_value=frappe._dict(intention_expiration_seconds=3600, mode="Test"),
 			),
 			patch("paymob_integration.api.intention.create_intention", return_value=result),
 			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),

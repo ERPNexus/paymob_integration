@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import frappe
 
 from paymob_integration import tasks
-from paymob_integration.paymob import amounts, auth, client
+from paymob_integration.paymob import amounts, auth, client, inquiry
 from paymob_integration.tests.helpers import (
 	NoCommitIntegrationTestCase,
 	cleanup_fixture,
@@ -65,7 +65,7 @@ class _FakeClient:
 		if url.endswith("/api/auth/tokens"):
 			self.token_calls += 1
 			return {"token": f"token-{self.token_calls}"}
-		assert tasks.INQUIRY_PATH in url
+		assert inquiry.INQUIRY_PATH in url
 		self.inquiry_calls.append(headers.get("Authorization"))
 		response = self._inquiry_responses.pop(0)
 		if isinstance(response, Exception):
@@ -111,7 +111,7 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 
 	def _patched_client(self, inquiry_responses=None):
 		fake = _FakeClient(inquiry_responses)
-		patcher = patch("paymob_integration.tasks.client.request", side_effect=fake)
+		patcher = patch("paymob_integration.paymob.inquiry.client.request", side_effect=fake)
 		patcher.start()
 		self.addCleanup(patcher.stop)
 		return fake
@@ -120,7 +120,7 @@ class TestReconciliation(NoCommitIntegrationTestCase):
 		attempt, _payment_request, _invoice = self._given_attempt()
 		before_entries = payment_entry_count()
 		self.settings.enabled = 0
-		with patch("paymob_integration.tasks.client.request") as request:
+		with patch("paymob_integration.paymob.inquiry.client.request") as request:
 			tasks.reconcile_pending_attempts()
 
 		attempt.reload()

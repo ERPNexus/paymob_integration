@@ -28,7 +28,6 @@
   "last_polled_at",
   "timestamps_column_break",
   "refund_requested_at",
-  "refund_requested_cents",
   "outcome_section",
   "payment_entry",
   "outcome_column_break",
@@ -171,12 +170,6 @@
    "fieldname": "refund_requested_at",
    "fieldtype": "Datetime",
    "label": "Refund Requested At",
-   "read_only": 1
-  },
-  {
-   "fieldname": "refund_requested_cents",
-   "fieldtype": "Int",
-   "label": "Refund Requested Cents",
    "read_only": 1
   },
   {

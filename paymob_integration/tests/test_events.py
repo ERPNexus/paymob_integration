@@ -13,6 +13,23 @@ class TestClassifyEvent(UnitTestCase):
 		# A refund callback also carries success: true — the reversal flag must be read first.
 		self.assertEqual(classify_event({"is_refunded": True, "success": True}), "Refund")
 
+	def test_signed_child_refund_classifies_as_refund(self):
+		# The real shape returned by Transaction Inquiry for a child refund transaction:
+		# is_refunded is false and success is true on its own record.
+		obj = {
+			"has_parent_transaction": True,
+			"is_refund": True,
+			"is_refunded": False,
+			"success": True,
+		}
+		self.assertEqual(classify_event(obj), "Refund")
+
+	def test_unsigned_is_refund_alone_does_not_hijack_classification(self):
+		# is_refund is not HMAC-signed. Without the signed has_parent_transaction flag alongside
+		# it, it must not be trusted to reclassify a webhook.
+		obj = {"is_refund": True, "has_parent_transaction": False, "success": True}
+		self.assertEqual(classify_event(obj), "Success")
+
 	def test_pending_wins_over_success(self):
 		# Wallet/kiosk: pending: true, success: true — a settlement follows later for the
 		# same transaction id and must not share the Success event_key.

@@ -18,7 +18,9 @@ class NoCommitIntegrationTestCase(IntegrationTestCase):
 		# never runs it, so Company.create_default_warehouses() fails looking up "Transit".
 		if not frappe.db.exists("Warehouse Type", "Transit"):
 			frappe.get_doc({"doctype": "Warehouse Type", "name": "Transit"}).insert()
-		company = "_Test Company"
+		# A name paymob owns exclusively: "_Test Company" is ERPNext core's own fixture name, and
+		# reusing it collides with whatever currency an earlier, unrelated test run left it in.
+		company = "_Test Paymob Company"
 		if not frappe.db.exists("Company", company):
 			frappe.get_doc(
 				{
@@ -33,21 +35,42 @@ class NoCommitIntegrationTestCase(IntegrationTestCase):
 		frappe.defaults.set_global_default("company", company)
 		# Same gap as Warehouse Type above: the setup wizard seeds the running Fiscal Year, a
 		# fresh site has none, and every submitted document validates its posting date against one.
-		# Checked by date coverage, not by a "<year>"-named record: an existing Fiscal Year (e.g. a
-		# non-calendar year like "2026-2027") can already cover today under a different name.
+		# Checked by date coverage AND company scope: a Fiscal Year restricted to other companies
+		# (a "Fiscal Year Company" child row) covers the date but not `company`, and ERPNext's own
+		# `get_fiscal_year` would still reject it — see `erpnext.accounts.utils._get_fiscal_years`.
 		today = frappe.utils.nowdate()
-		if not frappe.db.exists(
-			"Fiscal Year", {"year_start_date": ["<=", today], "year_end_date": [">=", today]}
-		):
-			year = today[:4]
+		unrestricted_or_scoped = frappe.db.sql(
+			"""
+			select fy.name from `tabFiscal Year` fy
+			where fy.disabled = 0 and fy.year_start_date <= %(today)s and fy.year_end_date >= %(today)s
+			and (
+				not exists (select 1 from `tabFiscal Year Company` fyc where fyc.parent = fy.name)
+				or exists (
+					select 1 from `tabFiscal Year Company` fyc
+					where fyc.parent = fy.name and fyc.company = %(company)s
+				)
+			)
+			""",
+			{"today": today, "company": company},
+		)
+		if not unrestricted_or_scoped:
+			# Scoped to `company` (not left global): an unscoped Fiscal Year here would overlap
+			# ERPNext's own unrestricted "2025-2026"/"2026-2027" test fixtures and fail
+			# `validate_overlap`, which only allows overlapping ranges when they're company-scoped.
 			frappe.get_doc(
 				{
 					"doctype": "Fiscal Year",
-					"year": year,
-					"year_start_date": f"{year}-01-01",
-					"year_end_date": f"{year}-12-31",
+					"year": "Paymob Test Fiscal Year",
+					"year_start_date": f"{today[:4]}-01-01",
+					"year_end_date": f"{today[:4]}-12-31",
+					"companies": [{"company": company}],
 				}
 			).insert()
+			# ERPNext's `get_fiscal_year` reads a Redis hash keyed by company (`_get_fiscal_years`);
+			# an earlier lookup for this brand-new company (e.g. from the Company save above) can
+			# have cached an empty result before this Fiscal Year existed. `on_update` clears the
+			# whole hash, but only for saves that go through it — force it here too, cheaply.
+			frappe.cache().delete_key("fiscal_years")
 		commit = patch.object(frappe.db, "commit", return_value=None)
 		commit.start()
 		cls.addClassCleanup(commit.stop)
@@ -75,15 +98,24 @@ def given_attempt(state="Pending", credentials=None):
 def cleanup_fixture(attempt_name, payment_request_name, invoice_name):
 	"""Cancel/delete the Payment Entry first — it blocks deleting both the Payment Request and
 	the Sales Invoice while submitted.
+
+	A refund Payment Entry is never added to `Payment Entry Reference` (fields.md — ERPNext would
+	reject the allocation against an already-zero outstanding balance); it only carries the custom
+	`payment_request` link field, so both sources are queried here or refund entries leak past
+	cleanup and block later Payment Request/Sales Invoice deletion with a dangling audit-entry link.
 	"""
-	for payment_entry in frappe.get_all(
+	# Audit entries (which link to a refund Payment Entry via `payment_entry`) must go first — a
+	# submitted Payment Entry can't be cancelled while a Paymob Audit Entry still links to it.
+	frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
+	original_charge = frappe.get_all(
 		"Payment Entry Reference", {"payment_request": payment_request_name}, pluck="parent"
-	):
+	)
+	refunds = frappe.get_all("Payment Entry", {"payment_request": payment_request_name}, pluck="name")
+	for payment_entry in set(original_charge) | set(refunds):
 		pe = frappe.get_doc("Payment Entry", payment_entry)
 		if pe.docstatus == 1:
 			pe.cancel()
 		frappe.delete_doc("Payment Entry", payment_entry, force=True, ignore_permissions=True)
-	frappe.db.delete("Paymob Audit Entry", {"payment_request": payment_request_name})
 	frappe.db.delete("Paymob Transaction", {"payment_request": payment_request_name})
 	frappe.delete_doc("Paymob Payment Attempt", attempt_name, force=True, ignore_permissions=True)
 	payment_request = frappe.get_doc("Payment Request", payment_request_name)

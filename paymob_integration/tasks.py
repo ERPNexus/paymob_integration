@@ -8,9 +8,8 @@ Payment Entry write path (rules/payments.md rule 1).
 import frappe
 from frappe.utils import add_to_date, now_datetime
 
-from paymob_integration.paymob import auth, client, events, processor, settings, states, transactions
+from paymob_integration.paymob import client, events, inquiry, processor, settings, states, transactions
 
-INQUIRY_PATH = "/api/ecommerce/orders/transaction_inquiry"
 RECONCILE_BATCH_SIZE = 50
 STALE_PENDING_MINUTES = 20
 
@@ -40,6 +39,39 @@ def reconcile_pending_attempts():
 				f"reconciliation failed payment_request={row.payment_request or 'unknown'} attempt={row.name}"
 			)
 
+	_sweep_unprocessed_refunds(cutoff)
+
+
+def _sweep_unprocessed_refunds(cutoff):
+	"""A parent re-send whose inquiry failed (`processor.process_transaction` propagated
+	`client.PaymobError` without marking the row processed) is retried by nobody else — the
+	poller above only looks at attempts still `Pending`. Each row gets its own try/except so one
+	permanently-failing inquiry cannot starve the rest of the batch.
+
+	Parent re-sends only (`has_parent_transaction = 0`). An unprocessed *child* refund row was
+	left that way by something other than a failed inquiry — a raised ledger error, a broken save
+	— and retrying it here every run would re-drive a money-posting path nobody diagnosed.
+	"""
+	rows = frappe.get_all(
+		"Paymob Transaction",
+		filters={
+			"event_kind": "Refund",
+			"has_parent_transaction": 0,
+			"processed": 0,
+			"creation": ["<", cutoff],
+		},
+		fields=["name", "payment_request"],
+		order_by="creation asc",
+		limit=RECONCILE_BATCH_SIZE,
+	)
+	for row in rows:
+		try:
+			processor.process_transaction(row.name)
+		except client.PaymobError:
+			frappe.logger("paymob").info(
+				f"refund sweep failed payment_request={row.payment_request or 'unknown'} txn={row.name}"
+			)
+
 
 def _reconcile(attempt_name):
 	# Read-then-write on a state field: lock the row before deciding (rules/frappe-discipline.md).
@@ -63,7 +95,7 @@ def _reconcile(attempt_name):
 		return
 
 	try:
-		obj = _inquire(credentials, attempt)
+		obj = inquiry.by_reference(credentials, attempt.special_reference)
 	finally:
 		# The only db_set the phase adds. It runs even on a network failure, so one
 		# permanently-failing attempt cannot starve newer ones out of every bounded batch — a
@@ -76,44 +108,11 @@ def _reconcile(attempt_name):
 		_hand_off(attempt, obj)
 
 
-def _inquire(credentials, attempt):
-	"""Retries exactly once, on a 401 only. A timeout or 5xx propagates straight out to the
-	batch loop; a repeated 401 is not retried again (rules/implementation-gate.md §11).
-	"""
-	try:
-		return _post_inquiry(credentials, attempt, force_refresh=False)
-	except client.PaymobAPIError as exc:
-		if exc.status_code == 404:
-			return None  # Paymob has no transaction for this reference
-		if exc.status_code != 401:
-			raise  # 5xx / anything else: the batch loop logs and moves on
-		frappe.logger("paymob").info(
-			f"inquiry auth token refreshed payment_request={attempt.payment_request} attempt={attempt.name}"
-		)
-	try:
-		return _post_inquiry(credentials, attempt, force_refresh=True)
-	except client.PaymobAPIError as exc:
-		if exc.status_code == 404:
-			return None
-		raise  # a second 401 is not retried again
-
-
-def _post_inquiry(credentials, attempt, force_refresh):
-	token = auth.get_auth_token(credentials, force_refresh=force_refresh)
-	url = f"{settings.base_url(credentials)}{INQUIRY_PATH}"
-	return client.request(
-		"POST",
-		url,
-		headers={"Authorization": f"Bearer {token}"},
-		json_body={"merchant_order_id": attempt.special_reference},
-	)
-
-
 def _expire_if_due(attempt):
 	"""Only an *answered* inquiry that found nothing may expire an attempt
 	(rules/implementation-gate.md §11). A timeout, a 5xx or a repeated 401 never reaches here — it
-	propagates out of `_inquire` to the batch loop, and the attempt stays Pending for the next
-	run. Auth-token expiry and intention expiry share no code path.
+	propagates out of `inquiry.by_reference` to the batch loop, and the attempt stays Pending for
+	the next run. Auth-token expiry and intention expiry share no code path.
 	"""
 	if not attempt.expires_at or attempt.expires_at > frappe.utils.now_datetime():
 		return
@@ -139,12 +138,7 @@ def _hand_off(attempt, obj):
 		# marked it processed, this reconciliation pass is the only thing left that will ever
 		# process it. `process_transaction` is idempotent on `processed`, so if the row was already
 		# handled this is a no-op.
-		doc = frappe.get_doc(
-			"Paymob Transaction",
-			transactions.event_key(
-				obj.get("id"), kind, obj.get("refunded_amount_cents"), events.unsupported_subtype(obj)
-			),
-		)
+		doc = frappe.get_doc("Paymob Transaction", transactions.key_for(obj, kind))
 	previous_state = attempt.state
 	processor.process_transaction(doc.name)
 	_log_recovery(attempt, doc, previous_state)

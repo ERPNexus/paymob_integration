@@ -7,6 +7,11 @@ callback also carries `success: true`, so the reversal and pending flags are rea
 def classify_event(obj):
 	if obj.get("is_refunded"):
 		return "Refund"
+	if obj.get("has_parent_transaction") and obj.get("is_refund"):
+		# A child refund transaction: is_refunded is false and success is true on its own record,
+		# so it would otherwise read as a second charge. is_refund is not HMAC-signed, but paired
+		# with has_parent_transaction (which is) a tampered webhook cannot flip both and still verify.
+		return "Refund"
 	if obj.get("is_voided") or obj.get("is_capture") or obj.get("is_auth"):
 		return "Unsupported"
 	if obj.get("pending"):

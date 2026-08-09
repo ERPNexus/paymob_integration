@@ -112,7 +112,7 @@ that field is the reference document's `owner`, which is whoever created the rec
 mailing a Paymob checkout link to an internal user is worse than mailing no one. When no customer
 email can be resolved, the email is muted rather than sent to the wrong address.
 
-## ADR-0032 — A full refund posts from the signed parent re-send
+## ADR-0032 — A full refund posts from the signed parent re-send (superseded by ADR-0034)
 
 Supersedes ADR-0017. A parent re-send (`has_parent_transaction = 0`) whose signed `amount_cents`
 equals Paymob's reported cumulative `refunded_amount_cents`, with `is_refunded` set (both signed
@@ -128,7 +128,7 @@ after something has already been posted — still cannot prove its delta and is 
 (`_hold_parent_refund`), unchanged. Automatic partial refunds are out of scope: the general fix is an
 authenticated Transaction Inquiry read, which belongs to the Phase 10 reconciliation poller.
 
-## ADR-0033 — A partial refund posts from the locally recorded request
+## ADR-0033 — A partial refund posts from the locally recorded request (superseded by ADR-0034)
 
 Extends ADR-0032. `request_refund` now records `refund_requested_cents` alongside
 `refund_requested_at` — the amount *we* asked Paymob to refund, before the call is made. A parent
@@ -144,3 +144,36 @@ Evidence: live transaction `511436444` (EGP 649.50) on `capital`, `ACC-PRQ-2026-
 requested half-refund that Paymob accepted and arrived as a parent re-send with a cumulative total
 of `64950`, not `129900`, so it failed ADR-0032's full-refund equality test and fell to
 `_hold_parent_refund` (`PMB-AUD-2026-00462`) with no reversal posted.
+
+## ADR-0034 — Refunds post from the signed child fetched by inquiry
+
+Supersedes ADR-0032 and ADR-0033, and reinstates ADR-0017's rule with its delivery mechanism
+corrected. A live Transaction Inquiry on `capital` overturned the premise both superseded ADRs
+rested on: Paymob *does* create a child refund transaction — the half-refund of
+`ACC-PRQ-2026-00028-1` produced transaction `511470147` (`has_parent_transaction: true`,
+`parent_transaction: 511436444`, `is_refund: true`, `amount_cents: 64950`, the exact delta, in a
+signed field). It simply never arrives by webhook; only the parent re-send does. Transaction
+Inquiry returns it.
+
+The parent re-send is now a trigger only, never evidence. `processor.process_transaction`, on a
+`Refund` event with `has_parent_transaction = 0`, compares Paymob's reported cumulative
+`refunded_amount_cents` against what's already posted; if it has grown, it calls
+`inquiry.by_reference` (shared with the Phase 10 poller) for the attempt's own reference. The
+result is validated on four signed fields — `has_parent_transaction`, `is_refund`, `success`, and
+`parent_transaction` matching the verified charge's transaction id — and its delta is cross-checked
+against Paymob's own cumulative total (`posted + child.amount_cents == reported`) before the child
+is stored as its own Paymob Transaction row and reprocessed through the existing signed-child
+branch. Any mismatch, or an inquiry that returns something else, holds for a human
+(`_hold_parent_refund`), unchanged. A `client.PaymobError` from the inquiry propagates without
+touching state; the row stays unprocessed and the new `tasks._sweep_unprocessed_refunds` bounded
+sweep retries it. `ledger.post_refund` stays the only refund-posting call.
+
+`refund_requested_cents` is retired — a partial refund no longer needs a number this app
+remembers, since the child transaction supplies its own signed delta.
+
+Both superseded workarounds had already misfired on live data before this fix. The first EGP 649.50
+refund on `ACC-PRQ-2026-00028-1` fell to `_hold_parent_refund` — no Payment Entry
+(`PMB-AUD-2026-00462`). The second EGP 649.50 request missed ADR-0033's equality test (cumulative
+`129900` ≠ posted `0` + requested `64950`), fell through to ADR-0032's full-refund branch — which
+passed *only because the first half had never posted* — and submitted `ACC-PAY-2026-00007` for the
+full EGP 1299.00, a full reversal for a half refund.
