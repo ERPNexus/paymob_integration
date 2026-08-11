@@ -63,6 +63,10 @@ jinja = {"methods": ["paymob_integration.pay_link.build"]}
 
 fixtures = [
 	{"doctype": "Role", "filters": [["name", "in", ["Paymob Refund Manager"]]]},
+	# Refund Payment Entries carry no `references` row, so the Connections tab falls back to the
+	# default fieldname `payment_request` from ERPNext's payment_request_dashboard.py. The field
+	# must be named exactly that (no `paymob_` prefix) to be picked up.
+	{"doctype": "Custom Field", "filters": [["name", "in", ["Payment Entry-payment_request"]]]},
 	{
 		"doctype": "Number Card",
 		"filters": [
