@@ -27,6 +27,8 @@
 - [2026-08-05] For Paymob sandbox testing, the user wants a stable custom HTTPS hostname for the local `capital` bench rather than a temporary tunnel URL.
 - [2026-08-05] Keep local-only operational endpoints and startup commands in the repository's ignored `.local.md` file.
 
+- [2026-08-12] Marketing/visual assets must stay factually grounded in the repo: only claim payment methods actually evidenced in docs (Visa, Mastercard, wallets, Apple/Google Pay via Pixel) — never invent brands (PayPal was fabricated once and rejected). Keep the audience framing fixed: this is a developer-facing open-source announcement, not a merchant "WE ACCEPT" storefront sticker, and the flow is hosted online checkout — no POS terminal, no card-present imagery.
+
 ## Key Learnings
 
 - [2026-08-06] The local `paymob-test` Cloudflare connector is healthy and uses QUIC by default. Cloudflare caching is unsafe for dynamic/authenticated Frappe routes; the tunnel adds network latency but does not account for slow local application rendering.
