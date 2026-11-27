@@ -80,3 +80,16 @@ class TestCancelPaidOrder(NoCommitIntegrationTestCase):
 			patch("paymob_integration.invoice_pay.frappe.db.exists", return_value=False),
 		):
 			invoice_pay.refuse_cancel_while_paid(self._order())
+
+
+class TestStatusWhileCheckoutStarts(NoCommitIntegrationTestCase):
+	def test_no_inquiry_before_paymob_issued_the_order(self):
+		attempt = frappe._dict(name="A-1", state="Pending", last_polled_at=None, paymob_order_id=None)
+		with (
+			patch("paymob_integration.invoice_pay.frappe.db.get_value", return_value=attempt),
+			patch("paymob_integration.invoice_pay.tasks._reconcile") as reconcile,
+			patch("paymob_integration.invoice_pay.frappe.get_doc", side_effect=frappe.DoesNotExistError),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				invoice_pay.status_for("PR-1")
+		reconcile.assert_not_called()

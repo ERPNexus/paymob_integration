@@ -68,11 +68,18 @@ def status_for(payment_request: str) -> dict:
 	attempt = frappe.db.get_value(
 		"Paymob Payment Attempt",
 		{"payment_request": payment_request},
-		["name", "state", "last_polled_at"],
+		["name", "state", "last_polled_at", "paymob_order_id"],
 		as_dict=True,
 		order_by="creation desc",
 	)
-	if attempt and attempt.state == "Pending" and _due_for_inquiry(attempt.last_polled_at):
+	# Only once Paymob has issued the order: before that the checkout is still saving this attempt,
+	# and touching it here makes that save fail (TimestampMismatchError, seen with a 3 s poll).
+	if (
+		attempt
+		and attempt.state == "Pending"
+		and attempt.paymob_order_id
+		and _due_for_inquiry(attempt.last_polled_at)
+	):
 		try:
 			tasks._reconcile(attempt.name)
 			frappe.db.commit()
