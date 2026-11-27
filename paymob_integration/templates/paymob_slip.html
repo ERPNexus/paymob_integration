@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="{{ lang or 'ar' }}" dir="{{ dir or 'rtl' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+{% if refresh_seconds %}<meta http-equiv="refresh" content="{{ refresh_seconds }}">{% endif %}
+<title>{{ title or _("Payment") }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&family=Readex+Pro:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+	--desk: #EEF2FA;
+	--slip: #FFFFFF;
+	--ink: #13203F;
+	--muted: #5B6680;
+	--carbon: #1F4BD8;
+	--carbon-deep: #1838A6;
+	--rule: #D5DCEA;
+	--alert: #B3261E;
+	--display: "Readex Pro", "IBM Plex Sans Arabic", system-ui, sans-serif;
+	--body: "IBM Plex Sans Arabic", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+	background: var(--desk);
+	color: var(--ink);
+	font: 400 15px/1.6 var(--body);
+	min-height: 100vh;
+	padding: 28px 16px 40px;
+}
+main { max-width: 400px; margin: 0 auto; }
+.seller { font: 500 18px/1.3 var(--display); margin: 0 0 2px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+
+/* The slip: one sheet torn from a receipt book, perforated where the stub would come off. */
+.slip {
+	position: relative;
+	background: var(--slip);
+	border-radius: 14px 14px 0 0;
+	padding: 22px 22px 26px;
+	box-shadow: 0 1px 0 var(--rule), 0 18px 40px -28px rgba(19, 32, 63, .45);
+}
+.slip::after {
+	content: "";
+	position: absolute; inset-inline: 0; bottom: -9px; height: 10px;
+	background: radial-gradient(circle at 9px 0, transparent 7px, var(--slip) 7.5px) 0 0 / 18px 10px repeat-x;
+}
+.due { color: var(--muted); font-size: 13px; margin: 0; }
+.amount {
+	font: 700 46px/1.05 var(--display);
+	width: fit-content;
+	color: var(--carbon);
+	letter-spacing: -.5px;
+	margin: 6px 0 0;
+	direction: ltr;
+	font-variant-numeric: tabular-nums;
+}
+.amount small { font-size: 18px; font-weight: 500; margin-inline-start: 6px; }
+.lines { margin: 20px 0 0; padding: 16px 0 0; border-top: 1.5px dashed var(--rule); display: grid; gap: 8px; }
+.lines div { display: flex; justify-content: space-between; gap: 12px; }
+.lines dt { color: var(--muted); }
+.lines dd { margin: 0; font-weight: 600; text-align: end; }
+.ltr { direction: ltr; unicode-bidi: isolate; }
+
+/* The «خالص» stamp: the mark a paid invoice gets at the counter. */
+.stamp {
+	position: absolute; inset-inline-end: 22px; top: 16px;
+	width: 104px; height: 104px; border-radius: 50%;
+	border: 3px solid var(--carbon); color: var(--carbon);
+	display: grid; place-items: center;
+	font: 700 30px/1 var(--display);
+	transform: rotate(-14deg);
+	opacity: .9;
+	box-shadow: inset 0 0 0 5px var(--slip), inset 0 0 0 6.5px var(--carbon);
+	mix-blend-mode: multiply;
+	animation: thump .42s cubic-bezier(.2, 1.6, .4, 1) both .25s;
+}
+@keyframes thump { from { transform: rotate(-14deg) scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
+
+.stub { padding: 28px 0 0; }
+h1 { font: 700 24px/1.3 var(--display); margin: 0 0 6px; }
+.note { color: var(--muted); margin: 0 0 18px; }
+.alert h1 { color: var(--alert); }
+.pay {
+	display: flex; align-items: center; justify-content: center; gap: 10px;
+	width: 100%; min-height: 56px; padding: 12px 20px;
+	border-radius: 12px; border: 0;
+	background: var(--carbon); color: #fff;
+	font: 700 18px/1.2 var(--display); text-decoration: none;
+}
+.pay:hover { background: var(--carbon-deep); }
+.pay:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.methods { display: flex; gap: 18px; color: var(--muted); font-size: 13px; margin: 14px 0 0; justify-content: center; }
+.methods span { display: inline-flex; align-items: center; gap: 6px; }
+.methods svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.waiting { display: flex; gap: 12px; align-items: center; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--carbon); flex: none; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+	{% if company_name %}
+	<p class="seller">{{ company_name }}</p>
+	<p class="sub">{% if invoice %}{{ _("Invoice") }} <span class="ltr">{{ invoice }}</span>{% if invoice_date %}، {{ invoice_date }}{% endif %}{% endif %}</p>
+	{% endif %}
+
+	{% if amount %}
+	<section class="slip" aria-label="{{ _('Invoice summary') }}">
+		{% if state == "Paid" %}<div class="stamp" role="img" aria-label="{{ _('Paid in full') }}">{{ _("Paid in full") }}</div>{% endif %}
+		<p class="due">{% if state == "Paid" %}{{ _("Amount paid") }}{% else %}{{ _("Amount due") }}{% endif %}</p>
+		<p class="amount">{{ amount }}<small>{{ currency_label }}</small></p>
+		<dl class="lines">
+			<div><dt>{{ _("Shop") }}</dt><dd>{{ customer_name }}</dd></div>
+			<div><dt>{{ _("Invoice") }}</dt><dd class="ltr">{{ invoice }}</dd></div>
+		</dl>
+	</section>
+	{% endif %}
+
+	<section class="stub {% if state in ('Error', 'Failed', 'Expired') %}alert{% endif %}">
+		{% block stub %}{% endblock %}
+	</section>
+
+	<footer>{{ _("Card and wallet payments are processed by Paymob.") }}</footer>
+</main>
+</body>
+</html>

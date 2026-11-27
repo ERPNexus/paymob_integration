@@ -8,6 +8,7 @@ could be replayed against another attempt's unsigned `merchant_order_id` lookup 
 import frappe
 from frappe import _
 
+from paymob_integration import invoice_pay, pay_link, slip
 from paymob_integration.paymob import hmac_verify, settings
 
 no_cache = 1
@@ -27,6 +28,7 @@ MESSAGES = {
 
 def get_context(context):
 	context.no_cache = 1
+	context.update(slip.lang_attrs())
 	reference = frappe.form_dict.get("merchant_order_id")
 	attempt = reference and frappe.db.get_value(
 		"Paymob Payment Attempt",
@@ -39,13 +41,29 @@ def get_context(context):
 		frappe.logger("paymob").info("result page reason=unknown_reference")
 		return _render(context, "Pending")
 
-	state = attempt.state if _redirect_is_trusted(attempt) else "Pending"
+	trusted = _redirect_is_trusted(attempt)
+	if trusted and attempt.state == "Pending":
+		# No webhook reaches a site Paymob cannot see; ask Paymob directly while the payer waits.
+		try:
+			attempt.state = invoice_pay.status_for(attempt.payment_request)["state"]
+		except Exception:
+			# The payer's money is with Paymob either way; a posting problem is ours to fix, so the
+			# page keeps saying "confirming" and the error goes to the log, never to the payer.
+			frappe.db.rollback()
+			frappe.log_error(title=f"Paymob result inquiry failed payment_request={attempt.payment_request}")
+	state = attempt.state if trusted else "Pending"
+	if state not in MESSAGES:
+		state = "Pending"
 	frappe.logger("paymob").info(f"result page shown payment_request={attempt.payment_request} state={state}")
+	slip.fill(context, frappe.get_doc("Payment Request", attempt.payment_request))
+	if state in ("Failed", "Expired"):
+		context.retry_url = pay_link.build(attempt.payment_request)
 	return _render(context, state)
 
 
 def _render(context, state):
 	context.state = state
+	context.refresh_seconds = 4 if state == "Pending" else None
 	context.message = _(MESSAGES.get(state, MESSAGES["Pending"]))
 	return context
 

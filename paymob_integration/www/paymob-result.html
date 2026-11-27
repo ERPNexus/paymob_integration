@@ -1,7 +1,22 @@
-{% extends "templates/web.html" %}
+{% extends "templates/paymob_slip.html" %}
 
-{% block page_content %}
-<div class="paymob-result paymob-result-{{ state | lower }}">
+{% block stub %}
+{% if state == "Paid" %}
+	<h1>{{ _("Paid. Thank you") }}</h1>
+	<p class="note">{{ _("{0} received the money. Keep this page as your receipt.").format(company_name) }}</p>
+{% elif state == "Pending" %}
+	<div class="waiting" role="status">
+		<span class="dot" aria-hidden="true"></span>
+		<div>
+			<h1>{{ _("Confirming your payment") }}</h1>
+			<p class="note">{{ _("This takes a few seconds. The page updates by itself.") }}</p>
+		</div>
+	</div>
+{% elif state in ("Failed", "Expired") %}
+	<h1>{% if state == "Failed" %}{{ _("The payment didn't go through") }}{% else %}{{ _("This link has expired") }}{% endif %}</h1>
+	<p class="note">{% if state == "Failed" %}{{ _("Check the card details or try another card or wallet.") }}{% else %}{{ _("Open the link again to start a new payment.") }}{% endif %}</p>
+	{% if retry_url %}<a class="pay" href="{{ retry_url }}">{{ _("Try again") }}</a>{% endif %}
+{% else %}
 	<h1>{{ message }}</h1>
-</div>
+{% endif %}
 {% endblock %}
