@@ -1,0 +1,95 @@
+from unittest.mock import patch
+
+import frappe
+
+from paymob_integration import invoice_pay
+from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_submitted_sales_invoice
+
+
+class TestInvoicePay(NoCommitIntegrationTestCase):
+	def setUp(self):
+		super().setUp()
+		self.enabled = patch("paymob_integration.invoice_pay.enabled_for", return_value=True)
+		self.enabled.start()
+		self.invoice = given_submitted_sales_invoice("120.00")
+
+	def tearDown(self):
+		self.enabled.stop()
+		super().tearDown()
+
+	def test_link_asks_for_the_whole_outstanding_and_is_reused(self):
+		first = invoice_pay.link_for(self.invoice.name)
+		second = invoice_pay.link_for(self.invoice.name)
+
+		self.assertEqual(first["amount"], 120.0)
+		self.assertEqual(first["state"], "Open")
+		self.assertIn("/paymob-pay?", first["url"])
+		self.assertEqual(first["payment_request"], second["payment_request"])
+
+	def test_a_lower_outstanding_replaces_the_old_request(self):
+		old = invoice_pay.link_for(self.invoice.name)
+		frappe.db.set_value("Sales Invoice", self.invoice.name, "outstanding_amount", 70)
+
+		new = invoice_pay.link_for(self.invoice.name)
+
+		self.assertNotEqual(old["payment_request"], new["payment_request"])
+		self.assertEqual(new["amount"], 70.0)
+		self.assertEqual(frappe.db.get_value("Payment Request", old["payment_request"], "docstatus"), 2)
+
+	def test_nothing_owed_means_no_link(self):
+		frappe.db.set_value("Sales Invoice", self.invoice.name, "outstanding_amount", 0)
+		self.assertRaises(frappe.ValidationError, invoice_pay.link_for, self.invoice.name)
+
+	def test_a_user_without_desk_rights_still_gets_a_link(self):
+		frappe.set_user("Guest")
+		try:
+			self.assertEqual(invoice_pay.link_for(self.invoice.name)["amount"], 120.0)
+		finally:
+			frappe.set_user("Administrator")
+
+
+class TestEnabledForCompany(NoCommitIntegrationTestCase):
+	def test_a_row_whose_account_is_another_companys_never_serves(self):
+		row = frappe._dict(payment_account="Paymob - X", mode="Test")
+		with (
+			patch("paymob_integration.invoice_pay.settings.is_enabled", return_value=True),
+			patch("paymob_integration.invoice_pay.settings.get_credential_set", return_value=row),
+			patch("paymob_integration.invoice_pay.settings.resolve_integrations", return_value=["1"]),
+			patch("paymob_integration.invoice_pay.frappe.get_cached_value", return_value=("Egypt", "EGP")),
+			patch("paymob_integration.invoice_pay.frappe.db.get_value", return_value="Company A"),
+		):
+			self.assertTrue(invoice_pay.enabled_for("Company A"))
+			self.assertFalse(invoice_pay.enabled_for("Company B"))
+
+
+class TestCancelPaidOrder(NoCommitIntegrationTestCase):
+	def _order(self, keep=False):
+		return frappe._dict(doctype="Sales Order", name="SO-X", flags=frappe._dict(paymob_keep_as_credit=keep))
+
+	def test_a_card_paid_order_cannot_be_cancelled_before_refund(self):
+		with (
+			patch("paymob_integration.invoice_pay.frappe.get_all", return_value=["PR-1"]),
+			patch("paymob_integration.invoice_pay.frappe.db.exists", return_value=True),
+		):
+			self.assertRaises(frappe.ValidationError, invoice_pay.refuse_cancel_while_paid, self._order())
+
+	def test_keep_as_credit_and_unpaid_orders_may_cancel(self):
+		invoice_pay.refuse_cancel_while_paid(self._order(keep=True))
+		with (
+			patch("paymob_integration.invoice_pay.frappe.get_all", return_value=["PR-1"]),
+			patch("paymob_integration.invoice_pay.frappe.db.exists", return_value=False),
+		):
+			invoice_pay.refuse_cancel_while_paid(self._order())
+
+
+class TestStatusWhileCheckoutStarts(NoCommitIntegrationTestCase):
+	def test_no_inquiry_before_paymob_issued_the_order(self):
+		attempt = frappe._dict(name="A-1", state="Pending", last_polled_at=None, paymob_order_id=None)
+		with (
+			patch("paymob_integration.invoice_pay.frappe.db.get_value", return_value=attempt),
+			patch("paymob_integration.invoice_pay.tasks._reconcile") as reconcile,
+			patch("paymob_integration.invoice_pay.frappe.get_doc", side_effect=frappe.DoesNotExistError),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				invoice_pay.status_for("PR-1")
+		reconcile.assert_not_called()

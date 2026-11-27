@@ -47,7 +47,10 @@ after_migrate = [
 	"paymob_integration.notifications.seed",
 	"paymob_integration.notifications.refresh_defaults",
 ]
-doc_events = {"Payment Request": {"validate": "paymob_integration.payment_request.prepare_payment_email"}}
+doc_events = {
+	"Payment Request": {"validate": "paymob_integration.payment_request.prepare_payment_email"},
+	"Sales Order": {"before_cancel": "paymob_integration.invoice_pay.refuse_cancel_while_paid"},
+}
 jinja = {"methods": ["paymob_integration.pay_link.build"]}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}

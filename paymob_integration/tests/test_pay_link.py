@@ -119,14 +119,39 @@ class TestPayLink(FrappeTestCase):
 		frappe.local.flags.redirect_location = None
 		with (
 			patch("paymob_integration.www.paymob_pay.verify_request", return_value=True),
-			patch("paymob_integration.www.paymob_pay.frappe.get_doc"),
+			patch("paymob_integration.www.paymob_pay.frappe.db.exists", return_value=True),
+			patch(
+				"paymob_integration.www.paymob_pay.frappe.get_doc",
+				return_value=frappe._dict(
+					status="Requested", docstatus=1, grand_total=10, outstanding_amount=10,
+					reference_doctype="Sales Invoice", reference_name="SINV-0001",
+				),
+			),
+			patch("paymob_integration.www.paymob_pay.slip.fill"),
 			patch("paymob_integration.www.paymob_pay.frappe.log_error"),
 			patch("paymob_integration.www.paymob_pay.api._checkout", side_effect=frappe.ValidationError),
 		):
-			context = paymob_pay.get_context(frappe._dict())
+			context = paymob_pay.get_context(frappe._dict(company_name="Seller"))
 
-		self.assertEqual(context.message, "We could not start your payment. Please contact the merchant.")
+		self.assertEqual(context.state, "Error")
+		self.assertIn("could not start the payment", context.message)
+		self.assertFalse(context.get("checkout_url"))
 		self.assertFalse(frappe.local.flags.get("redirect_location"))
+
+	def test_out_of_date_link_never_asks_for_more_than_is_owed(self):
+		frappe.form_dict = frappe._dict(ref="PR-0001")
+		request = frappe._dict(status="Requested", docstatus=1, grand_total=100, reference_doctype="Sales Invoice", reference_name="SINV-0001")
+		with (
+			patch("paymob_integration.www.paymob_pay.verify_request", return_value=True),
+			patch("paymob_integration.www.paymob_pay.frappe.db.exists", return_value=True),
+			patch("paymob_integration.www.paymob_pay.frappe.get_doc", side_effect=[request, frappe._dict(outstanding_amount=40)]),
+			patch("paymob_integration.www.paymob_pay.slip.fill"),
+			patch("paymob_integration.www.paymob_pay.api._checkout") as checkout,
+		):
+			context = paymob_pay.get_context(frappe._dict(company_name="Seller"))
+
+		self.assertEqual(context.state, "Error")
+		checkout.assert_not_called()
 
 
 class TestPayerLinkCheckout(NoCommitIntegrationTestCase):
@@ -186,7 +211,7 @@ class TestPayerLinkCheckout(NoCommitIntegrationTestCase):
 		)
 		create_intention.assert_called_once()
 
-	def test_signed_payer_link_persists_identifiers_before_redirecting(self):
+	def test_signed_payer_link_persists_identifiers_before_showing_pay_button(self):
 		result = {
 			"intention_id": "pi_FAKE_1",
 			"order_id": "987654",
@@ -206,9 +231,8 @@ class TestPayerLinkCheckout(NoCommitIntegrationTestCase):
 			patch("paymob_integration.api.intention.create_intention", return_value=result),
 			patch("paymob_integration.api.build_checkout_url", return_value="https://checkout.test"),
 			patch("paymob_integration.api.frappe.db.commit") as commit,
-			self.assertRaises(frappe.Redirect),
 		):
-			paymob_pay.get_context(frappe._dict())
+			context = paymob_pay.get_context(frappe._dict())
 
 		attempt = frappe.get_last_doc(
 			"Paymob Payment Attempt", filters={"payment_request": self.payment_request.name}
@@ -216,7 +240,9 @@ class TestPayerLinkCheckout(NoCommitIntegrationTestCase):
 		self.assertEqual(attempt.paymob_intention_id, result["intention_id"])
 		self.assertEqual(attempt.paymob_order_id, result["order_id"])
 		self.assertEqual(attempt.get_password("client_secret"), result["client_secret"])
-		self.assertEqual(frappe.local.flags.redirect_location, "https://checkout.test")
+		# The payer sees the summary first; the pay button carries the checkout.
+		self.assertEqual(context.state, "Payable")
+		self.assertEqual(context.checkout_url, "https://checkout.test")
 		self.assertEqual(commit.call_count, 2)
 
 	# CI-only flake under the full suite (not reproducible running this file alone) — tracked
