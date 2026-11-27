@@ -33,7 +33,11 @@ def enabled_for(company: str) -> bool:
 		settings.resolve_integrations(country, currency, company, credentials.mode)
 	except frappe.ValidationError:
 		return False
-	return bool(credentials.payment_account)
+	# The money lands in this account, so it must be the company's own. A row with no company
+	# (single-company sites) still serves its own company, never another tenant's documents.
+	return bool(credentials.payment_account) and (
+		frappe.db.get_value("Account", credentials.payment_account, "company") == company
+	)
 
 
 def owed(doc) -> float:

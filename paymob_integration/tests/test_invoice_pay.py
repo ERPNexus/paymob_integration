@@ -46,3 +46,17 @@ class TestInvoicePay(NoCommitIntegrationTestCase):
 			self.assertEqual(invoice_pay.link_for(self.invoice.name)["amount"], 120.0)
 		finally:
 			frappe.set_user("Administrator")
+
+
+class TestEnabledForCompany(NoCommitIntegrationTestCase):
+	def test_a_row_whose_account_is_another_companys_never_serves(self):
+		row = frappe._dict(payment_account="Paymob - X", mode="Test")
+		with (
+			patch("paymob_integration.invoice_pay.settings.is_enabled", return_value=True),
+			patch("paymob_integration.invoice_pay.settings.get_credential_set", return_value=row),
+			patch("paymob_integration.invoice_pay.settings.resolve_integrations", return_value=["1"]),
+			patch("paymob_integration.invoice_pay.frappe.get_cached_value", return_value=("Egypt", "EGP")),
+			patch("paymob_integration.invoice_pay.frappe.db.get_value", return_value="Company A"),
+		):
+			self.assertTrue(invoice_pay.enabled_for("Company A"))
+			self.assertFalse(invoice_pay.enabled_for("Company B"))
