@@ -60,3 +60,23 @@ class TestEnabledForCompany(NoCommitIntegrationTestCase):
 		):
 			self.assertTrue(invoice_pay.enabled_for("Company A"))
 			self.assertFalse(invoice_pay.enabled_for("Company B"))
+
+
+class TestCancelPaidOrder(NoCommitIntegrationTestCase):
+	def _order(self, keep=False):
+		return frappe._dict(doctype="Sales Order", name="SO-X", flags=frappe._dict(paymob_keep_as_credit=keep))
+
+	def test_a_card_paid_order_cannot_be_cancelled_before_refund(self):
+		with (
+			patch("paymob_integration.invoice_pay.frappe.get_all", return_value=["PR-1"]),
+			patch("paymob_integration.invoice_pay.frappe.db.exists", return_value=True),
+		):
+			self.assertRaises(frappe.ValidationError, invoice_pay.refuse_cancel_while_paid, self._order())
+
+	def test_keep_as_credit_and_unpaid_orders_may_cancel(self):
+		invoice_pay.refuse_cancel_while_paid(self._order(keep=True))
+		with (
+			patch("paymob_integration.invoice_pay.frappe.get_all", return_value=["PR-1"]),
+			patch("paymob_integration.invoice_pay.frappe.db.exists", return_value=False),
+		):
+			invoice_pay.refuse_cancel_while_paid(self._order())

@@ -281,3 +281,21 @@ def _has_live_payment(payment_request):
 
 def _due_for_inquiry(last_polled_at):
 	return not last_polled_at or last_polled_at < add_to_date(now_datetime(), seconds=-INQUIRY_GAP_SECONDS)
+
+
+def refuse_cancel_while_paid(doc, method=None):
+	"""Owner rule: an order paid by card or wallet is refunded first, then cancelled. Keeping the
+	money as the shop's credit instead is a deliberate call: set doc.flags.paymob_keep_as_credit.
+	Not a role check: apps cancel orders elevated, and Administrator holds every role."""
+	if doc.flags.paymob_keep_as_credit:
+		return
+	requests = frappe.get_all(
+		"Payment Request", filters={"reference_doctype": doc.doctype, "reference_name": doc.name}, pluck="name"
+	)
+	if requests and frappe.db.exists(
+		"Paymob Payment Attempt", {"payment_request": ["in", requests], "state": ["in", ("Paid", "Partially Refunded")]}
+	):
+		frappe.throw(
+			_("This order was paid by card or wallet. Refund the payment first, then cancel the order."),
+			title=_("Refund first"),
+		)
