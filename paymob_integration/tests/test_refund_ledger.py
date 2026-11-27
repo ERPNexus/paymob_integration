@@ -56,7 +56,7 @@ class TestRefundLedger(NoCommitIntegrationTestCase):
 	def _paid_attempt(self):
 		attempt, request, invoice = given_attempt(credentials=_credentials())
 		self.addCleanup(cleanup_fixture, attempt.name, request.name, invoice.name)
-		# Frappe's IntegrationTestCase only rolls back at class teardown (no per-test savepoint —
+		# Frappe's FrappeTestCase only rolls back at class teardown (no per-test savepoint —
 		# see frappe.tests.classes.integration_test_case), so every call in this class shares one
 		# transaction: the id must be unique per call, not a literal reused across test methods.
 		success = given_transaction("Success", f"success-{attempt.name}", attempt.name, request.name)

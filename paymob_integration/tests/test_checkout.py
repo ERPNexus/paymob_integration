@@ -3,7 +3,7 @@ from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
 from paymob_integration import api
@@ -24,7 +24,7 @@ CHECKOUT_RESULT = {
 }
 
 
-class TestCreateIntention(UnitTestCase):
+class TestCreateIntention(FrappeTestCase):
 	def setUp(self):
 		self.credentials = _Credentials()
 
@@ -93,7 +93,7 @@ class _Credentials:
 		return "sk_test_FAKE_secret"
 
 
-class TestCheckoutURL(UnitTestCase):
+class TestCheckoutURL(FrappeTestCase):
 	def test_only_browser_safe_values_are_in_the_url(self):
 		credentials = Mock(
 			public_key="pk_test_FAKE_public",

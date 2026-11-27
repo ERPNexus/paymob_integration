@@ -13,6 +13,7 @@ from paymob_integration.paymob import amounts, audit, intention, refund, setting
 WEBHOOK_PATH = "/api/method/paymob_integration.webhooks.processed_callback"
 RESULT_PATH = "/paymob-result"
 TEST_PHONE_NUMBER = "+201000000000"
+REFUND_ROLE = "Paymob Refund Manager"
 REFUND_CONFIRMATION_MINUTES = 20
 
 
@@ -20,7 +21,10 @@ REFUND_CONFIRMATION_MINUTES = 20
 def request_refund(attempt: str, amount_cents: int):
 	"""Request one refund under a row lock; its signed callback remains ledger authority."""
 	attempt_doc = frappe.get_doc("Paymob Payment Attempt", attempt, for_update=True)
-	attempt_doc.check_permission("refund")
+	# v15 has no custom permission types, so the v16 "refund" right becomes a role check.
+	attempt_doc.check_permission("read")
+	if REFUND_ROLE not in frappe.get_roles():
+		raise frappe.PermissionError(_("Only a Paymob Refund Manager can refund Paymob payments."))
 	settings.is_enabled(throw=True)
 	window_start = add_to_date(now_datetime(), minutes=-REFUND_CONFIRMATION_MINUTES)
 	if attempt_doc.refund_requested_at and attempt_doc.refund_requested_at >= window_start:
@@ -169,14 +173,8 @@ def _active_attempt(payment_request):
 
 def build_checkout_url(credentials, client_secret):
 	"""Only browser-safe public and per-session keys reach the hosted checkout URL."""
-	return f"{settings.base_url(credentials)}/unifiedcheckout/?{
-		urlencode(
-			{
-				'publicKey': credentials.public_key,
-				'clientSecret': client_secret,
-			}
-		)
-	}"
+	query = urlencode({"publicKey": credentials.public_key, "clientSecret": client_secret})
+	return f"{settings.base_url(credentials)}/unifiedcheckout/?{query}"
 
 
 def _validate_payable(request):

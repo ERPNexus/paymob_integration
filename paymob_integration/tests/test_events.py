@@ -1,10 +1,10 @@
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob.events import classify_event
 from paymob_integration.paymob.transactions import event_key
 
 
-class TestClassifyEvent(UnitTestCase):
+class TestClassifyEvent(FrappeTestCase):
 	def test_retired_flags_are_unsupported(self):
 		for flag in ("is_voided", "is_capture", "is_auth"):
 			self.assertEqual(classify_event({flag: True}), "Unsupported")

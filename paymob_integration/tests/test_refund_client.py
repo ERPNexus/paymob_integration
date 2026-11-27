@@ -1,11 +1,11 @@
 from unittest.mock import Mock, patch
 
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob import refund
 
 
-class TestRefundClient(UnitTestCase):
+class TestRefundClient(FrappeTestCase):
 	def test_refund_posts_the_verified_amount_once(self):
 		credentials = Mock(base_url="https://accept.example.test")
 		with (

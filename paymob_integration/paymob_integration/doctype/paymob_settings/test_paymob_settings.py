@@ -1,13 +1,13 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob import client
 from paymob_integration.paymob_integration.doctype.paymob_settings.paymob_settings import test_connection
 
 
-class TestPaymobSettings(UnitTestCase):
+class TestPaymobSettings(FrappeTestCase):
 	@patch("paymob_integration.paymob_integration.doctype.paymob_settings.paymob_settings.frappe.only_for")
 	@patch(
 		"paymob_integration.paymob_integration.doctype.paymob_settings.paymob_settings.settings.get_credential_set"

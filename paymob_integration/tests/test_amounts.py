@@ -1,12 +1,12 @@
 from decimal import Decimal
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob import amounts
 
 
-class TestMinorUnits(UnitTestCase):
+class TestMinorUnits(FrappeTestCase):
 	def test_two_decimal_currency(self):
 		self.assertEqual(amounts.to_minor_units("275.55", "EGP"), 27555)
 

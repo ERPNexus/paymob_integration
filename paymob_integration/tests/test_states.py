@@ -1,9 +1,9 @@
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob import states
 
 
-class TestStates(UnitTestCase):
+class TestStates(FrappeTestCase):
 	def test_every_legal_transition(self):
 		for current, targets in states.LEGAL.items():
 			for target in targets:

@@ -1,11 +1,11 @@
 from unittest.mock import Mock, patch
 
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob import client
 
 
-class TestClient(UnitTestCase):
+class TestClient(FrappeTestCase):
 	@patch("paymob_integration.paymob.client.requests.request")
 	def test_api_error_shows_only_allowlisted_paymob_detail(self, request):
 		response = Mock(status_code=417)

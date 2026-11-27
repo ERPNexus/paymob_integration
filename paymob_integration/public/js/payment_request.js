@@ -35,20 +35,8 @@ function add_action_buttons(frm) {
 		.then((attempts) => {
 			const attempt = attempts[0];
 			if (!attempt) return;
-			// "refund" is a custom Permission Type; frappe.perm.has_perm only knows the
-			// built-in rights, so the check has to go through the server.
-			frappe
-				.call({
-					method: "frappe.client.has_permission",
-					args: {
-						doctype: "Paymob Payment Attempt",
-						docname: attempt.name,
-						perm_type: "refund",
-					},
-				})
-				.then(({ message }) => {
-					if (message?.has_permission) add_refund_buttons(frm, attempt);
-				});
+			// v15 has no custom "refund" right: the server requires the Paymob Refund Manager role.
+			if (frappe.user.has_role("Paymob Refund Manager")) add_refund_buttons(frm, attempt);
 		});
 }
 

@@ -4,12 +4,12 @@ back exactly as it was, even when the wrapped block raises.
 """
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob import session
 
 
-class TestAsAdministrator(UnitTestCase):
+class TestAsAdministrator(FrappeTestCase):
 	def setUp(self):
 		self.original_user = frappe.session.user
 		self.addCleanup(frappe.set_user, self.original_user)

@@ -3,7 +3,7 @@ from contextlib import contextmanager, nullcontext
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration import api, hooks, pay_link, payment_request
 from paymob_integration.paymob import processor
@@ -17,7 +17,7 @@ from paymob_integration.tests.test_webhook import _post
 from paymob_integration.www import paymob_pay
 
 
-class TestPayLink(UnitTestCase):
+class TestPayLink(FrappeTestCase):
 	def test_build_uses_frappe_signed_params(self):
 		with (
 			patch("paymob_integration.pay_link.get_url", return_value="https://site.test"),

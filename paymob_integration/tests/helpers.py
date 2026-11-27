@@ -3,12 +3,12 @@
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration import api
 
 
-class NoCommitIntegrationTestCase(IntegrationTestCase):
+class NoCommitIntegrationTestCase(FrappeTestCase):
 	"""Keep each integration-test class inside Frappe's rollback transaction."""
 
 	@classmethod
@@ -274,7 +274,9 @@ def _ensure_customer(currency):
 
 
 def _ensure_item():
-	code = "PAYMOB-TEST-ITEM"
+	# Sites that scope Items per Company (e.g. Modar) require the code to start with "<abbr>-".
+	abbr = frappe.db.get_value("Company", frappe.defaults.get_global_default("company"), "abbr")
+	code = f"{abbr}-PAYMOB-TEST-ITEM" if abbr else "PAYMOB-TEST-ITEM"
 	if not frappe.db.exists("UOM", "Nos"):
 		frappe.get_doc({"doctype": "UOM", "uom_name": "Nos", "must_be_whole_number": 1}).insert(
 			ignore_permissions=True

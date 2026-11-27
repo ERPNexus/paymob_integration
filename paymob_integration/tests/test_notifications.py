@@ -2,12 +2,12 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration import notifications, payment_request
 
 
-class TestNotifications(UnitTestCase):
+class TestNotifications(FrappeTestCase):
 	def test_catalogue_contains_the_six_editable_alerts(self):
 		specs = notifications._spec()
 		self.assertEqual(len(specs), 6)

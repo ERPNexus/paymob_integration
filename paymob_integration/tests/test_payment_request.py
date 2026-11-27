@@ -1,14 +1,14 @@
 from unittest.mock import Mock, patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration import payment_request
 
 CREDENTIALS = Mock()
 
 
-class TestCustomerEmail(UnitTestCase):
+class TestCustomerEmail(FrappeTestCase):
 	def test_prefers_the_reference_documents_contact_email(self):
 		doc = frappe._dict(party_type="Customer", party="CUST-00001")
 		source = frappe._dict(contact_email="payer@example.test")
@@ -54,7 +54,7 @@ class TestCustomerEmail(UnitTestCase):
 		self.assertIsNone(payment_request._customer_email(doc, source))
 
 
-class TestPreparePaymentEmail(UnitTestCase):
+class TestPreparePaymentEmail(FrappeTestCase):
 	def call(self, doc, source, send_payment_link_email=1):
 		with (
 			patch(

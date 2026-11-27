@@ -1,9 +1,14 @@
 """Seed editable, opt-out-able Paymob notifications once per site."""
 
 import frappe
-from frappe.email.doctype.notification.notification import clear_notification_cache
 
 from paymob_integration import email
+
+
+def clear_notification_cache():
+	# ponytail: v15 has no helper; Notification caches per document type in this hash.
+	frappe.cache.delete_value("notifications")
+
 
 PAYMENT_REQUEST_COMPANY = "frappe.db.get_value('Payment Request', doc.payment_request, 'company')"
 

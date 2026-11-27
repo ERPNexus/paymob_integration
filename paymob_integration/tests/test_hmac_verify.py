@@ -1,7 +1,7 @@
 import hashlib
 import hmac as hmac_lib
 
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from paymob_integration.paymob.hmac_verify import (
 	PROCESSED_CALLBACK_FIELDS,
@@ -45,7 +45,7 @@ def _sign(params, secret=SECRET):
 	return {**params, "hmac": digest}
 
 
-class TestVerifyResponseCallback(UnitTestCase):
+class TestVerifyResponseCallback(FrappeTestCase):
 	def test_valid_signature_passes(self):
 		self.assertTrue(verify_response_callback(_sign(VALID_PARAMS), SECRET))
 
@@ -124,7 +124,7 @@ def _sign_processed(obj, secret=SECRET):
 	return hmac_lib.new(secret.encode(), message.encode(), hashlib.sha512).hexdigest()
 
 
-class TestVerifyProcessedCallback(UnitTestCase):
+class TestVerifyProcessedCallback(FrappeTestCase):
 	def test_valid_signature_passes(self):
 		digest = _sign_processed(VALID_OBJ)
 		self.assertTrue(verify_processed_callback(VALID_OBJ, digest, SECRET))
