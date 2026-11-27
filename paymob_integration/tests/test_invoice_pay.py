@@ -9,7 +9,7 @@ from paymob_integration.tests.helpers import NoCommitIntegrationTestCase, given_
 class TestInvoicePay(NoCommitIntegrationTestCase):
 	def setUp(self):
 		super().setUp()
-		self.enabled = patch("paymob_integration.invoice_pay.settings.is_enabled", return_value=True)
+		self.enabled = patch("paymob_integration.invoice_pay.enabled_for", return_value=True)
 		self.enabled.start()
 		self.invoice = given_submitted_sales_invoice("120.00")
 

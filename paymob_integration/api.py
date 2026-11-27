@@ -55,7 +55,9 @@ def request_refund(attempt: str, amount_cents: int):
 		received_amount_cents=amount_cents,
 		received_currency=attempt_doc.currency,
 	)
-	credentials = settings.get_credential_set(attempt_doc.country, attempt_doc.currency, attempt_doc.mode)
+	credentials = settings.get_credential_set(
+		attempt_doc.country, attempt_doc.currency, attempt_doc.mode, settings.attempt_company(attempt_doc)
+	)
 	refund.request(credentials, transaction_id=charged.paymob_transaction_id, amount_cents=amount_cents)
 	return {"status": "requested"}
 
@@ -102,20 +104,20 @@ def _checkout_for_request(request, reuse_pending=False):
 	_validate_payable(request)
 	source = frappe.get_doc(request.reference_doctype, request.reference_name)
 	country = _merchant_country(request, source)
-	integration_ids = settings.resolve_integrations(country, request.currency)
+	credentials = settings.get_credential_set(country, request.currency, company=request.company)
+	integration_ids = settings.resolve_integrations(country, request.currency, request.company, credentials.mode)
 	if reuse_pending:
 		attempt = _active_attempt(request.name)
 		if attempt:
 			client_secret = attempt.get_password("client_secret")
 			if client_secret:
-				credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+				credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode, request.company)
 				return {
 					"attempt": attempt.name,
 					"checkout_url": build_checkout_url(credentials, client_secret),
 				}
 
 	billing_data = _billing_data(request, source)
-	credentials = settings.get_credential_set(country, request.currency)
 	attempt = _create_attempt(request, credentials, _contact_email(request, source))
 	result = intention.create_intention(
 		credentials,

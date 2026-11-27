@@ -15,6 +15,7 @@ def fill(context, request):
 			"company_name": frappe.get_cached_value("Company", request.company, "company_name") or request.company,
 			"customer_name": request.party_name or source.get("customer_name") or request.party,
 			"invoice": request.reference_name,
+			"doc_label": _("Order") if request.reference_doctype == "Sales Order" else _("Invoice"),
 			"invoice_date": formatdate(source.get("posting_date")),
 			"amount": "{:,.2f}".format(flt(request.grand_total, 2)),
 			"currency_label": _("EGP") if request.currency == "EGP" else request.currency,

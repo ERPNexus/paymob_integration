@@ -109,7 +109,7 @@ class TestResultPage(NoCommitIntegrationTestCase):
 			return_value=self.credentials,
 		) as get_credential_set:
 			paymob_result.get_context(frappe._dict())
-		get_credential_set.assert_called_once_with("Egypt", "EGP", "Test")
+		get_credential_set.assert_called_once_with("Egypt", "EGP", "Test", self.payment_request.company)
 
 	def test_credential_lookup_failure_is_logged_and_renders_pending(self):
 		frappe.form_dict.clear()

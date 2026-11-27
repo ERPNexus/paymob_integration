@@ -81,7 +81,9 @@ def _reconcile(attempt_name):
 		return
 
 	try:
-		credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+		credentials = settings.get_credential_set(
+			attempt.country, attempt.currency, attempt.mode, settings.attempt_company(attempt)
+		)
 	except frappe.ValidationError:
 		# Credentials for this attempt's country/currency/mode were disabled or removed after
 		# checkout. That's not a Paymob API failure (client.PaymobError), so left uncaught it would

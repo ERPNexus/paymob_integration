@@ -263,7 +263,9 @@ def _process_parent_refund_resend(txn, attempt):
 		_mark_processed(txn)
 		return
 
-	credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+	credentials = settings.get_credential_set(
+		attempt.country, attempt.currency, attempt.mode, settings.attempt_company(attempt)
+	)
 	# A PaymobError here propagates: the row stays unprocessed, the attempt untouched, and the
 	# tasks.py refund sweep retries it on the next scheduled run. A timeout never changes state.
 	obj = inquiry.by_reference(credentials, attempt.special_reference)

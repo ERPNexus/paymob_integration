@@ -5,7 +5,7 @@ from frappe import _
 from frappe.utils import flt
 from frappe.utils.verified_command import verify_request
 
-from paymob_integration import api, slip
+from paymob_integration import api, invoice_pay, slip
 from paymob_integration.paymob import session
 
 no_cache = 1
@@ -30,7 +30,7 @@ def get_context(context):
 	source = frappe.get_doc(request.reference_doctype, request.reference_name)
 	# The request was priced when the link was made; a cash collection since then lowers what is
 	# owed, and a card page must never ask for more than that.
-	if request.docstatus != 1 or flt(source.get("outstanding_amount"), 2) < flt(request.grand_total, 2):
+	if request.docstatus != 1 or invoice_pay.owed(source) < flt(request.grand_total, 2):
 		return slip.error(context, _("This link is out of date. Ask {0} for a new one.").format(context.company_name))
 
 	try:

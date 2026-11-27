@@ -38,7 +38,9 @@ def post_payment(attempt, transaction):
 		_audit_duplicate(attempt, transaction, existing)
 		return None
 
-	credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+	credentials = settings.get_credential_set(
+		attempt.country, attempt.currency, attempt.mode, settings.attempt_company(attempt)
+	)
 	payment_request.payment_account = credentials.payment_account  # in-memory only, ADR-0008
 	payment_entry = payment_request.create_payment_entry(submit=True)
 
@@ -153,7 +155,9 @@ def post_refund(attempt, transaction, delta_cents):
 		return None
 
 	original = frappe.get_doc("Payment Entry", attempt.payment_entry)
-	credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+	credentials = settings.get_credential_set(
+		attempt.country, attempt.currency, attempt.mode, settings.attempt_company(attempt)
+	)
 	amount = amounts.from_minor_units(delta_cents, transaction.currency)
 
 	# Mirrors what Payment Entry's own validate() would compute (set_exchange_rate,

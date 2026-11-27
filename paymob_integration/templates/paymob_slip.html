@@ -108,7 +108,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 3
 <main>
 	{% if company_name %}
 	<p class="seller">{{ company_name }}</p>
-	<p class="sub">{% if invoice %}{{ _("Invoice") }} <span class="ltr">{{ invoice }}</span>{% if invoice_date %}، {{ invoice_date }}{% endif %}{% endif %}</p>
+	<p class="sub">{% if invoice %}{{ doc_label or _("Invoice") }} <span class="ltr">{{ invoice }}</span>{% if invoice_date %}، {{ invoice_date }}{% endif %}{% endif %}</p>
 	{% endif %}
 
 	{% if amount %}
@@ -118,7 +118,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 3
 		<p class="amount">{{ amount }}<small>{{ currency_label }}</small></p>
 		<dl class="lines">
 			<div><dt>{{ _("Shop") }}</dt><dd>{{ customer_name }}</dd></div>
-			<div><dt>{{ _("Invoice") }}</dt><dd class="ltr">{{ invoice }}</dd></div>
+			<div><dt>{{ doc_label or _("Invoice") }}</dt><dd class="ltr">{{ invoice }}</dd></div>
 		</dl>
 	</section>
 	{% endif %}

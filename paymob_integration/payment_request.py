@@ -35,7 +35,7 @@ def prepare_payment_email(doc, method=None):
 
 	try:
 		source = frappe.get_doc(doc.reference_doctype, doc.reference_name)
-		settings.get_credential_set(api._merchant_country(doc, source), doc.currency)
+		settings.get_credential_set(api._merchant_country(doc, source), doc.currency, company=doc.company)
 	except frappe.ValidationError:
 		return
 

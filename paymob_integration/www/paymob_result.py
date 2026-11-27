@@ -72,7 +72,9 @@ def _redirect_is_trusted(attempt):
 	try:
 		# The attempt's own frozen mode, not the site's current mode — an administrator
 		# switching Test/Live after checkout started must not change which secret verifies it.
-		credentials = settings.get_credential_set(attempt.country, attempt.currency, attempt.mode)
+		credentials = settings.get_credential_set(
+			attempt.country, attempt.currency, attempt.mode, settings.attempt_company(attempt)
+		)
 	except frappe.ValidationError as e:
 		# get_credential_set throws when Paymob is disabled or the pair is unconfigured —
 		# a scoped, narrow catch, not a bare except. Either way we cannot verify, so we

@@ -40,3 +40,24 @@ class TestResolveIntegrations(FrappeTestCase):
 		)
 		with self.assertRaises(frappe.ValidationError):
 			settings.resolve_integrations("Egypt", "EGP")
+
+
+class TestCompanyCredentials(FrappeTestCase):
+	"""Multi-company: each seller's own Paymob account, never another's."""
+
+	def _settings(self, *rows):
+		return frappe._dict(enabled=1, mode="Live", credential_sets=list(rows))
+
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_a_company_uses_its_own_row_in_its_own_mode(self, get_settings):
+		own = frappe._dict(_row(mode="Test"), company="A", name="own")
+		shared = frappe._dict(_row(mode="Live"), company=None, name="shared")
+		get_settings.return_value = self._settings(shared, own)
+		self.assertEqual(settings.get_credential_set("Egypt", "EGP", company="A").name, "own")
+		self.assertEqual(settings.get_credential_set("Egypt", "EGP", company="B").name, "shared")
+
+	@patch("paymob_integration.paymob.settings.get_settings")
+	def test_one_companys_row_never_serves_another(self, get_settings):
+		get_settings.return_value = self._settings(frappe._dict(_row(mode="Live"), company="A", name="own"))
+		with self.assertRaises(frappe.ValidationError):
+			settings.get_credential_set("Egypt", "EGP", company="B")

@@ -1,8 +1,9 @@
-"""Pay one Sales Invoice by link: the shared server half of every "pay by card or wallet" button.
+"""Pay one Sales Invoice or Sales Order by link: the shared server half of every "pay by card or
+wallet" button, and each company's own Paymob account.
 
-Callers (a rep app, a merchant app, a portal) check that the user may act on the invoice first;
-this module only knows invoices and Payment Requests. Nothing here marks anything paid: that stays
-with the signed callback or the reconciliation inquiry (rules/payments.md rule 1).
+Callers (a rep app, a merchant app, a portal) check that the user may act on the document first;
+this module only knows documents, Payment Requests and companies. Nothing here marks anything paid:
+that stays with the signed callback or the reconciliation inquiry (rules/payments.md rule 1).
 """
 
 import frappe
@@ -15,57 +16,47 @@ from paymob_integration.paymob import client, settings
 OPEN_STATES = ("Initiated", "Requested", "Partially Paid", "Payment Ordered")
 # ponytail: one inquiry per attempt every few seconds is plenty for a screen that polls.
 INQUIRY_GAP_SECONDS = 5
+DEFAULT_BASE_URL = "https://accept.paymob.com"
 
 
 def enabled():
 	return settings.is_enabled()
 
 
+def enabled_for(company: str) -> bool:
+	"""Whether `company` can take Paymob payments now: keys and a card or wallet integration."""
+	if not company or not settings.is_enabled():
+		return False
+	country, currency = frappe.get_cached_value("Company", company, ["country", "default_currency"])
+	try:
+		credentials = settings.get_credential_set(country, currency, company=company)
+		settings.resolve_integrations(country, currency, company, credentials.mode)
+	except frappe.ValidationError:
+		return False
+	return bool(credentials.payment_account)
+
+
+def owed(doc) -> float:
+	"""What is still unpaid on an invoice or an order."""
+	if doc.doctype == "Sales Order":
+		return flt(flt(doc.rounded_total or doc.grand_total, 2) - flt(doc.advance_paid), 2)
+	return flt(doc.get("outstanding_amount"), 2)
+
+
 def link_for(invoice: str) -> dict:
-	"""The open Payment Request for the invoice's whole outstanding amount, created if missing.
-
-	A request for a different amount (a cash collection landed since) is cancelled and replaced:
-	a link must never ask for more than the shop still owes.
-	"""
-	settings.is_enabled(throw=True)
+	"""The open Payment Request for the invoice's whole outstanding amount, created if missing."""
 	si = frappe.get_doc("Sales Invoice", invoice)
-	outstanding = flt(si.outstanding_amount, 2)
-	if si.docstatus != 1 or si.is_return or outstanding <= 0:
+	if si.docstatus != 1 or si.is_return:
 		frappe.throw(_("This invoice has nothing left to pay."))
+	return _link(si, owed(si))
 
-	for row in _open_requests(invoice):
-		# A live checkout keeps its request even at an old amount: someone may be on the card page
-		# right now, and a second request beside it is how an invoice gets paid twice.
-		if flt(row.grand_total, 2) == outstanding or _has_live_payment(row.name):
-			return _describe(frappe.get_doc("Payment Request", row.name), si)
-		cancelled = frappe.get_doc("Payment Request", row.name)
-		cancelled.flags.ignore_permissions = True
-		cancelled.cancel()
 
-	request = frappe.get_doc(
-		{
-			"doctype": "Payment Request",
-			"payment_request_type": "Inward",
-			"transaction_date": frappe.utils.nowdate(),
-			"reference_doctype": "Sales Invoice",
-			"reference_name": si.name,
-			"party_type": "Customer",
-			"party": si.customer,
-			"party_name": si.customer_name,
-			"company": si.company,
-			"currency": si.currency,
-			"grand_total": outstanding,
-			"payment_channel": "Email",
-			"mute_email": 1,
-			"email_to": si.contact_email or "",
-			"subject": _("Payment Request for {0}").format(si.name),
-			"message": _("Pay invoice {0}").format(si.name),
-		}
-	)
-	request.flags.ignore_permissions = True
-	request.insert()
-	request.submit()
-	return _describe(request, si)
+def link_for_order(order: str) -> dict:
+	"""An advance against a submitted Sales Order, for what is not yet paid on it."""
+	so = frappe.get_doc("Sales Order", order)
+	if so.docstatus != 1 or so.status in ("Closed", "Completed", "On Hold"):
+		frappe.throw(_("This order can't be paid online."))
+	return _link(so, owed(so))
 
 
 def status_for(payment_request: str) -> dict:
@@ -84,11 +75,156 @@ def status_for(payment_request: str) -> dict:
 		except client.PaymobError:
 			pass  # still Pending; the next poll asks again
 	request = frappe.get_doc("Payment Request", payment_request)
-	si = frappe.get_doc(request.reference_doctype, request.reference_name)
-	return _describe(request, si)
+	return _describe(request, frappe.get_doc(request.reference_doctype, request.reference_name))
 
 
-def _describe(request, si) -> dict:
+def company_status(company: str) -> dict:
+	"""What a company's own Paymob setup looks like. Never returns a secret, only whether it is set."""
+	row = _own_row(company)
+	ids = [r for r in settings.get_settings().integration_ids if r.get("company") == company and r.enabled]
+	return {
+		"configured": bool(row),
+		"ready": enabled_for(company),
+		"mode": row.mode if row else None,
+		"public_key": row.public_key if row else None,
+		"has_secret_key": bool(row and row.get_password("secret_key", raise_exception=False)),
+		"has_api_key": bool(row and row.get_password("api_key", raise_exception=False)),
+		"has_hmac_secret": bool(row and row.get_password("hmac_secret", raise_exception=False)),
+		"card_integration_id": next((r.integration_id for r in ids if r.payment_method == "card"), None),
+		"wallet_integration_id": next((r.integration_id for r in ids if r.payment_method == "wallet"), None),
+		"payment_account": row.payment_account if row else None,
+	}
+
+
+def configure_company(
+	company: str,
+	mode: str,
+	public_key: str,
+	card_integration_id: str,
+	secret_key: str | None = None,
+	api_key: str | None = None,
+	hmac_secret: str | None = None,
+	wallet_integration_id: str | None = None,
+) -> dict:
+	"""Save `company`'s own Paymob account: one enabled row in `mode`. A secret left empty keeps
+	the one already saved, so a form never has to show a secret back to fill itself."""
+	if mode not in ("Test", "Live"):
+		frappe.throw(_("Mode must be Test or Live."))
+	country, currency = frappe.get_cached_value("Company", company, ["country", "default_currency"])
+	config = frappe.get_doc("Paymob Settings")
+	row = _own_row(company, config)
+	if not row:
+		row = config.append("credential_sets", {"company": company, "base_url": DEFAULT_BASE_URL})
+	row.update(
+		{
+			"enabled": 1,
+			"country": country,
+			"currency": currency,
+			"mode": mode,
+			"public_key": (public_key or "").strip(),
+			"payment_account": row.payment_account or _payment_account(company, currency),
+		}
+	)
+	for field, value in (("secret_key", secret_key), ("api_key", api_key), ("hmac_secret", hmac_secret)):
+		if value and value.strip():
+			row.set(field, value.strip())
+	# A company has one account; its old integration rows go with the save.
+	config.integration_ids = [r for r in config.integration_ids if r.get("company") != company]
+	for method, value in (("card", card_integration_id), ("wallet", wallet_integration_id)):
+		if value and str(value).strip():
+			config.append(
+				"integration_ids",
+				{
+					"enabled": 1,
+					"company": company,
+					"country": country,
+					"currency": currency,
+					"mode": mode,
+					"payment_method": method,
+					"integration_id": str(value).strip(),
+				},
+			)
+	config.enabled = 1
+	config.flags.ignore_permissions = True
+	config.save()
+	missing = [f for f in ("secret_key", "api_key", "hmac_secret") if not row.get_password(f, raise_exception=False)]
+	if missing:
+		frappe.throw(_("Fill in the secret key, API key and HMAC secret."))
+	return company_status(company)
+
+
+def _own_row(company, config=None):
+	config = config or settings.get_settings()
+	return next((r for r in config.credential_sets if r.get("company") == company and r.enabled), None)
+
+
+def _payment_account(company, currency):
+	"""The company's own clearing account for card and wallet money, made on first setup."""
+	abbr = frappe.get_cached_value("Company", company, "abbr")
+	name = f"Paymob - {abbr}"
+	if frappe.db.exists("Account", name):
+		return name
+	parent = frappe.db.get_value(
+		"Account", {"company": company, "account_type": "Bank", "is_group": 1}, "name"
+	) or frappe.db.get_value("Account", {"company": company, "account_name": "Bank Accounts", "is_group": 1}, "name")
+	if not parent:
+		frappe.throw(_("{0} has no bank accounts group to hold the Paymob account.").format(company))
+	account = frappe.get_doc(
+		{
+			"doctype": "Account",
+			"account_name": "Paymob",
+			"parent_account": parent,
+			"company": company,
+			"account_type": "Bank",
+			"account_currency": currency,
+		}
+	)
+	account.flags.ignore_permissions = True
+	return account.insert().name
+
+
+def _link(doc, outstanding) -> dict:
+	"""A link must never ask for more than is still owed: a request at another amount (a cash
+	collection landed since) is cancelled and replaced, unless someone may be paying it now."""
+	if not enabled_for(doc.company):
+		frappe.throw(_("Card and wallet payments are not set up for {0}.").format(doc.company))
+	if outstanding <= 0:
+		frappe.throw(_("This invoice has nothing left to pay."))
+
+	for row in _open_requests(doc.doctype, doc.name):
+		if flt(row.grand_total, 2) == outstanding or _has_live_payment(row.name):
+			return _describe(frappe.get_doc("Payment Request", row.name), doc)
+		cancelled = frappe.get_doc("Payment Request", row.name)
+		cancelled.flags.ignore_permissions = True
+		cancelled.cancel()
+
+	request = frappe.get_doc(
+		{
+			"doctype": "Payment Request",
+			"payment_request_type": "Inward",
+			"transaction_date": frappe.utils.nowdate(),
+			"reference_doctype": doc.doctype,
+			"reference_name": doc.name,
+			"party_type": "Customer",
+			"party": doc.customer,
+			"party_name": doc.customer_name,
+			"company": doc.company,
+			"currency": doc.currency,
+			"grand_total": outstanding,
+			"payment_channel": "Email",
+			"mute_email": 1,
+			"email_to": doc.get("contact_email") or "",
+			"subject": _("Payment Request for {0}").format(doc.name),
+			"message": _("Pay {0}").format(doc.name),
+		}
+	)
+	request.flags.ignore_permissions = True
+	request.insert()
+	request.submit()
+	return _describe(request, doc)
+
+
+def _describe(request, doc) -> dict:
 	attempt_state = frappe.db.get_value(
 		"Paymob Payment Attempt",
 		{"payment_request": request.name},
@@ -98,10 +234,11 @@ def _describe(request, si) -> dict:
 	paid = request.status == "Paid" or attempt_state in ("Paid", "Partially Refunded", "Refunded")
 	return {
 		"payment_request": request.name,
-		"invoice": si.name,
-		"customer": si.customer,
-		"customer_name": si.customer_name,
-		"company": si.company,
+		"reference_doctype": doc.doctype,
+		"invoice": doc.name,  # the paid document's name (an invoice or an order)
+		"customer": doc.customer,
+		"customer_name": doc.customer_name,
+		"company": doc.company,
 		"amount": flt(request.grand_total, 2),
 		"currency": request.currency,
 		"url": pay_link.build(request.name),
@@ -110,12 +247,12 @@ def _describe(request, si) -> dict:
 	}
 
 
-def _open_requests(invoice):
+def _open_requests(doctype, name):
 	return frappe.get_all(
 		"Payment Request",
 		filters={
-			"reference_doctype": "Sales Invoice",
-			"reference_name": invoice,
+			"reference_doctype": doctype,
+			"reference_name": name,
 			"docstatus": 1,
 			"status": ["in", OPEN_STATES],
 		},
