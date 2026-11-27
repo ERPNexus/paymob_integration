@@ -11,7 +11,7 @@ from frappe import _
 from frappe.utils import add_to_date, flt, now_datetime
 
 from paymob_integration import pay_link, tasks
-from paymob_integration.paymob import client, settings
+from paymob_integration.paymob import client, session, settings
 
 OPEN_STATES = ("Initiated", "Requested", "Partially Paid", "Payment Ordered")
 # ponytail: one inquiry per attempt every few seconds is plenty for a screen that polls.
@@ -184,6 +184,13 @@ def _payment_account(company, currency):
 
 
 def _link(doc, outstanding) -> dict:
+	# ERPNext's PaymentRequest.validate re-checks read on the invoice/order as the session user,
+	# and a merchant or rep session has none. Callers check ownership first (module docstring).
+	with session.as_administrator():
+		return _link_as_admin(doc, outstanding)
+
+
+def _link_as_admin(doc, outstanding) -> dict:
 	"""A link must never ask for more than is still owed: a request at another amount (a cash
 	collection landed since) is cancelled and replaced, unless someone may be paying it now."""
 	if not enabled_for(doc.company):

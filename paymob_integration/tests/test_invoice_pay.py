@@ -39,3 +39,10 @@ class TestInvoicePay(NoCommitIntegrationTestCase):
 	def test_nothing_owed_means_no_link(self):
 		frappe.db.set_value("Sales Invoice", self.invoice.name, "outstanding_amount", 0)
 		self.assertRaises(frappe.ValidationError, invoice_pay.link_for, self.invoice.name)
+
+	def test_a_user_without_desk_rights_still_gets_a_link(self):
+		frappe.set_user("Guest")
+		try:
+			self.assertEqual(invoice_pay.link_for(self.invoice.name)["amount"], 120.0)
+		finally:
+			frappe.set_user("Administrator")
