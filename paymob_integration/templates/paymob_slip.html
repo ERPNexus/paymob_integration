@@ -79,6 +79,10 @@ main { max-width: 400px; margin: 0 auto; }
 	animation: thump .42s cubic-bezier(.2, 1.6, .4, 1) both .25s;
 }
 @keyframes thump { from { transform: rotate(-14deg) scale(1.6); opacity: 0; } }
+/* A paid slip keeps the amount readable: the stamp sits beside it, as on the rep's slip, never over the digits. */
+.slip:has(.stamp) .stamp { width: 88px; height: 88px; font-size: 26px; }
+/* .amount is direction:ltr, so cap its width instead of a logical margin (that would land on the wrong side). */
+.slip:has(.stamp) .amount { max-width: calc(100% - 100px); font-size: clamp(26px, 8vw, 46px); }
 @media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
 
 .stub { padding: 28px 0 0; }
